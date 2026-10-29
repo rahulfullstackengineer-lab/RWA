@@ -1,11 +1,12 @@
-// Prisma schema — PostgreSQL (Render)
+// Prisma schema
+// Local: SQLite | Production (Render): PostgreSQL (patched in build command)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
