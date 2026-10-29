@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cutora — Log In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;460;520;560;600;660;680;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    /* =============================================
+       Cutora Log-in Hero Design System
+       Artboard: 1672x941 reference pixels
+       Scale: --u = max(.62px, min(100vw/1672, 100dvh/941))
+       ============================================= */
+    :root {
+      --u: max(0.62px, min(calc(100vw / 1672), calc(100dvh / 941)));
+      --ink: #000000;
+      --secondary: #5F636B;
+      --muted: #898D94;
+      --placeholder: #95999F;
+      --lines: #E2E4E7;
+      --lines-soft: #E9EAEC;
+      --card: #FEFEFE;
+      --button: #161515;
+      --amber: #F59A08;
+      --amber-light: #FBAE05;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #140A00;
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Full-bleed Plate & Video Wrapper */
+    .viewport {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+      background-color: #140A00;
+      background-image: url('/cutora-plate.jpg'), url('https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/e781b542-a83d-4cf2-a66a-44085485865d.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+
+    /* Motion: Muted 4s loop of the upward camera drift */
+    .video-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      opacity: 0;
+      transition: opacity 0.8s ease;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .video-bg.loaded {
+      opacity: 1;
+    }
+
+    /* Readability: 150u left wash, 140u top wash, 420u rising warm wash */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.35) calc(150 * var(--u)), transparent calc(450 * var(--u))),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.2) calc(140 * var(--u)), transparent calc(300 * var(--u))),
+        linear-gradient(0deg, rgba(20, 10, 0, 0.38) 0%, transparent calc(420 * var(--u)));
+    }
+
+    /* Two-column layout: Hero fills left */
+    .hero-col {
+      flex: 1 1 0%;
+      height: 100%;
+      position: relative;
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: calc(57 * var(--u)) calc(40 * var(--u)) calc(50 * var(--u)) calc(92.5 * var(--u));
+    }
+
+    /* Top bar: Logo + Link */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.1s;
+    }
+
+    .logo-group {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(16 * var(--u));
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .logo-tile {
+      width: calc(48 * var(--u));
+      height: calc(48 * var(--u));
+      background: #000000;
+      border-radius: calc(12 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(0, 0, 0, 0.45);
+    }
+
+    .logo-glyph {
+      font-weight: 900;
+      font-size: calc(29 * var(--u));
+      line-height: 1;
+      background: linear-gradient(135deg, #FFC233 0%, #F58A07 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+    }
+
+    .logo-name {
+      font-weight: 680;
+      font-size: calc(35.5 * var(--u));
+      letter-spacing: calc(-0.95 * var(--u));
+      color: #FFFFFF;
+      line-height: 1;
+    }
+
+    .back-link {
+      font-size: calc(17.4 * var(--u));
+      font-weight: 520;
+      color: var(--amber-light);
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: calc(6 * var(--u));
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .back-link:hover {
+      opacity: 0.85;
+      transform: translateX(-3px);
+    }
+
+    /* Pitch: bottom-left */
+    .pitch {
+      position: relative;
+      max-width: calc(760 * var(--u));
+    }
+
+    .headline-clip {
+      overflow: hidden;
+      display: block;
+    }
+
+    .headline-line {
+      display: block;
+      font-weight: 600;
+      font-size: calc(62 * var(--u));
+      line-height: calc(70 * var(--u));
+      letter-spacing: calc(-2.6 * var(--u));
+      color: #FFFFFF;
+      animation: wipeUp 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    }
+
+    .headline-line.line-1 {
+      animation-delay: 0.25s;
+    }
+
+    .headline-line.line-2 {
+      animation-delay: 0.4s;
+    }
+
+    .subline {
+      font-weight: 460;
+      font-size: calc(20 * var(--u));
+      line-height: calc(27.5 * var(--u));
+      color: rgba(255, 255, 255, 0.9);
+      margin-top: calc(19 * var(--u));
+      animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.55s;
+      max-width: calc(650 * var(--u));
+    }
+
+    /* Slider dots: 35.5u below */
+    .slider-dots {
+      display: flex;
+      align-items: center;
+      gap: calc(9 * var(--u));
+      margin-top: calc(35.5 * var(--u));
+      animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.7s;
+    }
+
+    .dot {
+      width: calc(9 * var(--u));
+      height: calc(9 * var(--u));
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.55);
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .dot.active {
+      width: calc(34.5 * var(--u));
+      border-radius: calc(4.5 * var(--u));
+      background: var(--amber);
+    }
+
+    .dot:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Right Card Panel: 742.4u wide, 18u margin top/right, 22.5u bottom */
+    .card-panel {
+      position: relative;
+      z-index: 4;
+      width: calc(742.4 * var(--u));
+      margin: calc(18 * var(--u)) calc(18 * var(--u)) calc(22.5 * var(--u)) 0;
+      background: var(--card);
+      border-radius: calc(20 * var(--u));
+      box-shadow: 0 calc(20 * var(--u)) calc(60 * var(--u)) rgba(0, 0, 0, 0.28);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: calc(24 * var(--u)) 0;
+      animation: cardRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.15s;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    /* Inner Form: 559u wide, centered vertically */
+    .form-wrap {
+      width: calc(559 * var(--u));
+      max-width: 90%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-heading {
+      font-weight: 660;
+      font-size: calc(50.6 * var(--u));
+      line-height: 1.15;
+      letter-spacing: calc(-1.9 * var(--u));
+      color: var(--ink);
+      margin-bottom: calc(8 * var(--u));
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.35s;
+    }
+
+    .card-subline {
+      font-size: calc(19 * var(--u));
+      line-height: 1.4;
+      color: var(--secondary);
+      margin-bottom: calc(28 * var(--u));
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.4s;
+    }
+
+    /* Fields */
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: calc(18 * var(--u));
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.5s;
+    }
+
+    .field-label {
+      font-weight: 560;
+      font-size: calc(17.4 * var(--u));
+      color: var(--ink);
+      margin-bottom: calc(8 * var(--u));
+    }
+
+    .field-input-box {
+      height: calc(66 * var(--u));
+      border-radius: calc(10 * var(--u));
+      border: 1px solid var(--lines);
+      background: #FFFFFF;
+      display: flex;
+      align-items: center;
+      padding: 0 calc(20 * var(--u));
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .field-input-box:focus-within {
+      border-color: var(--amber);
+      box-shadow: 0 0 0 calc(3 * var(--u)) rgba(245, 154, 8, 0.16);
+    }
+
+    .field-input {
+      flex: 1;
+      height: 100%;
+      border: none;
+      outline: none;
+      background: transparent;
+      font-size: calc(17 * var(--u));
+      color: var(--ink);
+      font-family: inherit;
+    }
+
+    .field-input::placeholder {
+      color: var(--placeholder);
+    }
+
+    /* Eye toggle with slash */
+    .eye-toggle-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: calc(6 * var(--u));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      transition: color 0.2s ease;
+    }
+
+    .eye-toggle-btn:hover {
+      color: var(--ink);
+    }
+
+    /* Options row: 26u Remember Me + Forgot Password */
+    .options-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: calc(4 * var(--u));
+      margin-bottom: calc(24 * var(--u));
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.6s;
+    }
+
+    .checkbox-container {
+      display: inline-flex;
+      align-items: center;
+      gap: calc(10 * var(--u));
+      font-size: calc(16 * var(--u));
+      color: var(--secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .custom-checkbox {
+      width: calc(26 * var(--u));
+      height: calc(26 * var(--u));
+      border-radius: calc(6 * var(--u));
+      border: 1.5px solid var(--lines);
+      background: #FFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .checkbox-input {
+      display: none;
+    }
+
+    .checkbox-input:checked + .custom-checkbox {
+      background: #000000;
+      border-color: #000000;
+    }
+
+    .checkbox-tick {
+      display: none;
+      color: #FFFFFF;
+      font-size: calc(15 * var(--u));
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .checkbox-input:checked + .custom-checkbox .checkbox-tick {
+      display: block;
+    }
+
+    .forgot-password-link {
+      font-size: calc(16 * var(--u));
+      font-weight: 560;
+      color: var(--amber);
+      text-decoration: none;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+
+    .forgot-password-link:hover {
+      opacity: 0.85;
+      text-decoration: underline;
+    }
+
+    /* Login button: 66u pill, black, with "Login" in amber, 38u below */
+    .login-button {
+      width: 100%;
+      height: calc(66 * var(--u));
+      border-radius: 9999px;
+      background: var(--button);
+      color: var(--amber);
+      font-size: calc(18 * var(--u));
+      font-weight: 700;
+      letter-spacing: calc(-0.4 * var(--u));
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: calc(14 * var(--u));
+      cursor: pointer;
+      transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.68s;
+    }
+
+    .login-button:hover {
+      background: #000000;
+      box-shadow: 0 calc(12 * var(--u)) calc(32 * var(--u)) rgba(0, 0, 0, 0.32);
+      transform: translateY(-1px);
+    }
+
+    .login-button:active {
+      transform: translateY(1px);
+    }
+
+    /* Divider */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: calc(16 * var(--u));
+      margin: calc(26 * var(--u)) 0 calc(22 * var(--u));
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.78s;
+    }
+
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--lines);
+    }
+
+    .divider-text {
+      font-size: calc(14 * var(--u));
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* Google Button: 66u white pill with multicolour Google "G" */
+    .google-button {
+      width: 100%;
+      height: calc(66 * var(--u));
+      border-radius: 9999px;
+      background: #FFFFFF;
+      border: 1px solid var(--lines);
+      color: var(--ink);
+      font-size: calc(17.4 * var(--u));
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(12 * var(--u));
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.84s;
+    }
+
+    .google-button:hover {
+      border-color: #C8CBD0;
+      box-shadow: 0 calc(6 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, 0.07);
+      transform: translateY(-1px);
+    }
+
+    /* Footer line */
+    .footer-line {
+      margin-top: calc(24 * var(--u));
+      text-align: center;
+      font-size: calc(15 * var(--u));
+      color: var(--secondary);
+      animation: cardElemRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+      animation-delay: 0.94s;
+    }
+
+    .footer-line a {
+      color: var(--amber);
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .footer-line a:hover {
+      text-decoration: underline;
+    }
+
+    /* Keyframes */
+    @keyframes heroFadeUp {
+      from { opacity: 0; transform: translateY(calc(18 * var(--u))); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes wipeUp {
+      from { transform: translateY(115%); }
+      to { transform: translateY(0); }
+    }
+
+    @keyframes cardRise {
+      from { opacity: 0; transform: scale(0.99) translateY(calc(20 * var(--u))); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    @keyframes cardElemRise {
+      from { opacity: 0; transform: translateY(calc(14 * var(--u))); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+      }
+      .video-bg {
+        display: none !important;
+      }
+    }
+
+    /* Tablet and Phone: Portrait */
+    @media (max-width: 1024px) {
+      :root {
+        --u: max(0.62px, min(calc(100vw / 390), calc(100dvh / 844)));
+      }
+      .viewport {
+        flex-direction: column;
+        overflow-y: auto;
+      }
+      .hero-col {
+        flex: none;
+        padding: calc(28 * var(--u)) calc(20 * var(--u)) calc(16 * var(--u));
+      }
+      .subline {
+        display: none; /* Shorter screens drop the subline */
+      }
+      .headline-line {
+        font-size: calc(34 * var(--u));
+        line-height: calc(40 * var(--u));
+      }
+      .card-panel {
+        width: 100%;
+        margin: 0;
+        border-radius: calc(24 * var(--u)) calc(24 * var(--u)) 0 0;
+        padding: calc(28 * var(--u)) calc(18 * var(--u)) calc(40 * var(--u));
+      }
+      .form-wrap {
+        width: 100%;
+      }
+    }
+
+    /* Landscape Phone */
+    @media (max-width: 900px) and (orientation: landscape) {
+      :root {
+        --u: max(0.62px, min(calc(100vw / 700), calc(100dvh / 390)));
+      }
+      .viewport {
+        flex-direction: row;
+      }
+      .hero-col {
+        padding: calc(20 * var(--u)) calc(20 * var(--u));
+      }
+      .subline {
+        display: none;
+      }
+      .headline-line {
+        font-size: calc(30 * var(--u));
+        line-height: calc(36 * var(--u));
+      }
+      .card-panel {
+        width: calc(380 * var(--u));
+        margin: calc(10 * var(--u)) calc(10 * var(--u)) calc(10 * var(--u)) 0;
+        border-radius: calc(16 * var(--u));
+        padding: calc(16 * var(--u));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="viewport">
+    <!-- Motion: Muted 4s Loop (Fades in 0.8s on ready) -->
+    <video
+      id="heroVideo"
+      class="video-bg"
+      autoplay
+      loop
+      muted
+      playsinline
+      preload="auto"
+    >
+      <source src="/cutora-motion.mp4" type="video/mp4" />
+      <source src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/197f7e27-faac-4bdc-916c-615ac962bf86.mp4" type="video/mp4" />
+    </video>
+
+    <!-- Readability Soft Shades -->
+    <div class="overlay"></div>
+
+    <!-- Hero Left Column -->
+    <div class="hero-col">
+      <!-- Top bar (57u top, 92.5u left) -->
+      <div class="top-bar">
+        <div class="logo-group" onclick="location.reload()">
+          <div class="logo-tile">
+            <span class="logo-glyph">C</span>
+          </div>
+          <span class="logo-name">Cutora</span>
+        </div>
+        <a class="back-link" href="#">← Back to Website</a>
+      </div>
+
+      <!-- Pitch bottom-left -->
+      <div class="pitch">
+        <div class="headline-clip">
+          <span id="pitchLine1" class="headline-line line-1">Edit Smarter. Export Faster.</span>
+        </div>
+        <div class="headline-clip">
+          <span id="pitchLine2" class="headline-line line-2">Create Anywhere.</span>
+        </div>
+        <p id="pitchSub" class="subline">
+          From quick social media clips to full-length videos, our powerful editor<br/>lets you work seamlessly across devices.
+        </p>
+
+        <!-- Slider dots 35.5u below: amber pill + two white dots at 55% -->
+        <div class="slider-dots" id="sliderDots">
+          <button class="dot active" data-index="0" onclick="setSlide(0)" aria-label="Slide 1"></button>
+          <button class="dot" data-index="1" onclick="setSlide(1)" aria-label="Slide 2"></button>
+          <button class="dot" data-index="2" onclick="setSlide(2)" aria-label="Slide 3"></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Log-in Card (742.4u wide, 18u margin top/right, 22.5u bottom) -->
+    <div class="card-panel">
+      <div class="form-wrap">
+        <h1 class="card-heading">Welcome Back!</h1>
+        <p class="card-subline">Log in to start creating stunning videos with ease.</p>
+
+        <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+          <!-- Email Field -->
+          <div class="field-group">
+            <label class="field-label" for="emailInput">Email</label>
+            <div class="field-input-box">
+              <input
+                id="emailInput"
+                class="field-input"
+                type="email"
+                placeholder="Input your email"
+                required
+                autocomplete="email"
+              />
+            </div>
+          </div>
+
+          <!-- Password Field -->
+          <div class="field-group">
+            <label class="field-label" for="passwordInput">Password</label>
+            <div class="field-input-box">
+              <input
+                id="passwordInput"
+                class="field-input"
+                type="password"
+                placeholder="Input your password"
+                required
+                autocomplete="current-password"
+              />
+              <button
+                type="button"
+                class="eye-toggle-btn"
+                onclick="togglePassword()"
+                title="Toggle password visibility"
+                aria-label="Toggle password visibility"
+              >
+                <svg id="eyeSvg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <line id="eyeSlash" x1="2" y1="2" x2="22" y2="22" style="display:none;stroke:#F59A08;stroke-width:2.5;"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Options row: 26u Remember Me + Forgot Password -->
+          <div class="options-row">
+            <label class="checkbox-container">
+              <input type="checkbox" id="rememberMe" class="checkbox-input" checked />
+              <span class="custom-checkbox">
+                <span class="checkbox-tick">✓</span>
+              </span>
+              <span>Remember Me</span>
+            </label>
+            <a class="forgot-password-link" href="#" onclick="alert('Password reset link sent to your email.'); return false;">Forgot Password?</a>
+          </div>
+
+          <!-- Login button: 66u black pill, text in amber -->
+          <button type="submit" class="login-button">
+            Login
+          </button>
+        </form>
+
+        <!-- Footer line -->
+        <div class="footer-line" style="margin-top: calc(32 * var(--u));">
+          Don’t have an account? <a href="#" onclick="alert('Sign up page'); return false;">Sign up here</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Fade in video once first frame is ready
+    const video = document.getElementById('heroVideo');
+    if (video) {
+      const markLoaded = () => {
+        if (video.currentTime > 0.05 || video.readyState >= 3) {
+          video.classList.add('loaded');
+        }
+      };
+      video.addEventListener('timeupdate', markLoaded);
+      video.addEventListener('playing', () => setTimeout(markLoaded, 120));
+      if (video.currentTime > 0.05) {
+        video.classList.add('loaded');
+      }
+      video.play().catch(() => {});
+    }
+
+    // Interactive Slider Dots
+    const slides = [
+      {
+        line1: 'Edit Smarter. Export Faster.',
+        line2: 'Create Anywhere.',
+        sub: 'From quick social media clips to full-length videos, our powerful editor lets you work seamlessly across devices.'
+      },
+      {
+        line1: 'Cinematic Color Grading.',
+        line2: 'HDR at 120 FPS.',
+        sub: 'Intelligent color wheels, 3D LUT previewing, and GPU acceleration make your renders lightning fast.'
+      },
+      {
+        line1: 'Real-Time Collaboration.',
+        line2: 'Cut & Review Instantly.',
+        sub: 'Invite your team, leave frame-accurate notes, and export directly to YouTube, TikTok, and Vimeo.'
+      }
+    ];
+
+    let currentSlide = 0;
+    function setSlide(index) {
+      currentSlide = index;
+      const s = slides[index];
+      const dots = document.querySelectorAll('.dot');
+      dots.forEach((d, i) => {
+        if (i === index) d.classList.add('active');
+        else d.classList.remove('active');
+      });
+
+      const l1 = document.getElementById('pitchLine1');
+      const l2 = document.getElementById('pitchLine2');
+      const sub = document.getElementById('pitchSub');
+
+      l1.style.animation = 'none';
+      l2.style.animation = 'none';
+      void l1.offsetWidth; // force reflow
+      l1.innerText = s.line1;
+      l2.innerText = s.line2;
+      sub.innerText = s.sub;
+      l1.style.animation = 'wipeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+      l2.style.animation = 'wipeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.08s forwards';
+    }
+
+    // Auto-advance slides every 6s
+    setInterval(() => {
+      setSlide((currentSlide + 1) % slides.length);
+    }, 6000);
+
+    // Toggle password eye with slash
+    function togglePassword() {
+      const input = document.getElementById('passwordInput');
+      const slash = document.getElementById('eyeSlash');
+      const svg = document.getElementById('eyeSvg');
+      if (input.type === 'password') {
+        input.type = 'text';
+        slash.style.display = 'block';
+        svg.setAttribute('stroke', '#F59A08');
+      } else {
+        input.type = 'password';
+        slash.style.display = 'none';
+        svg.setAttribute('stroke', 'currentColor');
+      }
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('emailInput').value;
+      alert(`Welcome back to Cutora! Logged in as: ${email}`);
+    }
+  </script>
+</body>
+</html>

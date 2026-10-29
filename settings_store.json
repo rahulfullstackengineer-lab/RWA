@@ -1,0 +1,80 @@
+{
+  "cmvm59ryx000si1h25p4aa89b": {
+    "location": {
+      "googleMapsUrl": "",
+      "address": "Sector 22-B",
+      "city": "Chandigarh",
+      "pincode": "160022",
+      "mapEmbedUrl": "https://maps.google.com/maps?q=Sector%2022-B%2C%20Chandigarh%2C%20160022&t=&z=15&ie=UTF8&iwloc=&output=embed",
+      "isConfigured": true
+    }
+  },
+  "cmvm5febw0037i1h2pou6gfpz": {
+    "rules": {
+      "lateFeeEnabled": false,
+      "lateFeeType": "FIXED",
+      "lateFeeAmount": 100,
+      "interestEnabled": false,
+      "interestRateMonthly": 1.5,
+      "meetingNoticeDays": 14,
+      "committeeTermMonths": 12,
+      "quorumPercentage": 33,
+      "gracePeriodDays": 10
+    },
+    "payment": {
+      "bankName": "HDFC Bank Ltd.",
+      "accountHolder": "Greenwood Heights RWA",
+      "accountNumber": "50200088991122",
+      "ifscCode": "HDFC0001234",
+      "branch": "Sector 22 Branch, Chandigarh",
+      "upiId": "test2.rwa@hdfcbank",
+      "qrCodeEnabled": true,
+      "razorpayKeyId": "rzp_test_179118382",
+      "autoReceipts": true
+    },
+    "notifications": {
+      "smsBroadcastEnabled": true,
+      "whatsappBroadcastEnabled": true,
+      "emailAlertsEnabled": true,
+      "overduePaymentReminders": true,
+      "urgentNoticeSms": true,
+      "visitorGateNotification": true
+    },
+    "security": {
+      "twoFactorAuthEnabled": true,
+      "sessionTimeoutMinutes": 60,
+      "strictPasswordPolicy": true,
+      "ipWhitelistingEnabled": false,
+      "auditLoggingStrict": true
+    },
+    "location": {
+      "googleMapsUrl": "village -sangrain, Panchkula, 176303",
+      "mapEmbedUrl": "https://maps.google.com/maps?q=village%20-sangrain%2C%20Panchkula%2C%20176303&t=&z=15&ie=UTF8&iwloc=&output=embed",
+      "address": "village -sangrain",
+      "city": "Panchkula",
+      "pincode": "176303",
+      "landmark": "",
+      "isConfigured": true
+    }
+  },
+  "cmvmigakq006gi1h22qf05bj2": {
+    "location": {
+      "googleMapsUrl": "",
+      "address": "Sector 44",
+      "city": "Chandigarh",
+      "pincode": "160044",
+      "mapEmbedUrl": "https://maps.google.com/maps?q=Sector%2044%2C%20Chandigarh%2C%20160044&t=&z=15&ie=UTF8&iwloc=&output=embed",
+      "isConfigured": true
+    }
+  },
+  "cmvmjrovx0077i1h28uczup4v": {
+    "location": {
+      "googleMapsUrl": "",
+      "address": "",
+      "city": "Chandigarh",
+      "pincode": "",
+      "mapEmbedUrl": "",
+      "isConfigured": false
+    }
+  }
+}

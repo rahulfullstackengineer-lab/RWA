@@ -1,0 +1,642 @@
+// This is your Prisma schema file for LOCAL DEVELOPMENT (SQLite)
+// For production, change provider to "postgresql" and update DATABASE_URL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+
+model User {
+  id              String   @id @default(cuid())
+  phone           String   @unique
+  email           String?  @unique
+  name            String
+  passwordHash    String?
+  role            String   @default("RESIDENT")
+  status          String   @default("ACTIVE")
+  organizationId  String?
+  unitId          String?
+  avatarUrl       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization  Organization?  @relation(fields: [organizationId], references: [id])
+  unit          Unit?          @relation(fields: [unitId], references: [id])
+  sessions      Session[]
+  otpCodes      OtpCode[]
+  notifications Notification[]
+  complaints    Complaint[]    @relation("ComplaintRaisedBy")
+  payments      Payment[]
+  documents     Document[]
+
+  @@index([organizationId])
+  @@index([phone])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String?
+  ipAddress String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  userId    String
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phone])
+}
+
+// ============================================================
+// ORGANIZATION (RWA Society)
+// ============================================================
+
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  registrationNo  String?  @unique
+  address         String?
+  city            String   @default("Chandigarh")
+  pincode         String?
+  phone           String?
+  email           String?
+  logoUrl         String?
+  status          String   @default("ACTIVE")
+  plan            String   @default("STARTER")
+  totalUnits      Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users         User[]
+  blocks        Block[]
+  units         Unit[]
+  charges       ChargeHead[]
+  invoices      Invoice[]
+  payments      Payment[]
+  expenses      Expense[]
+  notices       Notice[]
+  meetings      Meeting[]
+  complaints    Complaint[]
+  documents     Document[]
+  notifications Notification[]
+  fundHeads     FundHead[]
+  emergencyContacts EmergencyContact[]
+  staffDuties       StaffDuty[]
+  entryPasses       EntryPass[]
+
+  @@index([status])
+}
+
+// ============================================================
+// PROPERTY STRUCTURE
+// ============================================================
+
+model Block {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  totalUnits     Int      @default(0)
+  floors         Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  units        Unit[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Unit {
+  id              String   @id @default(cuid())
+  organizationId  String
+  blockId         String?
+  unitNumber      String
+  unitType        String   @default("FLAT")
+  floor           Int?
+  areaSqft        Float?
+  occupancyStatus String   @default("OWNER_OCCUPIED")
+  ownerName       String?
+  ownerPhone      String?
+  ownerEmail      String?
+  tenantName      String?
+  tenantPhone     String?
+  registrationDate DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  block        Block?       @relation(fields: [blockId], references: [id])
+  users        User[]
+  invoices     Invoice[]
+  complaints   Complaint[]
+  vehicles     Vehicle[]
+
+  @@unique([organizationId, unitNumber])
+  @@index([organizationId])
+  @@index([blockId])
+}
+
+model Vehicle {
+  id             String   @id @default(cuid())
+  unitId         String
+  type           String   @default("CAR")
+  registrationNo String
+  make           String?
+  model          String?
+  color          String?
+  parkingSlot    String?
+  createdAt      DateTime @default(now())
+
+  unit Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([unitId])
+}
+
+// ============================================================
+// FINANCE
+// ============================================================
+
+model FundHead {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  type           String   @default("MAINTENANCE")
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  chargeHeads  ChargeHead[]
+
+  @@index([organizationId])
+}
+
+model ChargeHead {
+  id             String   @id @default(cuid())
+  organizationId String
+  fundHeadId     String?
+  name           String
+  description    String?
+  frequency      String   @default("MONTHLY")
+  basis          String   @default("FIXED")
+  amount         Float    @default(0)
+  gstPercent     Float    @default(0)
+  isActive       Boolean  @default(true)
+  applyToAll     Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  fundHead     FundHead?    @relation(fields: [fundHeadId], references: [id])
+  invoiceItems InvoiceItem[]
+
+  @@index([organizationId])
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  organizationId String
+  unitId         String
+  invoiceNumber  String   @unique
+  billingMonth   String
+  dueDate        DateTime
+  status         String   @default("ISSUED")
+  totalAmount    Float    @default(0)
+  paidAmount     Float    @default(0)
+  balanceAmount  Float    @default(0)
+  lateFee        Float    @default(0)
+  notes          String?
+  issuedAt       DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  unit         Unit          @relation(fields: [unitId], references: [id])
+  items        InvoiceItem[]
+  payments     Payment[]
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([status])
+  @@index([billingMonth])
+}
+
+model InvoiceItem {
+  id           String  @id @default(cuid())
+  invoiceId    String
+  chargeHeadId String?
+  description  String
+  amount       Float
+  gstPercent   Float   @default(0)
+  gstAmount    Float   @default(0)
+  totalAmount  Float
+
+  invoice    Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  chargeHead ChargeHead? @relation(fields: [chargeHeadId], references: [id])
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  organizationId    String
+  invoiceId         String?
+  userId            String?
+  amount            Float
+  currency          String   @default("INR")
+  method            String?
+  source            String   @default("ONLINE_GATEWAY")
+  status            String   @default("PENDING")
+  razorpayOrderId   String?  @unique
+  razorpayPaymentId String?  @unique
+  razorpaySignature String?
+  referenceNo       String?
+  notes             String?
+  recordedByUserId  String?
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([razorpayOrderId])
+}
+
+model Expense {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  category       String?
+  amount         Float
+  taxAmount      Float    @default(0)
+  totalAmount    Float
+  vendorName     String?
+  vendorPhone    String?
+  billNumber     String?
+  billDate       DateTime?
+  paidDate       DateTime?
+  paidBy         String?
+  status         String   @default("PENDING_APPROVAL")
+  receiptUrl     String?
+  notes          String?
+  createdBy      String?
+  approvedBy     String?
+  isRecurring    Boolean  @default(false)
+  recurringDay   Int?     @default(1)
+  recurringMonth String?
+  templateId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([isRecurring])
+}
+
+// ============================================================
+// COMMUNICATION
+// ============================================================
+
+model Notice {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  content        String
+  type           String   @default("GENERAL")
+  status         String   @default("PUBLISHED")
+  pinnedUntil    DateTime?
+  publishedAt    DateTime?
+  publishedBy    String?
+  channels       String   @default("IN_APP")
+  attachmentUrl  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model Meeting {
+  id              String   @id @default(cuid())
+  organizationId  String
+  title           String
+  description     String?
+  type            String   @default("GENERAL")
+  scheduledAt     DateTime
+  venue           String?
+  meetingLink     String?
+  quorumRequired  Int?
+  status          String   @default("SCHEDULED")
+  agenda          String?
+  minutesUrl      String?
+  attendanceCount Int?
+  conductedBy     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([scheduledAt])
+}
+
+// ============================================================
+// COMPLAINTS / HELPDESK
+// ============================================================
+
+model Complaint {
+  id             String   @id @default(cuid())
+  organizationId String
+  unitId         String?
+  raisedById     String
+  ticketNumber   String   @unique
+  title          String
+  description    String
+  category       String?
+  priority       String   @default("MEDIUM")
+  status         String   @default("OPEN")
+  assignedTo     String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+  imageUrls      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  unit         Unit?            @relation(fields: [unitId], references: [id])
+  raisedBy     User             @relation("ComplaintRaisedBy", fields: [raisedById], references: [id])
+  comments     ComplaintComment[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([raisedById])
+}
+
+model ComplaintComment {
+  id          String   @id @default(cuid())
+  complaintId String
+  authorName  String
+  authorRole  String
+  content     String
+  isInternal  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+}
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+
+model Document {
+  id             String   @id @default(cuid())
+  organizationId String
+  uploadedById   String
+  name           String
+  category       String?
+  fileUrl        String
+  fileSize       Int?
+  mimeType       String?
+  isPublic       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([organizationId])
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  title          String
+  message        String
+  type           String   @default("INFO")
+  referenceType  String?
+  referenceId    String?
+  isRead         Boolean  @default(false)
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([organizationId])
+}
+
+// ============================================================
+// AMENITIES & BOOKINGS
+// ============================================================
+
+model Amenity {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  bookingFee      Float    @default(0)
+  capacityPersons Int?
+  timingsFrom     String?
+  timingsTo       String?
+  isActive        Boolean  @default(true)
+  rules           String?
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+
+  bookings AmenityBooking[]
+
+  @@index([organizationId])
+}
+
+model AmenityBooking {
+  id            String   @id @default(cuid())
+  amenityId     String
+  unitId        String?
+  bookedByName  String
+  bookedByPhone String?
+  date          DateTime
+  startTime     String
+  endTime       String
+  purpose       String?
+  guests        Int?
+  status        String   @default("CONFIRMED")
+  feeAmount     Float    @default(0)
+  isPaid        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  amenity Amenity @relation(fields: [amenityId], references: [id])
+
+  @@index([amenityId])
+  @@index([date])
+}
+
+// ============================================================
+// AUDIT LOG (Immutable)
+// ============================================================
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String?
+  oldValues      String?
+  newValues      String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+// ============================================================
+// EMERGENCY CONTACTS
+// ============================================================
+
+model EmergencyContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  role           String
+  category       String   @default("COMMITTEE") // COMMITTEE, SECURITY, MAINTENANCE, MEDICAL, POLICE_FIRE, SERVICES
+  phone          String
+  altPhone       String?
+  email          String?
+  unit           String?
+  availableHours String   @default("24x7")
+  isPriority     Boolean  @default(false)
+  order          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([category])
+}
+
+// ============================================================
+// STAFF & GUARD DUTY ROSTER MANAGEMENT
+// ============================================================
+
+model StaffDuty {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  staffName          String
+  role               String    // e.g. "Senior Security Guard", "Main Gate Guard", "Tower A Housekeeper", "Campus Electrician"
+  category           String    @default("SECURITY") // SECURITY, HOUSEKEEPING, MAINTENANCE, SUPERVISOR, GARDENING
+  phone              String
+  altPhone           String?
+  blockName          String?   // e.g. "Main Gate", "Block A", "Block B", "Campus Wide"
+  locationPost       String    // e.g. "Gate 1 Main Entrance", "Gate 2 Exit", "Tower A Ground Lobby", "Basement B1 Parking"
+  shiftName          String    @default("Morning Shift") // Morning Shift, Evening Shift, Night Shift, General Shift
+  startTime          String    @default("06:00 AM")
+  endTime            String    @default("02:00 PM")
+  status             String    @default("ON_DUTY") // ON_DUTY, UPCOMING, OFF_DUTY, ON_LEAVE
+  isEmergencyContact Boolean   @default(false)
+  salaryAmount       Float     @default(18500)
+  salaryDate         String    @default("5th of every month")
+  paymentStatus      String    @default("PAID") // PAID, PROCESSING, DUE
+  lastPaidDate       String?
+  attendancePresent  Int       @default(26)
+  attendanceTotal    Int       @default(28)
+  notes              String?
+  order              Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([status])
+  @@index([locationPost])
+}
+
+// ============================================================
+// VISITOR ENTRY PASSES / VISITING PASS SYSTEM
+// ============================================================
+
+model EntryPass {
+  id             String    @id @default(cuid())
+  organizationId String
+  passCode       String    @unique // e.g. "PASS-84920"
+  otpPin         String    // e.g. "4821" 4-digit verification code for security guards
+  visitorName    String
+  visitorPhone   String
+  visitorType    String    @default("GUEST") // GUEST, DELIVERY, CAB, SERVICE, FAMILY, OTHER
+  vehicleNumber  String?   // e.g. "DL 01 AB 1234"
+  purpose        String?   // e.g. "Meeting family", "Zomato delivery", "AC Servicing"
+  residentName   String    // Host name e.g. "Dr. Vikram Malhotra"
+  residentPhone  String?
+  residentUnit   String    // e.g. "A-402"
+  unitId         String?
+  gateNumber     String    @default("Gate 1 - Main Gate")
+  validFrom      DateTime  @default(now())
+  validUntil     DateTime
+  status         String    @default("APPROVED") // APPROVED, CHECKED_IN, CHECKED_OUT, EXPIRED, CANCELLED
+  checkedInAt    DateTime?
+  checkedInBy    String?   // Guard name & post e.g. "Ram Singh (Gate 1)"
+  checkedOutAt   DateTime?
+  checkedOutBy   String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([passCode])
+  @@index([residentUnit])
+  @@index([status])
+  @@index([visitorPhone])
+}
+

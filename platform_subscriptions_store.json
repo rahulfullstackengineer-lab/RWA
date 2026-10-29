@@ -1,0 +1,69 @@
+{
+  "defaultUnitPrice": 50,
+  "annualDiscountPercent": 10,
+  "plans": [
+    {
+      "id": "plan_starter",
+      "code": "STARTER",
+      "name": "Starter Unit Plan",
+      "unitPriceMonthly": 35,
+      "description": "Essential society operations, directory, and complaint management",
+      "features": [
+        "Unit & Resident Directory Registry",
+        "Basic Maintenance Billing & Receipts",
+        "Resident Helpdesk & Complaint Tracking",
+        "Digital Notice Board & Circulars",
+        "Document Vault & By-Laws Repository"
+      ],
+      "isDefault": false,
+      "status": "ACTIVE"
+    },
+    {
+      "id": "plan_growth",
+      "code": "GROWTH",
+      "name": "Growth Standard Plan",
+      "unitPriceMonthly": 50,
+      "description": "Complete financial automation, online UPI gateway, and statutory compliance",
+      "features": [
+        "All Starter Features included",
+        "Razorpay & Instant UPI Collection Gateway",
+        "Double-Entry Accounting & Vendor Ledgers",
+        "Statutory Compliance Calendar with Google Sync",
+        "Amenity & Facility Reservations Engine",
+        "Automated PDF Bills with Email & SMS Alerts",
+        "Visitor Passcodes & Staff Attendance Register"
+      ],
+      "isDefault": true,
+      "isPopular": true,
+      "status": "ACTIVE"
+    },
+    {
+      "id": "plan_pro",
+      "code": "PRO",
+      "name": "Pro Enterprise Plan",
+      "unitPriceMonthly": 75,
+      "description": "High-scale community automation, digital democracy, and priority SLA",
+      "features": [
+        "All Growth Standard Features included",
+        "Official WhatsApp Business API Broadcasts",
+        "Digital Secret Ballot Elections & AGM Quorum Polls",
+        "Vehicle RFID Barrier & Parking Slot Allocation",
+        "Multi-Block Multi-Tier Financial Audits",
+        "Custom Society Subdomain & Dedicated Account Manager",
+        "99.9% Uptime Guarantee & Priority Phone SLA"
+      ],
+      "isDefault": false,
+      "status": "ACTIVE"
+    }
+  ],
+  "societySubscriptions": {
+    "cmuw8yax800hv53u02kwk60at": {
+      "organizationId": "cmuw8yax800hv53u02kwk60at",
+      "planId": "plan_growth",
+      "billingCycle": "MONTHLY",
+      "status": "ACTIVE",
+      "nextBillingDate": "2026-11-01",
+      "autoDebitEnabled": true
+    }
+  }
+}

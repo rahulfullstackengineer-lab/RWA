@@ -1,0 +1,762 @@
+{
+  "cmv8al7e10009fy5gx28jrpim": {
+    "members": [
+      {
+        "id": "CM-01",
+        "name": "Rajesh Kumar",
+        "role": "President",
+        "unit": "A-1001",
+        "phone": "1234567890",
+        "email": "president@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "blue",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-02",
+        "name": "Sunita Sharma",
+        "role": "Secretary",
+        "unit": "A-1002",
+        "phone": "9876543210",
+        "email": "secretary@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "green",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-03",
+        "name": "Vijay Mehta",
+        "role": "Treasurer",
+        "unit": "B-501",
+        "phone": "9811223344",
+        "email": "treasurer@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "amber",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-04",
+        "name": "Kavita Gupta",
+        "role": "Joint Secretary",
+        "unit": "B-502",
+        "phone": "9822334455",
+        "email": "jointsec@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "purple",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-05",
+        "name": "Ritu Arora",
+        "role": "Committee Member",
+        "unit": "C-801",
+        "phone": "9833445566",
+        "email": "member@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "teal",
+        "appointedDate": "2026-04-01"
+      }
+    ],
+    "election": {
+      "id": "ELEC-2027",
+      "title": "Managing Committee Elections 2027",
+      "term": "Apr 2027 – Mar 2028",
+      "status": "DRAFT",
+      "nominationOpen": "2026-10-20",
+      "nominationClose": "2026-10-25",
+      "votingStart": "2026-10-27",
+      "votingEnd": "2026-10-28",
+      "secretBallot": true,
+      "proxyAllowed": false,
+      "votingMode": "SECRET_BALLOT",
+      "totalEligibleVoters": 342,
+      "totalVotesCast": 0,
+      "positions": [
+        {
+          "id": "POS-01",
+          "title": "President",
+          "seats": 1,
+          "eligibility": "Flat owner resident for minimum 2 years with zero maintenance dues",
+          "nominations": [
+            {
+              "id": "NOM-101",
+              "candidateName": "Rajesh Kumar",
+              "unit": "A-1001",
+              "phone": "1234567890",
+              "proposer": "Sunita Sharma (A-1002)",
+              "seconder": "Vijay Mehta (B-501)",
+              "status": "APPROVED",
+              "manifesto": "Complete solar rooftop grid and transparent ledger audits for all residents.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T10:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-02",
+          "title": "Secretary",
+          "seats": 1,
+          "eligibility": "Flat owner with administrative experience and good standing",
+          "nominations": [
+            {
+              "id": "NOM-102",
+              "candidateName": "Sunita Sharma",
+              "unit": "A-1002",
+              "phone": "9876543210",
+              "proposer": "Rajesh Kumar (A-1001)",
+              "seconder": "Kavita Gupta (B-502)",
+              "status": "APPROVED",
+              "manifesto": "Digital grievance redressal within 24 hours and quarterly townhalls.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T11:30:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-03",
+          "title": "Treasurer",
+          "seats": 1,
+          "eligibility": "Finance/accounts background preferred. Mandatory owner resident.",
+          "nominations": [
+            {
+              "id": "NOM-103",
+              "candidateName": "Vijay Mehta",
+              "unit": "B-501",
+              "phone": "9811223344",
+              "proposer": "Sunita Sharma (A-1002)",
+              "seconder": "Ritu Arora (C-801)",
+              "status": "APPROVED",
+              "manifesto": "Zero deficit budget, automated GST compliance, and high interest on sinking fund FDs.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T09:15:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-04",
+          "title": "Joint Secretary",
+          "seats": 1,
+          "eligibility": "Owner resident in good standing",
+          "nominations": [
+            {
+              "id": "NOM-104",
+              "candidateName": "Kavita Gupta",
+              "unit": "B-502",
+              "phone": "9822334455",
+              "proposer": "Vijay Mehta (B-501)",
+              "seconder": "Sunita Sharma (A-1002)",
+              "status": "APPROVED",
+              "manifesto": "Youth and sports facilities upgrade in central clubhouse.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T14:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-05",
+          "title": "Committee Member (2 Seats)",
+          "seats": 2,
+          "eligibility": "Registered society member with active tenancy or ownership",
+          "nominations": [
+            {
+              "id": "NOM-105",
+              "candidateName": "Ritu Arora",
+              "unit": "C-801",
+              "phone": "9833445566",
+              "proposer": "Rajesh Kumar (A-1001)",
+              "seconder": "Vijay Mehta (B-501)",
+              "status": "APPROVED",
+              "manifesto": "Rainwater harvesting and waste segregation enforcement.",
+              "votes": 0,
+              "submittedAt": "2026-10-23T16:20:00Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-18T15:28:44.069Z"
+    }
+  },
+  "cmutll6x4000m53u0qjq16wno": {
+    "members": [
+      {
+        "id": "CM-01",
+        "name": "Rajesh Kuma",
+        "role": "President",
+        "unit": "A-1001",
+        "phone": "9876543210",
+        "email": "rajesh.admin@sector22rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "blue",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-02",
+        "name": "Victor Royce",
+        "role": "Secretary",
+        "unit": "A-1002",
+        "phone": "9833344455719",
+        "email": "victor.royce@society.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "green",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-03",
+        "name": "Glenna Beaumont",
+        "role": "Treasurer",
+        "unit": "B-501",
+        "phone": "9811122233693",
+        "email": "glenna.beaumont@society.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "amber",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-04",
+        "name": "Carey Murgatroyd",
+        "role": "Joint Secretary",
+        "unit": "B-502",
+        "phone": "9822233344359",
+        "email": "carey.murgatroyd@society.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "purple",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-05",
+        "name": "Ritu Arora",
+        "role": "Committee Member",
+        "unit": "C-801",
+        "phone": "9833445566",
+        "email": "member@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "teal",
+        "appointedDate": "2026-04-01"
+      }
+    ],
+    "election": {
+      "id": "ELEC-2027",
+      "title": "Managing Committee Elections 2027",
+      "term": "Apr 2027 – Mar 2028",
+      "status": "DRAFT",
+      "nominationOpen": "2026-10-20",
+      "nominationClose": "2026-10-25",
+      "votingStart": "2026-10-27",
+      "votingEnd": "2026-10-28",
+      "secretBallot": true,
+      "proxyAllowed": false,
+      "votingMode": "SECRET_BALLOT",
+      "totalEligibleVoters": 48,
+      "totalVotesCast": 0,
+      "positions": [
+        {
+          "id": "POS-01",
+          "title": "President",
+          "seats": 1,
+          "eligibility": "Flat owner resident for minimum 2 years with zero maintenance dues",
+          "nominations": [
+            {
+              "id": "NOM-101",
+              "candidateName": "Rajesh Kuma",
+              "unit": "A-1001",
+              "phone": "9876543210",
+              "proposer": "Victor Royce (A-1002)",
+              "seconder": "Glenna Beaumont (B-501)",
+              "status": "APPROVED",
+              "manifesto": "Complete solar rooftop grid and transparent ledger audits for all residents.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T10:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-02",
+          "title": "Secretary",
+          "seats": 1,
+          "eligibility": "Flat owner with administrative experience and good standing",
+          "nominations": [
+            {
+              "id": "NOM-102",
+              "candidateName": "Victor Royce",
+              "unit": "A-1002",
+              "phone": "9833344455719",
+              "proposer": "Rajesh Kuma (A-1001)",
+              "seconder": "Carey Murgatroyd (B-502)",
+              "status": "APPROVED",
+              "manifesto": "Digital grievance redressal within 24 hours and quarterly townhalls.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T11:30:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-03",
+          "title": "Treasurer",
+          "seats": 1,
+          "eligibility": "Finance/accounts background preferred. Mandatory owner resident.",
+          "nominations": [
+            {
+              "id": "NOM-103",
+              "candidateName": "Glenna Beaumont",
+              "unit": "B-501",
+              "phone": "9811122233693",
+              "proposer": "Victor Royce (A-1002)",
+              "seconder": "Ritu Arora (C-801)",
+              "status": "APPROVED",
+              "manifesto": "Zero deficit budget, automated GST compliance, and high interest on sinking fund FDs.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T09:15:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-04",
+          "title": "Joint Secretary",
+          "seats": 1,
+          "eligibility": "Owner resident in good standing",
+          "nominations": [
+            {
+              "id": "NOM-104",
+              "candidateName": "Carey Murgatroyd",
+              "unit": "B-502",
+              "phone": "9822233344359",
+              "proposer": "Glenna Beaumont (B-501)",
+              "seconder": "Victor Royce (A-1002)",
+              "status": "APPROVED",
+              "manifesto": "Youth and sports facilities upgrade in central clubhouse.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T14:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-05",
+          "title": "Committee Member (2 Seats)",
+          "seats": 2,
+          "eligibility": "Registered society member with active tenancy or ownership",
+          "nominations": [
+            {
+              "id": "NOM-105",
+              "candidateName": "Ritu Arora",
+              "unit": "C-801",
+              "phone": "9833445566",
+              "proposer": "Rajesh Kuma (A-1001)",
+              "seconder": "Glenna Beaumont (B-501)",
+              "status": "APPROVED",
+              "manifesto": "Rainwater harvesting and waste segregation enforcement.",
+              "votes": 0,
+              "submittedAt": "2026-10-23T16:20:00Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-18T19:19:02.334Z"
+    }
+  },
+  "cmusoghd20000dr7f202ebzkf": {
+    "members": [
+      {
+        "id": "CM-01",
+        "name": "Pooja Sharma",
+        "role": "President",
+        "unit": "A-1001",
+        "phone": "9876543211",
+        "email": "treasurer@greenfieldheights.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "blue",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-02",
+        "name": "Rohit Verma",
+        "role": "Secretary",
+        "unit": "A-101",
+        "phone": "9876543212",
+        "email": "rohit.verma@example.com",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "green",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-03",
+        "name": "Ananya Gupta",
+        "role": "Treasurer",
+        "unit": "B-204",
+        "phone": "9876543213",
+        "email": "ananya.gupta@example.com",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "amber",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-04",
+        "name": "Sanjay Kapoor",
+        "role": "Joint Secretary",
+        "unit": "A-102",
+        "phone": "9876543220",
+        "email": "jointsec@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "purple",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-05",
+        "name": "Kunal Singhania",
+        "role": "Committee Member",
+        "unit": "A-102",
+        "phone": "9876543221",
+        "email": "member@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "teal",
+        "appointedDate": "2026-04-01"
+      }
+    ],
+    "election": {
+      "id": "ELEC-2027",
+      "title": "Managing Committee Elections 2027",
+      "term": "Apr 2027 – Mar 2028",
+      "status": "DRAFT",
+      "nominationOpen": "2026-10-20",
+      "nominationClose": "2026-10-25",
+      "votingStart": "2026-10-27",
+      "votingEnd": "2026-10-28",
+      "secretBallot": true,
+      "proxyAllowed": false,
+      "votingMode": "SECRET_BALLOT",
+      "totalEligibleVoters": 4,
+      "totalVotesCast": 0,
+      "positions": [
+        {
+          "id": "POS-01",
+          "title": "President",
+          "seats": 1,
+          "eligibility": "Flat owner resident for minimum 2 years with zero maintenance dues",
+          "nominations": [
+            {
+              "id": "NOM-101",
+              "candidateName": "Pooja Sharma",
+              "unit": "A-1001",
+              "phone": "9876543211",
+              "proposer": "Rohit Verma (A-101)",
+              "seconder": "Ananya Gupta (B-204)",
+              "status": "APPROVED",
+              "manifesto": "Complete solar rooftop grid and transparent ledger audits for all residents.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T10:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-02",
+          "title": "Secretary",
+          "seats": 1,
+          "eligibility": "Flat owner with administrative experience and good standing",
+          "nominations": [
+            {
+              "id": "NOM-102",
+              "candidateName": "Rohit Verma",
+              "unit": "A-101",
+              "phone": "9876543212",
+              "proposer": "Pooja Sharma (A-1001)",
+              "seconder": "Sanjay Kapoor (A-102)",
+              "status": "APPROVED",
+              "manifesto": "Digital grievance redressal within 24 hours and quarterly townhalls.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T11:30:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-03",
+          "title": "Treasurer",
+          "seats": 1,
+          "eligibility": "Finance/accounts background preferred. Mandatory owner resident.",
+          "nominations": [
+            {
+              "id": "NOM-103",
+              "candidateName": "Ananya Gupta",
+              "unit": "B-204",
+              "phone": "9876543213",
+              "proposer": "Rohit Verma (A-101)",
+              "seconder": "Kunal Singhania (A-102)",
+              "status": "APPROVED",
+              "manifesto": "Zero deficit budget, automated GST compliance, and high interest on sinking fund FDs.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T09:15:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-04",
+          "title": "Joint Secretary",
+          "seats": 1,
+          "eligibility": "Owner resident in good standing",
+          "nominations": [
+            {
+              "id": "NOM-104",
+              "candidateName": "Sanjay Kapoor",
+              "unit": "A-102",
+              "phone": "9876543220",
+              "proposer": "Ananya Gupta (B-204)",
+              "seconder": "Rohit Verma (A-101)",
+              "status": "APPROVED",
+              "manifesto": "Youth and sports facilities upgrade in central clubhouse.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T14:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-05",
+          "title": "Committee Member (2 Seats)",
+          "seats": 2,
+          "eligibility": "Registered society member with active tenancy or ownership",
+          "nominations": [
+            {
+              "id": "NOM-105",
+              "candidateName": "Kunal Singhania",
+              "unit": "A-102",
+              "phone": "9876543221",
+              "proposer": "Pooja Sharma (A-1001)",
+              "seconder": "Ananya Gupta (B-204)",
+              "status": "APPROVED",
+              "manifesto": "Rainwater harvesting and waste segregation enforcement.",
+              "votes": 0,
+              "submittedAt": "2026-10-23T16:20:00Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-22T09:13:54.278Z"
+    }
+  },
+  "cmvm3ofvg00003iba6erjdw2p": {
+    "members": [
+      {
+        "id": "CM-01",
+        "name": "Vikram Malhotra",
+        "role": "President",
+        "unit": "A-1001",
+        "phone": "9876543210",
+        "email": "president@greenfieldheights.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "blue",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-02",
+        "name": "Pooja Sharma",
+        "role": "Secretary",
+        "unit": "A-1002",
+        "phone": "9876543211",
+        "email": "treasurer@greenfieldheights.in",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "green",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-03",
+        "name": "Rohit Verma",
+        "role": "Treasurer",
+        "unit": "A-101",
+        "phone": "9876543212",
+        "email": "rohit.verma@example.com",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "amber",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-04",
+        "name": "Ananya Gupta",
+        "role": "Joint Secretary",
+        "unit": "B-204",
+        "phone": "9876543213",
+        "email": "ananya.gupta@example.com",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "purple",
+        "appointedDate": "2026-04-01"
+      },
+      {
+        "id": "CM-05",
+        "name": "Ritu Arora",
+        "role": "Committee Member",
+        "unit": "C-801",
+        "phone": "9833445566",
+        "email": "member@rwa.org",
+        "termStart": "Apr 2026",
+        "termEnd": "Mar 2027",
+        "status": "CURRENT",
+        "color": "teal",
+        "appointedDate": "2026-04-01"
+      }
+    ],
+    "election": {
+      "id": "ELEC-2027",
+      "title": "Managing Committee Elections 2027",
+      "term": "Apr 2027 – Mar 2028",
+      "status": "DRAFT",
+      "nominationOpen": "2026-10-20",
+      "nominationClose": "2026-10-25",
+      "votingStart": "2026-10-27",
+      "votingEnd": "2026-10-28",
+      "secretBallot": true,
+      "proxyAllowed": false,
+      "votingMode": "SECRET_BALLOT",
+      "totalEligibleVoters": 4,
+      "totalVotesCast": 0,
+      "positions": [
+        {
+          "id": "POS-01",
+          "title": "President",
+          "seats": 1,
+          "eligibility": "Flat owner resident for minimum 2 years with zero maintenance dues",
+          "nominations": [
+            {
+              "id": "NOM-101",
+              "candidateName": "Vikram Malhotra",
+              "unit": "A-1001",
+              "phone": "9876543210",
+              "proposer": "Pooja Sharma (A-1002)",
+              "seconder": "Rohit Verma (A-101)",
+              "status": "APPROVED",
+              "manifesto": "Complete solar rooftop grid and transparent ledger audits for all residents.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T10:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-02",
+          "title": "Secretary",
+          "seats": 1,
+          "eligibility": "Flat owner with administrative experience and good standing",
+          "nominations": [
+            {
+              "id": "NOM-102",
+              "candidateName": "Pooja Sharma",
+              "unit": "A-1002",
+              "phone": "9876543211",
+              "proposer": "Vikram Malhotra (A-1001)",
+              "seconder": "Ananya Gupta (B-204)",
+              "status": "APPROVED",
+              "manifesto": "Digital grievance redressal within 24 hours and quarterly townhalls.",
+              "votes": 0,
+              "submittedAt": "2026-10-21T11:30:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-03",
+          "title": "Treasurer",
+          "seats": 1,
+          "eligibility": "Finance/accounts background preferred. Mandatory owner resident.",
+          "nominations": [
+            {
+              "id": "NOM-103",
+              "candidateName": "Rohit Verma",
+              "unit": "A-101",
+              "phone": "9876543212",
+              "proposer": "Pooja Sharma (A-1002)",
+              "seconder": "Ritu Arora (C-801)",
+              "status": "APPROVED",
+              "manifesto": "Zero deficit budget, automated GST compliance, and high interest on sinking fund FDs.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T09:15:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-04",
+          "title": "Joint Secretary",
+          "seats": 1,
+          "eligibility": "Owner resident in good standing",
+          "nominations": [
+            {
+              "id": "NOM-104",
+              "candidateName": "Ananya Gupta",
+              "unit": "B-204",
+              "phone": "9876543213",
+              "proposer": "Rohit Verma (A-101)",
+              "seconder": "Pooja Sharma (A-1002)",
+              "status": "APPROVED",
+              "manifesto": "Youth and sports facilities upgrade in central clubhouse.",
+              "votes": 0,
+              "submittedAt": "2026-10-22T14:00:00Z"
+            }
+          ]
+        },
+        {
+          "id": "POS-05",
+          "title": "Committee Member (2 Seats)",
+          "seats": 2,
+          "eligibility": "Registered society member with active tenancy or ownership",
+          "nominations": [
+            {
+              "id": "NOM-105",
+              "candidateName": "Ritu Arora",
+              "unit": "C-801",
+              "phone": "9833445566",
+              "proposer": "Vikram Malhotra (A-1001)",
+              "seconder": "Rohit Verma (A-101)",
+              "status": "APPROVED",
+              "manifesto": "Rainwater harvesting and waste segregation enforcement.",
+              "votes": 0,
+              "submittedAt": "2026-10-23T16:20:00Z"
+            }
+          ]
+        }
+      ],
+      "createdAt": "2026-10-01T00:00:00Z",
+      "updatedAt": "2026-10-24T07:57:07.451Z"
+    }
+  },
+  "cmvm59ryx000si1h25p4aa89b": {
+    "members": [],
+    "election": null
+  },
+  "cmvm5febw0037i1h2pou6gfpz": {
+    "members": [],
+    "election": null
+  }
+}
