@@ -1,12 +1,11 @@
-// This is your Prisma schema file for LOCAL DEVELOPMENT (SQLite)
-// For production, change provider to "postgresql" and update DATABASE_URL
+// Prisma schema — PostgreSQL (Render)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
