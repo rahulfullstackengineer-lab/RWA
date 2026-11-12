@@ -41,7 +41,8 @@ Screens['staff-dashboard'] = function() {
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <h2 id="staffHeroName" style="font-size:20px;font-weight:800;margin:0;color:#F0FDF4;">Ram Singh</h2>
               <span id="staffHeroRole" style="background:rgba(52,211,153,0.2);color:#A7F3D0;border:1px solid rgba(52,211,153,0.4);font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:12px;">Senior Security Guard</span>
-              <span style="background:#10B981;color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;">🟢 ON DUTY</span>
+              <span id="staffHeroSocietyBadge" style="background:rgba(59,130,246,0.3);color:#93C5FD;border:1px solid rgba(147,197,253,0.4);font-size:11px;font-weight:800;padding:3px 10px;border-radius:12px;">🏢 Emerald Heights RWA</span>
+              <span id="staffHeroStatusBadge" style="background:#10B981;color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;">🟢 ON DUTY</span>
             </div>
             <div style="display:flex;align-items:center;gap:16px;margin-top:6px;font-size:13px;color:#D1FAE5;flex-wrap:wrap;">
               <div>📍 <strong>Gate:</strong> <span id="staffHeroPost">Gate 1 - Main Entrance</span></div>
@@ -422,14 +423,36 @@ Screens['staff-dashboard'] = function() {
 window.__staffPortalData = null;
 window.__staffPortalPassFilter = 'ALL';
 
+// Returns the active guard's display name including their post
+window.getActiveGuardName = function() {
+  const data = window.__staffPortalData;
+  if (data && data.staff && data.staff.name) {
+    const post = (data.duty && data.duty.currentPost) ? data.duty.currentPost : '';
+    return post ? `${data.staff.name} (${post})` : data.staff.name;
+  }
+  // Fallback to localStorage user
+  try {
+    const u = JSON.parse(localStorage.getItem('rwa_user') || '{}');
+    if (u.name) return u.name;
+  } catch(e) {}
+  return 'Gate Security Guard';
+};
+
 window.loadLiveStaffPortal = async function() {
   try {
     const userStr = typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_user') : null;
     let u = null;
     try { u = userStr ? JSON.parse(userStr) : null; } catch(e) {}
-    const phone = u?.phone || '9876543210';
+    const phone = u?.phone || '';
+    const orgId = u?.organizationId || (typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_active_org_id') : '');
 
-    const res = await (typeof apiFetch === 'function' ? apiFetch(`/api/staff/portal?phone=${phone}`) : fetch(`/api/staff/portal?phone=${phone}`));
+    let url = '/api/staff/portal';
+    const params = [];
+    if (phone) params.push(`phone=${encodeURIComponent(phone)}`);
+    if (orgId) params.push(`orgId=${encodeURIComponent(orgId)}`);
+    if (params.length) url += `?${params.join('&')}`;
+
+    const res = await (typeof apiFetch === 'function' ? apiFetch(url) : fetch(url));
     const data = await res.json();
 
     if (data.success) {
@@ -445,6 +468,7 @@ window.renderStaffPortalUI = function(data) {
   const staff = data.staff || {};
   const duty = data.duty || {};
   const salary = data.salary || {};
+  const society = data.society || {};
   const passes = (data.passes && data.passes.list) || [];
 
   // Hero strip
@@ -453,12 +477,19 @@ window.renderStaffPortalUI = function(data) {
   const elPost = document.getElementById('staffHeroPost');
   const elShift = document.getElementById('staffHeroShift');
   const elPhone = document.getElementById('staffHeroPhone');
+  const elSociety = document.getElementById('staffHeroSocietyBadge');
+  const elStatus = document.getElementById('staffHeroStatusBadge');
 
   if (elName) elName.textContent = staff.name || 'Ram Singh';
   if (elRole) elRole.textContent = staff.role || 'Senior Security Guard';
   if (elPost) elPost.textContent = duty.currentPost || 'Gate 1 - Main Entrance';
   if (elShift) elShift.textContent = `${duty.currentShift || 'Morning Shift'} (${duty.timing || '06:00 AM - 02:00 PM'})`;
   if (elPhone) elPhone.textContent = staff.phone || '9876543210';
+  if (elSociety) elSociety.textContent = `🏢 ${society.name || 'Emerald Heights RWA'}`;
+  if (elStatus) {
+    const s = staff.status || 'ON_DUTY';
+    elStatus.textContent = s === 'ON_DUTY' ? '🟢 ON DUTY' : (s === 'UPCOMING' ? '⏳ UPCOMING' : s === 'OFF_DUTY' ? '⏸️ OFF DUTY' : '🏖️ ON LEAVE');
+  }
 
   // Duty tab cards
   const elDPost = document.getElementById('dutyCardPost');
@@ -631,8 +662,8 @@ window.handleStaffQuickVerify = async function() {
       body: JSON.stringify({
         action: 'quick_verify',
         passCodeOrPin: code,
-        guardName: 'Ram Singh (Gate 1)',
-        locationPost: 'Gate 1 - Main Entrance',
+        guardName: window.getActiveGuardName(),
+        locationPost: (window.__staffPortalData && window.__staffPortalData.duty && window.__staffPortalData.duty.currentPost) || 'Gate 1 - Main Entrance',
       }),
     }) : fetch('/api/staff/portal', {
       method: 'POST',
@@ -640,8 +671,8 @@ window.handleStaffQuickVerify = async function() {
       body: JSON.stringify({
         action: 'quick_verify',
         passCodeOrPin: code,
-        guardName: 'Ram Singh (Gate 1)',
-        locationPost: 'Gate 1 - Main Entrance',
+        guardName: window.getActiveGuardName(),
+        locationPost: (window.__staffPortalData && window.__staffPortalData.duty && window.__staffPortalData.duty.currentPost) || 'Gate 1 - Main Entrance',
       }),
     }));
 
@@ -680,11 +711,11 @@ window.staffCheckIn = async function(passId) {
     const res = await (typeof apiFetch === 'function' ? apiFetch('/api/entry-passes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: passId, action: 'check_in', guardName: 'Ram Singh (Gate 1)' }),
+      body: JSON.stringify({ id: passId, action: 'check_in', guardName: window.getActiveGuardName() }),
     }) : fetch('/api/entry-passes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: passId, action: 'check_in', guardName: 'Ram Singh (Gate 1)' }),
+      body: JSON.stringify({ id: passId, action: 'check_in', guardName: window.getActiveGuardName() }),
     }));
 
     const data = await res.json();
@@ -702,11 +733,11 @@ window.staffCheckOut = async function(passId) {
     const res = await (typeof apiFetch === 'function' ? apiFetch('/api/entry-passes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: passId, action: 'check_out', guardName: 'Ram Singh (Gate 1)' }),
+      body: JSON.stringify({ id: passId, action: 'check_out', guardName: window.getActiveGuardName() }),
     }) : fetch('/api/entry-passes', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: passId, action: 'check_out', guardName: 'Ram Singh (Gate 1)' }),
+      body: JSON.stringify({ id: passId, action: 'check_out', guardName: window.getActiveGuardName() }),
     }));
 
     const data = await res.json();
@@ -789,6 +820,8 @@ window.handleSpotEntrySubmit = async function(e) {
   const residentUnit = document.getElementById('spotFlatNumber')?.value;
   const vehicleNumber = document.getElementById('spotVehicleNo')?.value;
   const purpose = document.getElementById('spotPurpose')?.value;
+  const guardName = window.getActiveGuardName();
+  const gatePost = (window.__staffPortalData && window.__staffPortalData.duty && window.__staffPortalData.duty.currentPost) || 'Gate 1 - Main Entrance';
 
   try {
     const res = await (typeof apiFetch === 'function' ? apiFetch('/api/entry-passes', {
@@ -801,8 +834,8 @@ window.handleSpotEntrySubmit = async function(e) {
         residentUnit,
         vehicleNumber,
         purpose,
-        gateNumber: 'Gate 1 - Main Entrance',
-        notes: 'Walk-in spot registered by Guard Ram Singh',
+        gateNumber: gatePost,
+        notes: `Walk-in spot registered by ${guardName}`,
       }),
     }) : fetch('/api/entry-passes', {
       method: 'POST',
@@ -814,8 +847,8 @@ window.handleSpotEntrySubmit = async function(e) {
         residentUnit,
         vehicleNumber,
         purpose,
-        gateNumber: 'Gate 1 - Main Entrance',
-        notes: 'Walk-in spot registered by Guard Ram Singh',
+        gateNumber: gatePost,
+        notes: `Walk-in spot registered by ${guardName}`,
       }),
     }));
 
@@ -825,11 +858,11 @@ window.handleSpotEntrySubmit = async function(e) {
       await (typeof apiFetch === 'function' ? apiFetch('/api/entry-passes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: data.pass.id, action: 'check_in', guardName: 'Ram Singh (Gate 1)' }),
+        body: JSON.stringify({ id: data.pass.id, action: 'check_in', guardName }),
       }) : fetch('/api/entry-passes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: data.pass.id, action: 'check_in', guardName: 'Ram Singh (Gate 1)' }),
+        body: JSON.stringify({ id: data.pass.id, action: 'check_in', guardName }),
       }));
 
       if (typeof Modal !== 'undefined' && Modal.close) Modal.close();

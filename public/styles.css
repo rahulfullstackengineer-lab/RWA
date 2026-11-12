@@ -6841,6 +6841,54 @@ body.mobile-frame-view .cutora-footer-line {
   color: #059669;
 }
 
+/* =============================================
+   Cutora Staff & Security Mode Specific Accents
+   Deep Emerald, Night Sapphire & Guard Shield
+   ============================================= */
+.cutora-auth-screen.staff-mode {
+  --cutora-emerald: #10B981;
+  --cutora-emerald-dark: #059669;
+  --cutora-emerald-soft: #D1FAE5;
+  --cutora-shield: #064E3B;
+}
+
+.cutora-auth-screen.staff-mode .cutora-brand-glyph {
+  font-size: calc(22 * var(--u));
+}
+
+.cutora-auth-screen.staff-mode .cutora-dot.active {
+  background: #34D399;
+}
+
+.cutora-auth-screen.staff-mode .cutora-metric-val span {
+  color: #34D399;
+}
+
+.cutora-auth-screen.staff-mode .cutora-top-link {
+  color: #34D399;
+}
+
+.cutora-auth-screen.staff-mode .cutora-top-link:hover {
+  color: #6EE7B7;
+}
+
+.cutora-auth-screen.staff-mode .cutora-login-btn {
+  background: linear-gradient(135deg, #064E3B 0%, #047857 50%, #059669 100%);
+  color: #FFFFFF;
+}
+
+.cutora-auth-screen.staff-mode .cutora-login-btn:hover {
+  box-shadow: 0 calc(12 * var(--u)) calc(32 * var(--u)) rgba(5, 150, 105, 0.4);
+}
+
+.cutora-auth-screen.staff-mode .cutora-footer-line a {
+  color: #059669;
+}
+
+.cutora-auth-screen.staff-mode .cutora-forgot-link {
+  color: #059669;
+}
+
 /* OTP Boxes for Interactive 6-Digit Entry */
 .cutora-otp-row {
   display: flex;

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
@@ -18,6 +19,8 @@ export interface StaffRecord {
   joiningDate: string
   status: 'ACTIVE' | 'ON_LEAVE' | 'INACTIVE'
   shift: 'DAY' | 'NIGHT' | 'ROTATIONAL' | 'GENERAL'
+  pin?: string
+
   lastPaidMonth: string
   lastPaidDate?: string
   upiId?: string
@@ -168,10 +171,14 @@ function getStoredStaffData(orgId: string): OrgStaffStore {
     console.error('Error reading staff store:', e)
   }
 
-  return {
-    staff: [],
-    payments: [],
+  const initialStaff = getDefaultStaff().map(s => ({ ...s, pin: '1234' }))
+  const initialPayments = getDefaultPayments()
+  const initialData: OrgStaffStore = {
+    staff: initialStaff,
+    payments: initialPayments,
   }
+  saveStoredStaffData(orgId, initialData)
+  return initialData
 }
 
 function saveStoredStaffData(orgId: string, data: OrgStaffStore) {
@@ -311,6 +318,7 @@ export async function POST(request: Request) {
       salaryType = 'MONTHLY',
       joiningDate = '2026-10-01',
       shift = 'DAY',
+      pin = '1234',
       upiId = '',
       accountNumber = '',
       ifscCode = '',
@@ -323,6 +331,9 @@ export async function POST(request: Request) {
     }
 
     const newStaffId = `STF-${Math.floor(100 + Math.random() * 900)}`
+    const staffPin = (pin || '1234').toString().trim()
+    const cleanPhone = phone.trim().replace(/\D/g, '')
+    const tenDigit = cleanPhone.slice(-10)
 
     const newStaff: StaffRecord = {
       id: newStaffId,
@@ -335,6 +346,7 @@ export async function POST(request: Request) {
       joiningDate: joiningDate || new Date().toISOString().split('T')[0],
       status: 'ACTIVE',
       shift: shift || 'DAY',
+      pin: staffPin,
       lastPaidMonth: 'Sep 2026',
       upiId: upiId.trim(),
       accountNumber: accountNumber.trim(),
@@ -347,6 +359,80 @@ export async function POST(request: Request) {
     data.staff.unshift(newStaff)
     saveStoredStaffData(orgId, data)
 
+    // Sync to Prisma: StaffDuty & User (for guard/staff login)
+    try {
+      const cat = department?.toUpperCase().includes('SEC') ? 'SECURITY' : (department?.toUpperCase().includes('HOUSE') ? 'HOUSEKEEPING' : (department?.toUpperCase().includes('GARDEN') ? 'GARDENING' : 'MAINTENANCE'))
+      const existingDuty = await prisma.staffDuty.findFirst({
+        where: {
+          organizationId: orgId,
+          OR: [{ phone: phone.trim() }, { phone: cleanPhone }, { phone: tenDigit }],
+        },
+      })
+
+      if (existingDuty) {
+        await prisma.staffDuty.update({
+          where: { id: existingDuty.id },
+          data: {
+            staffName: name.trim(),
+            role: role.trim(),
+            category: cat,
+            locationPost: department === 'Security' ? 'Gate 1 Entrance Desk' : `${department} Station`,
+            shiftName: shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+            salaryAmount: Number(salary) || 12000,
+            status: 'ON_DUTY',
+          },
+        })
+      } else {
+        await prisma.staffDuty.create({
+          data: {
+            organizationId: orgId,
+            staffName: name.trim(),
+            role: role.trim(),
+            category: cat,
+            phone: phone.trim(),
+            locationPost: department === 'Security' ? 'Gate 1 Entrance Desk' : `${department} Station`,
+            shiftName: shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+            salaryAmount: Number(salary) || 12000,
+            status: 'ON_DUTY',
+          },
+        })
+      }
+
+      // Upsert User with STAFF role and bcrypt PIN
+      const defaultHash = await hashPassword(staffPin)
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [{ phone: phone.trim() }, { phone: cleanPhone }, { phone: tenDigit }],
+        },
+      })
+
+      if (existingUser) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name: name.trim(),
+            role: 'STAFF',
+            status: 'ACTIVE',
+            passwordHash: defaultHash,
+            organizationId: orgId,
+          },
+        })
+      } else {
+        await prisma.user.create({
+          data: {
+            phone: tenDigit || cleanPhone || phone.trim(),
+            name: name.trim(),
+            role: 'STAFF',
+            status: 'ACTIVE',
+            passwordHash: defaultHash,
+            organizationId: orgId,
+          },
+        })
+      }
+    } catch (syncErr) {
+      console.error('Error syncing staff to Prisma:', syncErr)
+    }
+
     emitLiveSocketEvent('staff-added', { staff: newStaff }, { orgId })
 
     await logAudit({
@@ -355,7 +441,7 @@ export async function POST(request: Request) {
       action: 'STAFF_CREATED',
       entityType: 'Staff',
       entityId: newStaff.id,
-      details: `New staff member "${newStaff.name}" (${newStaff.role}, ₹${newStaff.salary}/mo) onboarded by ${user.name}`,
+      details: `New staff member "${newStaff.name}" (${newStaff.role}, ₹${newStaff.salary}/mo, PIN: ${staffPin}) onboarded by ${user.name}`,
       severity: 'INFO',
       newValues: newStaff,
       ipAddress: request.headers.get('x-forwarded-for') || null,
@@ -376,7 +462,7 @@ export async function PATCH(request: Request) {
 
     const orgId = user.organizationId!
     const body = await request.json()
-    const { id, name, role, department, phone, salary, status, shift, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact } = body
+    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact } = body
 
     if (!id) return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 })
 
@@ -385,6 +471,7 @@ export async function PATCH(request: Request) {
     if (!staffMember) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 })
 
     const oldValues = { ...staffMember }
+    const oldPhone = staffMember.phone
     if (name !== undefined) staffMember.name = name.trim()
     if (role !== undefined) staffMember.role = role.trim()
     if (department !== undefined) staffMember.department = department.trim()
@@ -392,6 +479,7 @@ export async function PATCH(request: Request) {
     if (salary !== undefined) staffMember.salary = Number(salary)
     if (status !== undefined) staffMember.status = status
     if (shift !== undefined) staffMember.shift = shift
+    if (pin !== undefined && pin.trim().length >= 4) staffMember.pin = pin.trim()
     if (upiId !== undefined) staffMember.upiId = upiId.trim()
     if (accountNumber !== undefined) staffMember.accountNumber = accountNumber.trim()
     if (ifscCode !== undefined) staffMember.ifscCode = ifscCode.trim().toUpperCase()
@@ -401,13 +489,109 @@ export async function PATCH(request: Request) {
 
     saveStoredStaffData(orgId, data)
 
+    // Sync to Prisma (User & StaffDuty)
+    try {
+      const targetPhone = staffMember.phone || oldPhone
+      const cleanTarget = targetPhone.replace(/\D/g, '')
+      const tenDigitTarget = cleanTarget.slice(-10)
+
+      const cat = (staffMember.department || '').toUpperCase().includes('SEC')
+        ? 'SECURITY'
+        : ((staffMember.department || '').toUpperCase().includes('HOUSE') ? 'HOUSEKEEPING' : 'MAINTENANCE')
+
+      // Update StaffDuty
+      const existingDuty = await prisma.staffDuty.findFirst({
+        where: {
+          organizationId: orgId,
+          OR: [
+            { phone: targetPhone },
+            { phone: oldPhone },
+            { phone: cleanTarget },
+            { phone: tenDigitTarget },
+          ],
+        },
+      })
+
+      if (existingDuty) {
+        await prisma.staffDuty.update({
+          where: { id: existingDuty.id },
+          data: {
+            staffName: staffMember.name,
+            role: staffMember.role,
+            category: cat,
+            phone: targetPhone,
+            locationPost: staffMember.department === 'Security' ? 'Gate 1 Entrance Desk' : `${staffMember.department} Station`,
+            shiftName: staffMember.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+            salaryAmount: staffMember.salary || 12000,
+            status: staffMember.status === 'ACTIVE' ? 'ON_DUTY' : 'OFF_DUTY',
+          },
+        })
+      } else {
+        await prisma.staffDuty.create({
+          data: {
+            organizationId: orgId,
+            staffName: staffMember.name,
+            role: staffMember.role,
+            category: cat,
+            phone: targetPhone,
+            locationPost: staffMember.department === 'Security' ? 'Gate 1 Entrance Desk' : `${staffMember.department} Station`,
+            shiftName: staffMember.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+            salaryAmount: staffMember.salary || 12000,
+            status: staffMember.status === 'ACTIVE' ? 'ON_DUTY' : 'OFF_DUTY',
+          },
+        })
+      }
+
+      // Update User Auth
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: targetPhone },
+            { phone: oldPhone },
+            { phone: cleanTarget },
+            { phone: tenDigitTarget },
+          ],
+        },
+      })
+
+      const newHash = pin && pin.trim().length >= 4 ? await hashPassword(pin.trim()) : undefined
+
+      if (existingUser) {
+        const updateData: any = {
+          name: staffMember.name,
+          phone: tenDigitTarget || cleanTarget || targetPhone,
+          role: 'STAFF',
+          status: staffMember.status === 'INACTIVE' ? 'SUSPENDED' : 'ACTIVE',
+        }
+        if (newHash) updateData.passwordHash = newHash
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: updateData,
+        })
+      } else {
+        const fallbackHash = await hashPassword(pin?.trim() || staffMember.pin || '1234')
+        await prisma.user.create({
+          data: {
+            phone: tenDigitTarget || cleanTarget || targetPhone,
+            name: staffMember.name,
+            role: 'STAFF',
+            status: staffMember.status === 'INACTIVE' ? 'SUSPENDED' : 'ACTIVE',
+            passwordHash: fallbackHash,
+            organizationId: orgId,
+          },
+        })
+      }
+    } catch (syncErr) {
+      console.error('Error updating Prisma on staff patch:', syncErr)
+    }
+
     await logAudit({
       organizationId: orgId,
       userId: user.id,
       action: 'STAFF_UPDATED',
       entityType: 'Staff',
       entityId: staffMember.id,
-      details: `Staff member "${staffMember.name}" details updated by ${user.name}`,
+      details: `Staff member "${staffMember.name}" details updated by ${user.name}${pin ? ' (Login PIN updated)' : ''}`,
       severity: 'INFO',
       oldValues,
       newValues: staffMember,
@@ -438,6 +622,28 @@ export async function DELETE(request: Request) {
     const removed = data.staff.splice(idx, 1)[0]
     saveStoredStaffData(orgId, data)
 
+    // Sync deletion to Prisma
+    try {
+      const cleanP = (removed.phone || '').replace(/\D/g, '')
+      const tenD = cleanP.slice(-10)
+
+      await prisma.staffDuty.deleteMany({
+        where: {
+          organizationId: orgId,
+          OR: [{ phone: removed.phone }, { phone: cleanP }, { phone: tenD }],
+        },
+      })
+
+      await prisma.user.updateMany({
+        where: {
+          OR: [{ phone: removed.phone }, { phone: cleanP }, { phone: tenD }],
+        },
+        data: { status: 'SUSPENDED' },
+      })
+    } catch (syncErr) {
+      console.error('Error syncing staff deletion to Prisma:', syncErr)
+    }
+
     await logAudit({
       organizationId: orgId,
       userId: user.id,
@@ -455,3 +661,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Failed to delete staff record' }, { status: 500 })
   }
 }
+

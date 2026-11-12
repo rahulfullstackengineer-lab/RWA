@@ -1,6 +1,34 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyPassword, hashPassword, createSession } from '@/lib/auth'
+import fs from 'fs'
+import path from 'path'
+
+function findInStaffStore(cleanPhone: string, tenDigit: string) {
+  try {
+    const p = path.join(process.cwd(), 'staff_store.json')
+    if (fs.existsSync(p)) {
+      const allData = JSON.parse(fs.readFileSync(p, 'utf-8'))
+      for (const orgId of Object.keys(allData)) {
+        const staffList = allData[orgId]?.staff || []
+        for (const s of staffList) {
+          const sClean = (s.phone || '').trim().replace(/\D/g, '')
+          const sTen = sClean.slice(-10)
+          if (
+            (cleanPhone && (sClean === cleanPhone || sTen === cleanPhone || s.phone === cleanPhone)) ||
+            (tenDigit && (sClean === tenDigit || sTen === tenDigit || s.phone === tenDigit))
+          ) {
+            return { staff: s, orgId }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error checking staff store:', e)
+  }
+  return null
+}
+
 
 export async function POST(request: Request) {
   try {
@@ -78,7 +106,7 @@ export async function POST(request: Request) {
       }
 
       // Check if phone belongs to society Staff & Guard Roster
-      const matchingStaff = await prisma.staffDuty.findFirst({
+      let matchingStaff = await prisma.staffDuty.findFirst({
         where: {
           OR: [
             { phone: cleanPhone },
@@ -87,6 +115,46 @@ export async function POST(request: Request) {
         },
         include: { organization: true },
       })
+
+      if (!matchingStaff) {
+        const stored = findInStaffStore(cleanPhone, tenDigit)
+        if (stored) {
+          const defaultHash = await hashPassword(stored.staff.pin || '1234')
+
+          let u = await prisma.user.findFirst({
+            where: {
+              OR: [{ phone: cleanPhone }, { phone: tenDigit }],
+            },
+          })
+          if (!u) {
+            u = await prisma.user.create({
+              data: {
+                phone: tenDigit || cleanPhone,
+                name: stored.staff.name,
+                role: 'STAFF',
+                status: 'ACTIVE',
+                passwordHash: defaultHash,
+                organizationId: stored.orgId,
+              },
+            })
+          }
+
+          matchingStaff = await prisma.staffDuty.create({
+            data: {
+              organizationId: stored.orgId,
+              staffName: stored.staff.name,
+              role: stored.staff.role,
+              category: stored.staff.department?.toUpperCase().includes('SEC') ? 'SECURITY' : 'MAINTENANCE',
+              phone: stored.staff.phone || tenDigit,
+              locationPost: stored.staff.department === 'Security' ? 'Gate 1 Entrance Desk' : `${stored.staff.department} Post`,
+              shiftName: stored.staff.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+              salaryAmount: Number(stored.staff.salary) || 12000,
+              status: 'ON_DUTY',
+            },
+            include: { organization: true },
+          })
+        }
+      }
 
       if (matchingStaff) {
         return NextResponse.json({
@@ -290,7 +358,7 @@ export async function POST(request: Request) {
       }
 
       // Check if phone belongs to society Staff & Guard Roster
-      const matchingStaff = await prisma.staffDuty.findFirst({
+      let matchingStaff = await prisma.staffDuty.findFirst({
         where: {
           OR: [
             { phone: cleanPhone },
@@ -300,8 +368,27 @@ export async function POST(request: Request) {
         include: { organization: true },
       })
 
+      const storedStaff = findInStaffStore(cleanPhone, tenDigit)
+      if (!matchingStaff && storedStaff) {
+        matchingStaff = await prisma.staffDuty.create({
+          data: {
+            organizationId: storedStaff.orgId,
+            staffName: storedStaff.staff.name,
+            role: storedStaff.staff.role,
+            category: storedStaff.staff.department?.toUpperCase().includes('SEC') ? 'SECURITY' : 'MAINTENANCE',
+            phone: storedStaff.staff.phone || tenDigit,
+            locationPost: storedStaff.staff.department === 'Security' ? 'Gate 1 Entrance Desk' : `${storedStaff.staff.department} Post`,
+            shiftName: storedStaff.staff.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
+            salaryAmount: Number(storedStaff.staff.salary) || 12000,
+            status: 'ON_DUTY',
+          },
+          include: { organization: true },
+        })
+      }
+
       if (matchingStaff) {
-        const defaultHash = await hashPassword(secret || '1234')
+        const staffPin = storedStaff?.staff?.pin || '1234'
+        const defaultHash = await hashPassword(staffPin)
         user = await prisma.user.create({
           data: {
             phone: cleanPhone,
@@ -353,6 +440,10 @@ export async function POST(request: Request) {
 
     // Validate PIN strictly using bcrypt hash comparison or standard demo PINs
     let isPinValid = await verifyPassword(secret, user.passwordHash)
+    const storedForAuth = findInStaffStore(cleanPhone, tenDigit)
+    if (storedForAuth?.staff?.pin && secret === storedForAuth.staff.pin) {
+      isPinValid = true
+    }
     if (!isPinValid && (secret === '1234' || secret === '123456' || secret === 'admin123' || secret === 'resident123')) {
       isPinValid = true
     }
@@ -407,7 +498,23 @@ export async function POST(request: Request) {
       },
     })
 
-    const isConnected = Boolean(fullUser?.organizationId && fullUser?.unitId)
+    let staffDutyInfo = null
+    if (fullUser?.role === 'STAFF') {
+      staffDutyInfo = await prisma.staffDuty.findFirst({
+        where: {
+          organizationId: fullUser.organizationId || undefined,
+          OR: [
+            { phone: cleanPhone },
+            { phone: tenDigit },
+          ],
+        },
+      })
+    }
+
+    const isConnected = Boolean(
+      fullUser?.organizationId &&
+      (fullUser?.role === 'STAFF' || fullUser?.unitId || fullUser?.role === 'ADMIN' || fullUser?.role === 'SUPER_ADMIN')
+    )
 
     // Prepare response
     const response = NextResponse.json({
@@ -422,9 +529,13 @@ export async function POST(request: Request) {
         role: fullUser?.role,
         organizationId: fullUser?.organizationId,
         organizationName: fullUser?.organization?.name,
+        societyName: fullUser?.organization?.name,
         unitId: fullUser?.unitId,
         unitNumber: fullUser?.unit?.unitNumber,
         blockName: fullUser?.unit?.block?.name,
+        post: staffDutyInfo?.locationPost || null,
+        shift: staffDutyInfo?.shiftName || null,
+        shiftTiming: staffDutyInfo ? `${staffDutyInfo.startTime} - ${staffDutyInfo.endTime}` : null,
       },
     })
 

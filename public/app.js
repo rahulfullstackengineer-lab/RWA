@@ -204,7 +204,8 @@
     s.startsWith('auth-') ||
     s.startsWith('onboarding-') ||
     s.startsWith('resident-login') ||
-    s.startsWith('resident-onboard');
+    s.startsWith('resident-onboard') ||
+    s.startsWith('staff-login');
 
   if (initialHash && Screens[initialHash] && !['landing', 'product', 'solutions', 'pricing', 'company'].includes(initialHash)) {
     startScreen = initialHash;

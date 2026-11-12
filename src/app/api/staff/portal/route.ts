@@ -13,15 +13,18 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const phoneParam = searchParams.get('phone')?.trim()
+    const orgIdParam = searchParams.get('orgId')?.trim()
 
-    let organizationId = searchParams.get('orgId') || null
-    let staffPhone = phoneParam
+    let organizationId = orgIdParam || null
+    let staffPhone = phoneParam || null
 
-    if (!staffPhone) {
-      const { user } = await requireAuth(request).catch(() => ({ user: null }))
-      if (user) {
+    const { user } = await requireAuth(request).catch(() => ({ user: null }))
+    if (user) {
+      if (user.organizationId) {
+        organizationId = user.organizationId
+      }
+      if (user.role === 'STAFF' || !staffPhone) {
         staffPhone = user.phone
-        organizationId = user.organizationId || null
       }
     }
 
@@ -34,21 +37,40 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
     }
 
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true, name: true, address: true, city: true },
+    })
+
     // Find the staff duty record for this staff member
     let staffMember = null
     if (staffPhone) {
+      const cleanPhone = staffPhone.replace(/\D/g, '')
+      const tenDigit = cleanPhone.slice(-10)
       staffMember = await prisma.staffDuty.findFirst({
         where: {
           organizationId,
           OR: [
             { phone: staffPhone },
-            { phone: { contains: staffPhone.slice(-10) } },
+            { phone: cleanPhone },
+            { phone: tenDigit },
+            { phone: { contains: tenDigit } },
           ],
         },
       })
     }
 
-    // Default to Senior Security Guard Ram Singh if not found
+    // Try finding by user name if role is STAFF
+    if (!staffMember && user?.name) {
+      staffMember = await prisma.staffDuty.findFirst({
+        where: {
+          organizationId,
+          staffName: user.name,
+        },
+      })
+    }
+
+    // Default to first Security Guard in organization if not matched
     if (!staffMember) {
       staffMember = await prisma.staffDuty.findFirst({
         where: { organizationId, category: 'SECURITY' },
@@ -124,6 +146,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
+      society: {
+        id: org?.id,
+        name: org?.name || 'Emerald Heights RWA',
+        address: org?.address || 'Campus Gates & Towers',
+      },
       staff: {
         id: staffMember.id,
         name: staffMember.staffName,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
@@ -197,8 +197,31 @@ async function seedDefaultStaffDuties(orgId: string) {
       },
     ]
 
+    const defaultHash = await hashPassword('1234')
     for (const item of defaultDuties) {
       await prisma.staffDuty.create({ data: item })
+      const cleanPhone = item.phone.replace(/\D/g, '')
+      const tenDigit = cleanPhone.slice(-10)
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: cleanPhone },
+            { phone: tenDigit },
+          ],
+        },
+      })
+      if (!existingUser) {
+        await prisma.user.create({
+          data: {
+            phone: tenDigit,
+            name: item.staffName,
+            role: 'STAFF',
+            status: 'ACTIVE',
+            passwordHash: defaultHash,
+            organizationId: orgId,
+          },
+        })
+      }
     }
   } catch (err) {
     console.error('Error seeding default staff duties:', err)
@@ -356,6 +379,9 @@ export async function POST(request: Request) {
       startTime = '06:00 AM',
       endTime = '02:00 PM',
       status = 'ON_DUTY',
+      pin = '1234',
+      salaryAmount = 22500,
+      salaryDate = '5th of every month',
       isEmergencyContact = false,
       notes = '',
       notifyResidents = true,
@@ -367,6 +393,9 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    const cleanPhone = phone.trim().replace(/\D/g, '')
+    const tenDigit = cleanPhone.slice(-10)
 
     const duty = await prisma.staffDuty.create({
       data: {
@@ -382,10 +411,53 @@ export async function POST(request: Request) {
         startTime: startTime.trim(),
         endTime: endTime.trim(),
         status,
+        salaryAmount: salaryAmount ? Number(salaryAmount) : 22500,
+        salaryDate: salaryDate ? salaryDate.trim() : '5th of every month',
         isEmergencyContact: Boolean(isEmergencyContact),
         notes: notes ? notes.trim() : null,
       },
     })
+
+    // Create or update real User account so guard/staff can immediately log in
+    try {
+      const pinToUse = pin ? String(pin).trim() : '1234'
+      const hashedPin = await hashPassword(pinToUse)
+
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: cleanPhone },
+            { phone: tenDigit },
+          ],
+        },
+      })
+
+      if (existingUser) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name: staffName.trim(),
+            role: 'STAFF',
+            organizationId: orgId,
+            status: status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+            passwordHash: hashedPin,
+          },
+        })
+      } else {
+        await prisma.user.create({
+          data: {
+            phone: tenDigit,
+            name: staffName.trim(),
+            role: 'STAFF',
+            status: status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+            passwordHash: hashedPin,
+            organizationId: orgId,
+          },
+        })
+      }
+    } catch (userSyncErr) {
+      console.error('Error syncing User account for new staff:', userSyncErr)
+    }
 
     await logAudit({
       organizationId: orgId,
@@ -456,10 +528,56 @@ export async function PUT(request: Request) {
         ...(updates.startTime && { startTime: updates.startTime.trim() }),
         ...(updates.endTime && { endTime: updates.endTime.trim() }),
         ...(updates.status && { status: updates.status }),
+        ...(updates.salaryAmount !== undefined && { salaryAmount: Number(updates.salaryAmount) }),
+        ...(updates.salaryDate && { salaryDate: updates.salaryDate.trim() }),
         ...(updates.isEmergencyContact !== undefined && { isEmergencyContact: Boolean(updates.isEmergencyContact) }),
         ...(updates.notes !== undefined && { notes: updates.notes ? updates.notes.trim() : null }),
       },
     })
+
+    // Sync User account credentials (name, phone, status, and optional new PIN)
+    try {
+      const phoneToSync = (updates.phone || existing.phone).trim().replace(/\D/g, '')
+      const tenDigit = phoneToSync.slice(-10)
+
+      let userUpdateData: any = {
+        organizationId: orgId,
+        status: (updates.status || existing.status) === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+      }
+      if (updates.staffName) userUpdateData.name = updates.staffName.trim()
+      if (updates.pin && String(updates.pin).trim()) {
+        userUpdateData.passwordHash = await hashPassword(String(updates.pin).trim())
+      }
+
+      const staffUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { phone: phoneToSync },
+            { phone: tenDigit },
+          ],
+        },
+      })
+
+      if (staffUser) {
+        await prisma.user.update({
+          where: { id: staffUser.id },
+          data: userUpdateData,
+        })
+      } else if (updates.pin) {
+        await prisma.user.create({
+          data: {
+            phone: tenDigit,
+            name: updated.staffName,
+            role: 'STAFF',
+            status: updated.status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
+            passwordHash: await hashPassword(String(updates.pin).trim()),
+            organizationId: orgId,
+          },
+        })
+      }
+    } catch (userErr) {
+      console.error('Error syncing staff User during PUT:', userErr)
+    }
 
     await logAudit({
       organizationId: orgId,
@@ -523,6 +641,24 @@ export async function PATCH(request: Request) {
       },
     })
 
+    // If status changed to suspended or active, sync user
+    if (status && updated.phone) {
+      const tenDigit = updated.phone.replace(/\D/g, '').slice(-10)
+      const u = await prisma.user.findFirst({
+        where: {
+          organizationId: orgId,
+          role: 'STAFF',
+          OR: [{ phone: updated.phone }, { phone: tenDigit }],
+        },
+      })
+      if (u) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { status: status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE' },
+        })
+      }
+    }
+
     await broadcastDutyNotification(
       orgId,
       `🛡️ Guard Status Changed: ${updated.staffName}`,
@@ -561,6 +697,24 @@ export async function DELETE(request: Request) {
     const deleted = await prisma.staffDuty.delete({
       where: { id },
     })
+
+    // Deactivate associated staff user account
+    if (deleted.phone) {
+      const tenDigit = deleted.phone.replace(/\D/g, '').slice(-10)
+      const u = await prisma.user.findFirst({
+        where: {
+          organizationId: orgId,
+          role: 'STAFF',
+          OR: [{ phone: deleted.phone }, { phone: tenDigit }],
+        },
+      })
+      if (u) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { status: 'SUSPENDED' },
+        })
+      }
+    }
 
     emitLiveSocketEvent('duty:roster-updated', {
       action: 'DELETED',

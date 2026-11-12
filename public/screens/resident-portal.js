@@ -750,7 +750,7 @@ window.loadLiveResidentDashboard = async function() {
     if (activeOrgId) params.set('orgId', activeOrgId);
 
     // Fetch live APIs in parallel
-    const [invRes, noticeRes, complaintRes, pollRes, amenityRes, unitsRes, expRes, memberRes, settingsRes, emergencyRes, dutyRes] = await Promise.all([
+    const [invRes, noticeRes, complaintRes, pollRes, amenityRes, unitsRes, expRes, memberRes, settingsRes, emergencyRes, dutyRes, passRes] = await Promise.all([
       (window.apiFetch || fetch)('/api/billing/invoices?' + params.toString()).catch(() => null),
       (window.apiFetch || fetch)('/api/notices?status=PUBLISHED').catch(() => null),
       (window.apiFetch || fetch)('/api/complaints').catch(() => null),
@@ -798,10 +798,9 @@ window.loadLiveResidentDashboard = async function() {
     const allDuties = dutyData.duties || [];
     window._residentStaffDutyList = allDuties;
 
-    const passesData = (arguments[0] !== undefined && arguments[0] !== null) ? {} : {};
+    // Parse entry passes from the parallel fetch (already fetched above)
     let allPasses = [];
     try {
-      const passRes = await (window.apiFetch || fetch)('/api/entry-passes').catch(() => null);
       if (passRes && passRes.ok) {
         const pData = await passRes.json();
         allPasses = pData.passes || [];

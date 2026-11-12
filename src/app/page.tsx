@@ -27,6 +27,7 @@ export default function Home() {
       '/screens/admin-emergency.js',
       '/screens/admin-duty.js',
       '/screens/admin-entry-passes.js',
+      '/screens/staff-login.js',
       '/screens/staff-portal.js',
       '/screens/resident-portal.js',
       '/screens/resident-onboard.js',
@@ -71,7 +72,8 @@ export default function Home() {
           s.startsWith('auth-') ||
           s.startsWith('onboarding-') ||
           s.startsWith('resident-login') ||
-          s.startsWith('resident-onboard')
+          s.startsWith('resident-onboard') ||
+          s.startsWith('staff-login')
 
         if (hash && win.Screens[hash] && !['landing', 'product', 'solutions', 'pricing', 'company'].includes(hash)) {
           targetScreen = hash

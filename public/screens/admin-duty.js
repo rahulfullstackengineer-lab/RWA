@@ -228,6 +228,9 @@ window.renderStaffDutyTable = function() {
             <a href="tel:${d.phone}" style="font-size:12.5px;font-weight:700;color:#2563EB;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
               <span>📞</span> ${d.phone}
             </a>
+            <div style="font-size:10.5px;color:#059669;font-weight:700;display:flex;align-items:center;gap:3px;margin-top:1px;">
+              <span>🔑 PIN Login Active</span>
+            </div>
             ${d.altPhone ? `<span style="font-size:10.5px;color:#64748B;font-family:monospace;font-weight:600;">Ext: ${d.altPhone}</span>` : ''}
           </div>
         </td>
@@ -244,6 +247,9 @@ window.renderStaffDutyTable = function() {
         </td>
         <td style="text-align:right;">
           <div style="display:inline-flex;gap:5px;align-items:center;">
+            <button class="btn btn-secondary btn-xs" style="padding:4px 8px;font-size:11px;font-weight:700;color:#059669;border-color:#A7F3D0;background:#ECFDF5;" onclick="window.openGuardPinModal('${d.id}')" title="Set or Reset Guard Portal Login PIN">
+              🔑 PIN
+            </button>
             <button class="btn btn-secondary btn-xs" style="padding:4px 8px;font-size:11px;font-weight:700;" onclick="window.openQuickReassignModal('${d.id}')" title="Reassign Post or Shift Timing">
               🔄 Move Post
             </button>
@@ -338,6 +344,20 @@ window.openAddStaffDutyModal = function() {
         </div>
       </div>
 
+      <!-- Security PIN & Payroll Setting -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">🔑 Portal Login PIN *</label>
+          <input type="text" id="dutyInputPin" class="form-input" value="1234" maxlength="6" placeholder="e.g. 1234" required style="width:100%;font-size:13px;font-weight:700;color:#065F46;background:#fff;" />
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Guard uses Mobile + this PIN to sign in</div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">💵 Monthly Salary (₹)</label>
+          <input type="number" id="dutyInputSalary" class="form-input" value="22500" placeholder="e.g. 22500" style="width:100%;font-size:13px;background:#fff;" />
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Paid: 5th of every month</div>
+        </div>
+      </div>
+
       <div>
         <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Current Status</label>
         <select id="dutyInputStatus" class="form-select" style="width:100%;font-size:13px;">
@@ -365,8 +385,9 @@ window.openAddStaffDutyModal = function() {
     </div>
   `;
 
-  if (typeof window.showModal === 'function') {
-    window.showModal('🛡️ Assign Staff to Duty Post', formHtml, 'Assign & Broadcast to Residents ✓', async () => {
+  const modalFn = window.showModal || (typeof showModal === 'function' ? showModal : null);
+  if (modalFn) {
+    modalFn('🛡️ Assign Staff to Duty Post', formHtml, 'Assign & Broadcast to Residents ✓', async () => {
       const staffName = document.getElementById('dutyInputName')?.value;
       const category = document.getElementById('dutyInputCategory')?.value;
       const role = document.getElementById('dutyInputRole')?.value;
@@ -377,6 +398,8 @@ window.openAddStaffDutyModal = function() {
       const endTime = document.getElementById('dutyInputEndTime')?.value;
       const phone = document.getElementById('dutyInputPhone')?.value;
       const altPhone = document.getElementById('dutyInputAltPhone')?.value;
+      const pin = document.getElementById('dutyInputPin')?.value || '1234';
+      const salaryAmount = document.getElementById('dutyInputSalary')?.value || 22500;
       const status = document.getElementById('dutyInputStatus')?.value;
       const notifyResidents = document.getElementById('dutyNotifyResidents')?.checked;
       const isEmergencyContact = document.getElementById('dutyInputEmergency')?.checked;
@@ -390,7 +413,7 @@ window.openAddStaffDutyModal = function() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, status, isEmergencyContact, notifyResidents
+          staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, pin, salaryAmount, status, isEmergencyContact, notifyResidents
         }),
       });
 
@@ -466,8 +489,9 @@ window.openQuickReassignModal = function(dutyId) {
     </div>
   `;
 
-  if (typeof window.showModal === 'function') {
-    window.showModal(`🔄 Reassign Post: ${duty.staffName}`, formHtml, 'Update & Broadcast Live ✓', async () => {
+  const modalFn = window.showModal || (typeof showModal === 'function' ? showModal : null);
+  if (modalFn) {
+    modalFn(`🔄 Reassign Post: ${duty.staffName}`, formHtml, 'Update & Broadcast Live ✓', async () => {
       const locationPost = document.getElementById('quickReassignPost')?.value;
       const shiftName = document.getElementById('quickReassignShift')?.value;
       const status = document.getElementById('quickReassignStatus')?.value;
@@ -573,6 +597,19 @@ window.openEditStaffDutyModal = function(dutyId) {
         </div>
       </div>
 
+      <!-- Portal PIN & Salary for Edit -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">🔑 Reset Portal Login PIN</label>
+          <input type="text" id="dutyEditPin" class="form-input" maxlength="6" placeholder="Leave empty to keep current PIN" style="width:100%;font-size:13px;background:#fff;" />
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Set new 4-digit PIN for guard login</div>
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">💵 Monthly Salary (₹)</label>
+          <input type="number" id="dutyEditSalary" class="form-input" value="${duty.salaryAmount || 22500}" style="width:100%;font-size:13px;background:#fff;" />
+        </div>
+      </div>
+
       <div>
         <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Current Status</label>
         <select id="dutyEditStatus" class="form-select" style="width:100%;font-size:13px;">
@@ -592,8 +629,9 @@ window.openEditStaffDutyModal = function(dutyId) {
     </div>
   `;
 
-  if (typeof window.showModal === 'function') {
-    window.showModal('✏️ Edit Staff Duty Assignment', formHtml, 'Save Changes & Broadcast ✓', async () => {
+  const modalFn = window.showModal || (typeof showModal === 'function' ? showModal : null);
+  if (modalFn) {
+    modalFn('✏️ Edit Staff Duty Assignment', formHtml, 'Save Changes & Broadcast ✓', async () => {
       const staffName = document.getElementById('dutyEditName')?.value;
       const category = document.getElementById('dutyEditCategory')?.value;
       const role = document.getElementById('dutyEditRole')?.value;
@@ -604,6 +642,8 @@ window.openEditStaffDutyModal = function(dutyId) {
       const endTime = document.getElementById('dutyEditEndTime')?.value;
       const phone = document.getElementById('dutyEditPhone')?.value;
       const altPhone = document.getElementById('dutyEditAltPhone')?.value;
+      const pin = document.getElementById('dutyEditPin')?.value;
+      const salaryAmount = document.getElementById('dutyEditSalary')?.value;
       const status = document.getElementById('dutyEditStatus')?.value;
       const notifyResidents = document.getElementById('dutyEditNotify')?.checked;
 
@@ -616,7 +656,7 @@ window.openEditStaffDutyModal = function(dutyId) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: duty.id, staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, status, notifyResidents
+          id: duty.id, staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, pin, salaryAmount, status, notifyResidents
         }),
       });
 
@@ -630,6 +670,71 @@ window.openEditStaffDutyModal = function(dutyId) {
       }
       await window.loadLiveStaffDuties(true);
     }, '540px');
+  }
+};
+
+window.openGuardPinModal = function(dutyId) {
+  const duty = (window._staffDutyData || []).find(d => d.id === dutyId);
+  if (!duty) return;
+
+  const modalHtml = `
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="padding:12px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;display:flex;align-items:center;gap:12px;">
+        <div style="font-size:28px;">👮</div>
+        <div>
+          <div style="font-size:14.5px;font-weight:800;color:#0F172A;">${duty.staffName}</div>
+          <div style="font-size:12px;color:#64748B;">
+            Post: <strong style="color:#2563EB;">${duty.locationPost}</strong> · Phone: <strong>${duty.phone}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;">
+        <label style="display:block;font-size:12.5px;font-weight:700;color:#166534;margin-bottom:6px;">
+          🔑 Set New 4-to-6 Digit Portal Security PIN *
+        </label>
+        <input
+          type="text"
+          id="guardDirectPinInput"
+          class="form-input"
+          maxlength="6"
+          placeholder="e.g. 1234 or 5678"
+          value="1234"
+          required
+          style="width:100%;font-size:15px;font-weight:800;letter-spacing:2px;color:#065F46;background:#fff;"
+        />
+        <div style="font-size:11.5px;color:#15803D;margin-top:5px;line-height:1.4;">
+          The guard will immediately use their mobile number (<strong>${duty.phone}</strong>) and this PIN to sign in to the Guard &amp; Staff Portal.
+        </div>
+      </div>
+    </div>
+  `;
+
+  const modalFn = window.showModal || (typeof showModal === 'function' ? showModal : null);
+  if (modalFn) {
+    modalFn(`🔑 Manage Guard Login PIN: ${duty.staffName}`, modalHtml, 'Update PIN Instantly ✓', async () => {
+      const pin = document.getElementById('guardDirectPinInput')?.value?.trim();
+      if (!pin || pin.length < 4) {
+        throw new Error('PIN must be at least 4 digits');
+      }
+
+      const fetchFn = window.apiFetch || fetch;
+      const res = await fetchFn('/api/staff/duty', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: duty.id, pin }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update PIN');
+      }
+
+      if (typeof showToast === 'function') {
+        showToast(`✓ Login PIN for ${duty.staffName} updated to ${pin}!`, 'success');
+      }
+      await window.loadLiveStaffDuties(true);
+    }, '460px');
   }
 };
 

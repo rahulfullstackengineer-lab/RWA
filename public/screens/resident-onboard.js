@@ -112,13 +112,17 @@ Screens['resident-login'] = function() {
 
           <!-- Top Role Portal Switcher -->
           <div class="cutora-tab-group" style="margin-bottom:calc(12 * var(--u));">
-            <button class="cutora-tab-btn" onclick="Router.go('auth-login')">
+            <button class="cutora-tab-btn" onclick="Router.go('auth-login')" title="Switch to RWA Admin Portal">
               <span>🏢</span>
-              <span>RWA Admin Portal →</span>
+              <span>RWA Admin</span>
             </button>
             <button class="cutora-tab-btn active resident-active" style="cursor:default;">
               <span>🏠</span>
-              <span>Resident Portal</span>
+              <span>Resident</span>
+            </button>
+            <button class="cutora-tab-btn" onclick="Router.go('staff-login')" style="color:#10B981;font-weight:700;" title="Switch to Staff & Guards Login Portal">
+              <span>👮</span>
+              <span>Staff &amp; Guards</span>
             </button>
           </div>
 

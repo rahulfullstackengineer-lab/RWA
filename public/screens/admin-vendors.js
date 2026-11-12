@@ -1175,6 +1175,15 @@ window.openAddStaffModal = function() {
       </div>
     </div>
 
+    <div style="padding:12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <label class="form-label" style="color:#166534;font-weight:700;margin-bottom:0;">🔑 Portal Login PIN * (4-6 digits)</label>
+        <span style="font-size:11px;color:#166534;font-weight:600;">For guard/staff login at #staff-login</span>
+      </div>
+      <input type="text" id="stfPin" required value="1234" maxlength="6" placeholder="e.g. 1234" class="form-input" style="width:100%;font-weight:700;letter-spacing:2px;background:#fff;margin-top:6px;" />
+      <div style="font-size:11px;color:#15803D;margin-top:4px;">Guards and staff will use their phone number + this Security PIN to access the Staff & Gate Portal.</div>
+    </div>
+
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
         <label class="form-label">Bank Account Number (Optional)</label>
@@ -1195,6 +1204,7 @@ window.openAddStaffModal = function() {
     var salary = parseFloat(document.getElementById('stfSalary').value) || 0;
     var shift = document.getElementById('stfShift').value;
     var joiningDate = document.getElementById('stfJoinDate').value;
+    var pin = (document.getElementById('stfPin')?.value || '1234').trim();
     var upiId = document.getElementById('stfUpi').value.trim();
     var aadhaarNumber = document.getElementById('stfAadhaar').value.trim();
     var accountNumber = document.getElementById('stfAccount').value.trim();
@@ -1209,11 +1219,11 @@ window.openAddStaffModal = function() {
       var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, upiId, aadhaarNumber, accountNumber, ifscCode }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode }),
       }) : fetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, upiId, aadhaarNumber, accountNumber, ifscCode }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode }),
       }));
 
       if (res.ok) {
@@ -1417,6 +1427,15 @@ window.openEditStaffModal = function(staffId) {
         <input type="text" id="estfAadhaar" value="${staff.aadhaarNumber || ''}" class="form-input" style="width:100%;" />
       </div>
     </div>
+
+    <div style="padding:12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <label class="form-label" style="color:#166534;font-weight:700;margin-bottom:0;">🔑 Portal Login PIN (Staff & Guard Auth)</label>
+        <span style="font-size:11px;color:#166534;font-weight:600;">Active: <strong>${staff.pin ? staff.pin : '1234 (Default)'}</strong></span>
+      </div>
+      <input type="text" id="estfPin" maxlength="6" placeholder="Enter new 4-6 digit PIN (e.g. 1234)" class="form-input" style="width:100%;font-weight:700;letter-spacing:2px;background:#fff;margin-top:6px;" />
+      <div style="font-size:11.5px;color:#15803D;margin-top:4px;">Guard logs into #staff-login with Phone (<strong>${staff.phone || ''}</strong>) and this PIN. Leave empty to keep current PIN.</div>
+    </div>
   `;
 
   openStaffModal('✏️ Edit Staff Details: ' + staff.name, html, 'Save Changes', async function() {
@@ -1429,20 +1448,26 @@ window.openEditStaffModal = function(staffId) {
     var shift = document.getElementById('estfShift').value;
     var upiId = document.getElementById('estfUpi').value.trim();
     var aadhaarNumber = document.getElementById('estfAadhaar').value.trim();
+    var pin = (document.getElementById('estfPin')?.value || '').trim();
+
+    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber };
+    if (pin && pin.length >= 4) {
+      updatePayload.pin = pin;
+    }
 
     try {
       var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber }),
+        body: JSON.stringify(updatePayload),
       }) : fetch('/api/staff', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber }),
+        body: JSON.stringify(updatePayload),
       }));
 
       if (res.ok) {
-        if (typeof window.showToast === 'function') window.showToast('✅ Staff member details updated!', 'success');
+        if (typeof window.showToast === 'function') window.showToast('✅ Staff member details and Login PIN updated!', 'success');
         await window.loadLiveStaffScreen();
       } else {
         var err = await res.json().catch(() => ({}));
@@ -1453,6 +1478,55 @@ window.openEditStaffModal = function(staffId) {
     }
   }, '600px');
 };
+
+// Quick PIN Update Modal
+window.openQuickStaffPinModal = function(staffId) {
+  var staff = (window.__cachedStaffList || []).find(s => s.id === staffId);
+  if (!staff) return;
+
+  var currentPin = staff.pin || '1234';
+  var html = `
+    <div style="padding:14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;color:#0F172A;">${staff.name}</div>
+      <div style="font-size:12.5px;color:#64748B;margin-top:2px;">${staff.role} · <strong>${staff.department}</strong></div>
+      <div style="font-size:12px;color:#2563EB;margin-top:6px;font-weight:600;">📞 Login Phone: ${staff.phone}</div>
+    </div>
+    <div>
+      <label class="form-label" style="font-weight:700;">Set 4-to-6 Digit Portal Login PIN *</label>
+      <input type="text" id="quickPinInput" maxlength="6" value="${currentPin}" class="form-input" style="width:100%;font-size:20px;font-weight:800;letter-spacing:4px;text-align:center;color:#1E40AF;background:#EFF6FF;border-color:#93C5FD;" />
+      <div style="font-size:12px;color:#64748B;margin-top:6px;">This PIN gives ${staff.name} immediate access to the Staff & Gate Portal (<a href="#staff-login" target="_blank" style="color:#2563EB;">#staff-login</a>).</div>
+    </div>
+  `;
+
+  openStaffModal('🔑 Set Portal Login PIN: ' + staff.name, html, 'Save Login PIN', async function() {
+    var newPin = (document.getElementById('quickPinInput')?.value || '').trim();
+    if (!newPin || newPin.length < 4) {
+      if (typeof window.showToast === 'function') window.showToast('PIN must be at least 4 digits', 'error');
+      return;
+    }
+    try {
+      var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: staffId, pin: newPin }),
+      }) : fetch('/api/staff', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: staffId, pin: newPin }),
+      }));
+      if (res.ok) {
+        if (typeof window.showToast === 'function') window.showToast(`🔑 PIN updated to "${newPin}" for ${staff.name}!`, 'success');
+        await window.loadLiveStaffScreen();
+      } else {
+        var err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update PIN');
+      }
+    } catch(e) {
+      if (typeof window.showToast === 'function') window.showToast(e.message || 'Error updating PIN', 'error');
+    }
+  }, '460px');
+};
+
 
 // Delete Staff
 window.confirmDeleteStaff = async function(staffId, staffName) {
@@ -1635,7 +1709,10 @@ window.renderStaffTable = function() {
           </div>
         </td>
         <td style="font-family:monospace;font-size:12.5px;">
-          <a href="tel:${s.phone}" style="color:var(--blue);text-decoration:none;font-weight:500;">📞 ${s.phone}</a>
+          <a href="tel:${s.phone}" style="color:var(--blue);text-decoration:none;font-weight:600;">📞 ${s.phone}</a>
+          <div style="font-size:11px;color:#16A34A;font-weight:600;margin-top:3px;display:flex;align-items:center;gap:4px;">
+            <span>🔑 PIN:</span> <span style="font-family:monospace;background:#DCFCE7;padding:1px 5px;border-radius:4px;color:#166534;font-weight:700;">${s.pin || '1234'}</span>
+          </div>
         </td>
         <td style="font-weight:700;font-size:13.5px;color:var(--text-primary);">
           ₹${Number(s.salary).toLocaleString('en-IN')}<span style="font-size:10.5px;font-weight:400;color:var(--text-muted);">/mo</span>
@@ -1648,6 +1725,7 @@ window.renderStaffTable = function() {
             <button class="btn btn-secondary btn-sm" onclick="window.openPaySalaryModal('${s.id}')" style="padding:4px 10px;font-size:11.5px;font-weight:700;background:${isPaidOct?'#F8FAFC':'#FEF3C7'};border-color:${isPaidOct?'#CBD5E1':'#F59E0B'};color:${isPaidOct?'#334155':'#92400E'};">
               💳 ${isPaidOct ? 'Pay More' : 'Pay'}
             </button>
+            <button class="btn btn-ghost btn-sm" onclick="window.openQuickStaffPinModal('${s.id}')" title="Set Portal Login PIN" style="padding:4px 7px;font-size:11px;color:#2563EB;border:1px solid #BFDBFE;background:#EFF6FF;border-radius:6px;font-weight:700;">🔑 PIN</button>
             <button class="btn btn-ghost btn-sm" onclick="window.openEditStaffModal('${s.id}')" title="Edit Staff" style="padding:4px 8px;font-size:12px;">✏️</button>
             <button class="btn btn-ghost btn-sm" onclick="window.confirmDeleteStaff('${s.id}', '${s.name.replace(/'/g, "\\'")}')" title="Delete Staff" style="padding:4px 8px;font-size:12px;color:#EF4444;">🗑️</button>
           </div>

@@ -115,7 +115,7 @@ Screens['auth-login'] = function() {
               <span>🏠</span>
               <span>Resident</span>
             </button>
-            <button class="cutora-tab-btn" onclick="window.quickFillStaff()" style="color:#10B981;font-weight:700;">
+            <button class="cutora-tab-btn" onclick="Router.go('staff-login')" style="color:#10B981;font-weight:700;" title="Switch to Staff & Guards Login Portal">
               <span>👮</span>
               <span>Staff &amp; Guards</span>
             </button>
