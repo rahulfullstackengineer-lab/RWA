@@ -17,12 +17,15 @@ window.__selectedBlockFilter = 'ALL';
 window.__selectedUnit = null;
 
 Screens['admin-structure'] = function() {
-  // Trigger dynamic DB load
-  setTimeout(() => {
+  function tryLoadUnits(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveUnitsScreen === 'function') {
       window.loadLiveUnitsScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadUnits(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadUnits, 30);
 
   return Shell.render('admin-structure', {
     title: 'Property Structure',

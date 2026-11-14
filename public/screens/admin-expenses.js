@@ -78,9 +78,15 @@ function openAppModal(title, contentHtml, submitLabel, onSubmit, maxWidth) {
 // Screen Registration
 // =============================================
 Screens['admin-expenses'] = function() {
-  setTimeout(function() {
-    if (typeof window.loadLiveExpenses === 'function') window.loadLiveExpenses();
-  }, 15);
+  function tryLoadExpenses(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveExpenses === 'function') {
+      window.loadLiveExpenses();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadExpenses(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadExpenses, 20);
 
   var catOptions = EXPENSE_CATEGORIES.map(function(c) {
     return '<option value="' + c + '">' + c + '</option>';
@@ -242,13 +248,13 @@ window.loadLiveExpenses = async function() {
     }
   } catch (err) {
     console.error('Error loading expenses:', err);
-    window.__expensesAll = window.generateDemoExpenses();
-    window.updateExpenseKPIs(window.__expensesAll);
-    window.renderExpenseCategoryBreakdown(window.__expensesAll);
-    window.renderExpensesAnalytics(window.__expensesAll);
+    window.__expensesAll = [];
+    window.updateExpenseKPIs([]);
+    window.renderExpenseCategoryBreakdown([]);
+    window.renderExpensesAnalytics([]);
     window.applyExpenseFilters();
     var sub2 = document.getElementById('expensesSubtitle');
-    if (sub2) sub2.innerHTML = '<span style="color:var(--amber)">⚠ Using fallback data — database connection issue</span>';
+    if (sub2) sub2.innerHTML = '<span style="color:var(--text-secondary)">No expense records found. Click "+ Record Expense" to add a voucher.</span>';
   }
 };
 
@@ -320,18 +326,10 @@ window.renderExpensesAnalytics = function(expenses) {
 };
 
 // =============================================
-// Fallback Data
+// Empty Fallback
 // =============================================
 window.generateDemoExpenses = function() {
-  var today = new Date();
-  var d = function(n) { var dt = new Date(today); dt.setDate(dt.getDate() - n); return dt.toISOString(); };
-  return [
-    { id:'EXP-001', title:'Monthly Security Guard Services',    category:'Security',    vendorName:'SkyGuard Security',  amount:42000, totalAmount:42000, status:'PAID',             approvedBy:'Rajesh K', description:'Oct 2026 security guard services',   createdAt:d(2),  expenseDate:d(2)  },
-    { id:'EXP-002', title:'Electrical Panel & Maintenance',     category:'Maintenance', vendorName:'Ashok Electricals',   amount:8400,  totalAmount:8400,  status:'APPROVED',         approvedBy:'Rajesh K', description:'Annual panel inspection & repair',   createdAt:d(5),  expenseDate:d(5)  },
-    { id:'EXP-003', title:'Water Pipeline Repair — B Block',    category:'Plumbing',    vendorName:'Sharma Plumbing',    amount:3200,  totalAmount:3200,  status:'PENDING_APPROVAL', approvedBy:null,       description:'Leakage fix in B-201 pipeline',      createdAt:d(7),  expenseDate:d(7)  },
-    { id:'EXP-004', title:'Office Stationery & Supplies',       category:'Admin',       vendorName:'Stationary mart',    amount:1800,  totalAmount:1800,  status:'PAID',             approvedBy:'Rajesh K', description:'Ledger books, printer paper etc',    createdAt:d(13), expenseDate:d(13) },
-    { id:'EXP-005', title:'Lawn Mowing & Landscaping',          category:'Horticulture',vendorName:'Green Thumb Gardens', amount:12000, totalAmount:12000, status:'PENDING_APPROVAL', approvedBy:null,       description:'Monsoon garden maintenance',         createdAt:d(15), expenseDate:d(15) },
-  ];
+  return [];
 };
 
 // =============================================

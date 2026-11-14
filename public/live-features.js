@@ -2441,4 +2441,810 @@
     })
   }
   setInterval(wireInteractiveButtons, 1000)
+
+
+// ============================================================
+  // STAFF & GUARD PORTAL — Live Data Functions
+  // ============================================================
+
+  // Internal state
+  window.__staffPortalData   = null
+  window.__staffPassesAll    = []
+  window.__staffPassFilter   = 'ALL'
+  window.__staffCurrentGuard = null
+
+  // ---- Main loader: fetches /api/staff/portal ----------------
+  window.loadLiveStaffPortal = async function() {
+    try {
+      const orgId = localStorage.getItem('rwa_active_org_id') || ''
+      const url   = '/api/staff/portal' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')
+      const res   = await (window.apiFetch || fetch)(url).catch(() => null)
+      if (!res || !res.ok) throw new Error('API unavailable')
+
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to load staff portal')
+
+      window.__staffPortalData   = data
+      window.__staffPassesAll    = (data.passes && data.passes.list) ? data.passes.list : []
+      window.__staffCurrentGuard = data.staff || null
+
+      // --- Populate Hero Identity Strip ----
+      const s = data.staff || {}
+      const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || '—' }
+      setTxt('staffHeroName',  s.name  || 'Guard')
+      setTxt('staffHeroRole',  s.role  || 'Security Guard')
+      setTxt('staffHeroPost',  s.locationPost || 'Gate 1')
+      setTxt('staffHeroPhone', s.phone || '—')
+
+      const d = data.duty || {}
+      setTxt('staffHeroShift', (d.timing ? (d.currentShift + ' (' + d.timing + ')') : (d.currentShift || '—')))
+
+      // society name badge
+      const socBadge = document.getElementById('staffHeroSociety')
+      if (socBadge && data.society) socBadge.textContent = data.society.name
+
+      // --- Gate Visitors tab count ----
+      const passCount = window.__staffPassesAll.filter(p => p.status === 'APPROVED' || p.status === 'CHECKED_IN').length
+      const tabCount  = document.getElementById('staffTabPassCount')
+      if (tabCount) tabCount.textContent = passCount
+
+      // --- Populate Duty tab ----
+      setTxt('dutyCardPost',  d.currentPost  || s.locationPost || 'Gate 1')
+      setTxt('dutyCardBlock', d.currentBlock || 'Main Gate Perimeter')
+      setTxt('dutyCardTiming', d.timing || (s.startTime + ' – ' + s.endTime) || '—')
+      setTxt('dutyCardShiftName', (d.currentShift || s.shiftName || 'Morning Shift') + ' (8 Hours Duration)')
+
+      if (d.supervisor) {
+        setTxt('dutyCardSupervisorName', d.supervisor.name || 'Supervisor')
+        const supCall = document.getElementById('dutyCardSupervisorCall')
+        if (supCall && d.supervisor.phone) supCall.href = 'tel:' + d.supervisor.phone
+      }
+      if (d.reliefGuard) {
+        setTxt('dutyCardReliefName', d.reliefGuard.name || 'Relief Guard')
+        const relSub = document.getElementById('dutyCardReliefName')
+        const relRole = document.querySelector('[id="dutyCardReliefName"] + div')
+        if (relRole) relRole.textContent = d.reliefGuard.role || 'Evening Guard'
+        const relCall = document.getElementById('dutyCardReliefCall')
+        if (relCall && d.reliefGuard.phone) relCall.href = 'tel:' + d.reliefGuard.phone
+      }
+
+      // Weekly roster - show real shift for today, placeholders for rest
+      window._renderWeeklyRoster(s)
+
+      // --- Populate Salary tab ----
+      const sal = data.salary || {}
+      const fmt = (v) => '₹' + Number(v || 0).toLocaleString('en-IN')
+      setTxt('salaryCardMonthly',    fmt(sal.monthlySalary))
+      setTxt('salaryCardDate',       sal.salaryDate || '5th of every month')
+      setTxt('salaryCardNextDate',   sal.nextSalaryCredit || '—')
+      setTxt('salaryCardAttendance', (sal.attendancePresent || '—') + ' / ' + (sal.attendanceTotal || '—') + ' Days')
+
+      const attendPct = sal.attendancePercent || 0
+      const attendSub = document.querySelector('#salaryCardAttendance + div')
+      if (attendSub) attendSub.textContent = attendPct + '% punctuality rate'
+
+      // Payment status badge
+      const statusBadge = document.getElementById('salaryCardStatusBadge')
+      if (statusBadge) {
+        const isPaid = (sal.paymentStatus || '').toUpperCase() === 'PAID'
+        statusBadge.textContent = isPaid ? 'PAID (Cleared)' : 'PENDING'
+        statusBadge.style.background = isPaid ? '#DCFCE7' : '#FEF3C7'
+        statusBadge.style.color      = isPaid ? '#166534' : '#92400E'
+        statusBadge.style.borderColor = isPaid ? '#BBF7D0' : '#FCD34D'
+      }
+      setTxt('salaryCardLastPaid', sal.lastPaidDate || '—')
+
+      // Bank info
+      const bankEl = document.getElementById('salaryCardBank')
+      if (bankEl) bankEl.textContent = '🏦 ' + (sal.bankAccount || 'Bank Account on record')
+
+      // Salary slip breakdown
+      const br = (sal.breakdown) || {}
+      setTxt('slipBasic',     fmt(br.basicSalary    || Math.round((sal.monthlySalary || 22500) * 0.75)))
+      setTxt('slipAllowance', fmt(br.shiftAllowance || Math.round((sal.monthlySalary || 22500) * 0.15)))
+      setTxt('slipBonus',     fmt(br.specialDutyBonus || (sal.monthlySalary || 22500) - Math.round((sal.monthlySalary||22500)*0.75) - Math.round((sal.monthlySalary||22500)*0.15)))
+      setTxt('slipGross',     fmt(sal.monthlySalary || 22500))
+      setTxt('slipNet',       fmt(br.netSalary      || (sal.monthlySalary || 22500) - (br.pfEsiDeduction || 1250)))
+
+      // --- Render passes table ----
+      window.renderStaffPassesTable(window.__staffPassesAll)
+
+    } catch (err) {
+      console.error('loadLiveStaffPortal error:', err)
+      try {
+        const orgId = localStorage.getItem('rwa_active_org_id') || ''
+        const passUrl = '/api/entry-passes' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')
+        const passRes = await (window.apiFetch || fetch)(passUrl).catch(() => null)
+        if (passRes && passRes.ok) {
+          const passData = await passRes.json()
+          const passes = passData.passes || []
+          window.__staffPassesAll = passes
+          window.renderStaffPassesTable(passes)
+          const tabCount = document.getElementById('staffTabPassCount')
+          if (tabCount) tabCount.textContent = passes.filter(p => p.status === 'APPROVED' || p.status === 'CHECKED_IN').length
+        } else {
+          const tbody = document.getElementById('staffPassesTableBody')
+          if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted,#94A3B8);"><div style="font-size:28px;margin-bottom:8px;">🎫</div><div>No gate passes found. Use &quot;Spot Visitor Entry&quot; to register a visitor.</div></td></tr>'
+          }
+        }
+      } catch (fallbackErr) {
+        const tbody = document.getElementById('staffPassesTableBody')
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-muted,#94A3B8);">No gate passes found. Use &quot;Spot Visitor Entry&quot; to register a visitor.</td></tr>'
+        }
+      }
+    }
+  }
+
+  // ---- Weekly roster renderer --------------------------------
+  window._renderWeeklyRoster = function(staff) {
+    const container = document.getElementById('staffWeeklyRoster')
+    if (!container) return
+
+    const today = new Date()
+    const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
+    const todayIdx = today.getDay()
+    const post  = staff && staff.locationPost ? staff.locationPost.replace('Gate ', 'G').split(' ')[0] : 'Gate 1'
+    const start = staff && staff.startTime ? staff.startTime : '06:00'
+    const end   = staff && staff.endTime   ? staff.endTime   : '14:00'
+    const timing = start.replace(' AM','').replace(' PM','') + ' - ' + end.replace(' AM','').replace(' PM','')
+
+    container.innerHTML = days.map((day, i) => {
+      const isToday = i === todayIdx
+      const isOff   = i === 6 // Saturday default off
+      return '<div style="background:' + (isOff ? '#FEF2F2' : (isToday ? '#F0FDF4' : '#F8FAFC')) + ';border:1px solid ' + (isOff ? '#FECACA' : (isToday ? '#BBF7D0' : '#E2E8F0')) + ';border-radius:10px;padding:10px;text-align:center;">' +
+        '<div style="font-size:11px;font-weight:800;color:' + (isOff ? '#991B1B' : (isToday ? '#166534' : '#64748B')) + ';">' + (isToday ? 'TODAY (' + day + ')' : day) + (isOff ? ' (OFF)' : '') + '</div>' +
+        '<div style="font-size:13px;font-weight:800;color:' + (isOff ? '#991B1B' : '#0F172A') + ';margin-top:4px;">' + (isOff ? 'Weekly Off' : (i % 3 === 2 ? 'Gate 2' : 'Gate 1')) + '</div>' +
+        '<div style="font-size:11px;color:' + (isOff ? '#991B1B' : (isToday ? '#15803D' : '#64748B')) + ';">' + (isOff ? 'Rest Day' : timing) + '</div>' +
+      '</div>'
+    }).join('')
+  }
+
+  // ---- Tab switcher ------------------------------------------
+  window.switchStaffTab = function(tab, btnEl) {
+    ['passes','duty','salary','emergency'].forEach(t => {
+      const panel = document.getElementById('staffTabContent' + t.charAt(0).toUpperCase() + t.slice(1))
+      if (panel) panel.style.display = (t === tab) ? 'flex' : 'none'
+    })
+    // Update button active states
+    const tabs = document.getElementById('staffPortalTabs')
+    if (tabs) {
+      tabs.querySelectorAll('button').forEach(b => {
+        b.className = b === btnEl ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'
+        b.style.fontWeight = '700'
+        b.style.borderRadius = '8px'
+        b.style.padding = '8px 16px'
+      })
+    }
+  }
+
+  // ---- Pass filter -------------------------------------------
+  window.filterStaffPasses = function(statusFilter) {
+    window.__staffPassFilter = statusFilter || 'ALL'
+    const all = window.__staffPassesAll || []
+    if (statusFilter === 'ALL') {
+      window.renderStaffPassesTable(all)
+    } else {
+      window.renderStaffPassesTable(all.filter(p => p.status === statusFilter))
+    }
+    // Update filter button active states
+    document.querySelectorAll('#staffTabContentPasses .btn-sm').forEach(btn => {
+      const txt = btn.textContent.trim()
+      const isActive =
+        (statusFilter === 'ALL'         && txt === 'All') ||
+        (statusFilter === 'APPROVED'    && txt.includes('Expected')) ||
+        (statusFilter === 'CHECKED_IN'  && txt.includes('Inside')) ||
+        (statusFilter === 'CHECKED_OUT' && txt.includes('Departed'))
+      btn.className = isActive ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'
+      btn.style.fontSize = '12px'
+      btn.style.fontWeight = '700'
+    })
+  }
+
+  // ---- Table renderer ----------------------------------------
+  window.renderStaffPassesTable = function(list) {
+    const tbody = document.getElementById('staffPassesTableBody')
+    if (!tbody) return
+
+    if (!list || list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary,#94A3B8);">' +
+        '<div style="font-size:28px;margin-bottom:8px;">🎫</div>' +
+        '<div style="font-weight:600;margin-bottom:4px;">No visitor passes found</div>' +
+        '<div style="font-size:12px;">Use "Spot Visitor Entry" to log a walk-in visitor</div>' +
+        '</td></tr>'
+      return
+    }
+
+    const fmtTime = (d) => {
+      if (!d) return '—'
+      const dt = new Date(d)
+      return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    }
+
+    const statusBadge = (status) => {
+      const map = {
+        APPROVED:    { bg: '#EFF6FF', color: '#1D4ED8', label: '🔵 Expected' },
+        CHECKED_IN:  { bg: '#F0FDF4', color: '#16A34A', label: '🟢 Inside'   },
+        CHECKED_OUT: { bg: '#F8FAFC', color: '#94A3B8', label: '⚪ Departed' },
+        CANCELLED:   { bg: '#FEF2F2', color: '#DC2626', label: '🔴 Cancelled'},
+      }
+      const s = map[status] || { bg: '#F8FAFC', color: '#64748B', label: status }
+      return '<span style="background:' + s.bg + ';color:' + s.color + ';font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;">' + s.label + '</span>'
+    }
+
+    const typeIcon = (t) => ({ GUEST:'👤', DELIVERY:'📦', CAB:'🚕', SERVICE:'🔧', STAFF:'👷', VENDOR:'🏪' }[t] || '👤')
+
+    tbody.innerHTML = list.slice(0, 50).map(p => {
+      const isApproved   = p.status === 'APPROVED'
+      const isCheckedIn  = p.status === 'CHECKED_IN'
+      const actionsHtml  = isApproved
+        ? '<button data-wired="true" class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 10px;border-radius:6px;" onclick="event.stopPropagation();window.staffCheckIn(\'' + p.id + '\')">✅ Check In</button>'
+        : (isCheckedIn
+          ? '<button data-wired="true" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;border-radius:6px;" onclick="event.stopPropagation();window.staffCheckOut(\'' + p.id + '\')">🚪 Check Out</button>'
+          : '<span style="font-size:12px;color:var(--text-muted,#94A3B8);">' + fmtTime(p.checkedOutAt || p.updatedAt) + '</span>')
+
+      return '<tr style="transition:background 0.12s;" onmouseover="this.style.background=\'var(--bg-elevated,#F8FAFC)\'" onmouseout="this.style.background=\'\'">' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-family:monospace;font-size:12px;font-weight:800;color:#2563EB;">' + (p.passCode || '—') + '</div>' +
+          '<div style="font-size:11px;color:#64748B;margin-top:2px;">PIN: <strong>' + (p.otpPin || '—') + '</strong></div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-weight:700;font-size:13px;">' + (p.visitorName || '—') + '</div>' +
+          '<div style="font-size:11px;color:#64748B;">' + (p.visitorPhone || '') + '</div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-weight:600;font-size:13px;color:#0F172A;">' + (p.residentUnit || '—') + '</div>' +
+          '<div style="font-size:11px;color:#64748B;">' + (p.residentName || '') + '</div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-size:16px;">' + typeIcon(p.visitorType) + '</span>' +
+            '<div>' +
+              '<div style="font-size:12px;font-weight:600;">' + (p.visitorType || 'GUEST') + '</div>' +
+              (p.vehicleNumber ? '<div style="font-size:11px;color:#64748B;">' + p.vehicleNumber + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' + statusBadge(p.status) + '</td>' +
+        '<td style="padding:12px 16px;text-align:right;">' + actionsHtml + '</td>' +
+      '</tr>'
+    }).join('')
+  }
+
+  // ---- Check In ----------------------------------------------
+  window.staffCheckIn = async function(passId) {
+    try {
+      const guard = window.__staffCurrentGuard
+      const guardName = guard ? guard.name + ' (' + (guard.locationPost || 'Gate') + ')' : 'Gate Security Guard'
+
+      const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: passId, action: 'check_in', guardName, notes: 'Checked in by guard at gate.' }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Check-in failed')
+
+      if (typeof window.showToast === 'function') window.showToast('✅ Visitor Checked In: ' + (data.pass && data.pass.visitorName), 'success')
+      await window.loadLiveStaffPortal()
+    } catch (err) {
+      if (typeof window.showToast === 'function') window.showToast('Check-in error: ' + err.message, 'error')
+      else console.error('staffCheckIn error:', err)
+    }
+  }
+
+  // ---- Check Out ---------------------------------------------
+  window.staffCheckOut = async function(passId) {
+    try {
+      const guard = window.__staffCurrentGuard
+      const guardName = guard ? guard.name + ' (' + (guard.locationPost || 'Gate') + ')' : 'Gate Security Guard'
+
+      const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: passId, action: 'check_out', guardName }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Check-out failed')
+
+      if (typeof window.showToast === 'function') window.showToast('🚪 Visitor Checked Out: ' + (data.pass && data.pass.visitorName), 'info')
+      await window.loadLiveStaffPortal()
+    } catch (err) {
+      if (typeof window.showToast === 'function') window.showToast('Check-out error: ' + err.message, 'error')
+      else console.error('staffCheckOut error:', err)
+    }
+  }
+
+  // ---- Quick Pass Verifier (scanner input) -------------------
+  window.handleStaffQuickVerify = async function() {
+    const input = document.getElementById('staffScannerInput')
+    if (!input) return
+    const code = (input.value || '').trim()
+    if (!code) {
+      if (typeof window.showToast === 'function') window.showToast('Please enter a Pass Code, PIN, or Phone number', 'warning')
+      return
+    }
+
+    const resultBox = document.getElementById('staffScannerResultBox')
+
+    try {
+      const guard = window.__staffCurrentGuard
+      const guardName = guard ? guard.name : 'Gate Security Guard'
+      const locationPost = guard ? (guard.locationPost || 'Gate 1 - Main Gate') : 'Gate 1 - Main Gate'
+
+      if (resultBox) {
+        resultBox.style.display = 'block'
+        resultBox.style.background = '#EFF6FF'
+        resultBox.style.border = '1px solid #BFDBFE'
+        resultBox.style.color = '#1D4ED8'
+        resultBox.innerHTML = '🔍 Verifying pass code <strong>' + code + '</strong>...'
+      }
+
+      const res = await (window.apiFetch || fetch)('/api/staff/portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'quick_verify', passCodeOrPin: code, guardName, locationPost }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'Verification failed')
+
+      const p = data.pass || {}
+
+      if (data.alreadyCheckedIn) {
+        if (resultBox) {
+          resultBox.style.background = '#FFFBEB'
+          resultBox.style.border = '1px solid #FDE68A'
+          resultBox.style.color = '#92400E'
+          resultBox.innerHTML = '⚠ <strong>' + p.visitorName + '</strong> is already checked in at ' + p.gateNumber + '. To check out: use the table row button.'
+        }
+      } else {
+        if (resultBox) {
+          resultBox.style.background = '#F0FDF4'
+          resultBox.style.border = '1px solid #BBF7D0'
+          resultBox.style.color = '#166534'
+          resultBox.innerHTML =
+            '✅ <strong>Entry Granted!</strong> ' + p.visitorName + ' (' + p.visitorType + ') → Flat <strong>' + p.residentUnit + '</strong>' +
+            (p.vehicleNumber ? ' | Vehicle: ' + p.vehicleNumber : '') +
+            '<div style="font-size:11px;margin-top:4px;color:#374151;">Pass: ' + p.passCode + ' · Resident: ' + (p.residentName || '—') + '</div>'
+        }
+        if (typeof window.showToast === 'function') window.showToast(data.message || '✅ Visitor checked in!', 'success')
+        input.value = ''
+        await window.loadLiveStaffPortal()
+      }
+    } catch (err) {
+      if (resultBox) {
+        resultBox.style.display = 'block'
+        resultBox.style.background = '#FEF2F2'
+        resultBox.style.border = '1px solid #FECACA'
+        resultBox.style.color = '#991B1B'
+        resultBox.innerHTML = '❌ ' + (err.message || 'Verification failed. Please check the pass code.')
+      }
+      if (typeof window.showToast === 'function') window.showToast(err.message || 'Verification failed', 'error')
+    }
+  }
+
+  // ---- Spot Visitor Entry Modal ------------------------------
+  window.openSpotEntryModal = function() {
+    const html =
+      '<div style="display:flex;flex-direction:column;gap:14px;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Visitor Name *</label>' +
+          '<input type="text" id="spotVisitorName" class="form-input" placeholder="e.g. Ramesh Kumar" style="width:100%;font-size:13px;" /></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Phone Number</label>' +
+          '<input type="tel" id="spotVisitorPhone" class="form-input" placeholder="10-digit mobile" style="width:100%;font-size:13px;" /></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Destination Flat *</label>' +
+          '<input type="text" id="spotResidentUnit" class="form-input" placeholder="e.g. A-402, B-201" style="width:100%;font-size:13px;" /></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Visitor Type</label>' +
+          '<select id="spotVisitorType" class="form-select" style="width:100%;font-size:13px;">' +
+            '<option value="GUEST">👤 Guest</option>' +
+            '<option value="DELIVERY">📦 Delivery</option>' +
+            '<option value="CAB">🚕 Cab / Ride</option>' +
+            '<option value="SERVICE">🔧 Service Worker</option>' +
+            '<option value="VENDOR">🏪 Vendor</option>' +
+          '</select></div>' +
+      '</div>' +
+      '<div><label style="font-size:12px;font-weight:700;">Vehicle Number (optional)</label>' +
+        '<input type="text" id="spotVehicleNo" class="form-input" placeholder="e.g. DL 3C AU 9901" style="width:100%;font-size:13px;" /></div>' +
+      '<div><label style="font-size:12px;font-weight:700;">Purpose of Visit</label>' +
+        '<input type="text" id="spotPurpose" class="form-input" placeholder="e.g. Food delivery, Guest visit" style="width:100%;font-size:13px;" /></div>' +
+      '</div>'
+
+    if (typeof window.showModal === 'function') {
+      window.showModal('+ Spot Visitor Entry', html, '✅ Allow Entry & Generate Pass', async function() {
+        await window._submitSpotEntry()
+      }, '500px')
+    } else {
+      alert('Modal not available. Please refresh.')
+    }
+  }
+
+  window._submitSpotEntry = async function() {
+    const visitorName  = (document.getElementById('spotVisitorName')  || {}).value || ''
+    const visitorPhone = (document.getElementById('spotVisitorPhone') || {}).value || ''
+    const residentUnit = (document.getElementById('spotResidentUnit') || {}).value || ''
+    const visitorType  = (document.getElementById('spotVisitorType')  || {}).value || 'GUEST'
+    const vehicleNumber = (document.getElementById('spotVehicleNo')   || {}).value || ''
+    const purpose      = (document.getElementById('spotPurpose')      || {}).value || 'Walk-in visitor'
+
+    if (!visitorName.trim() || !residentUnit.trim()) {
+      if (typeof window.showToast === 'function') window.showToast('Visitor name and flat number are required', 'warning')
+      throw new Error('Required fields missing')
+    }
+
+    const guard = window.__staffCurrentGuard
+    const orgId = localStorage.getItem('rwa_active_org_id') || ''
+
+    const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        visitorName:   visitorName.trim(),
+        visitorPhone:  visitorPhone.trim(),
+        residentUnit:  residentUnit.trim(),
+        visitorType,
+        vehicleNumber: vehicleNumber.trim(),
+        purpose:       purpose.trim(),
+        gateNumber:    guard ? (guard.locationPost || 'Gate 1 - Main Gate') : 'Gate 1 - Main Gate',
+        validHours:    8,
+        organizationId: orgId,
+      }),
+    })
+
+    const data = await res.json()
+    if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create pass')
+
+    if (typeof window.showToast === 'function') {
+      window.showToast('🎫 Pass Generated: ' + (data.pass && data.pass.passCode) + ' · PIN: ' + (data.pass && data.pass.otpPin), 'success')
+    }
+
+    await window.loadLiveStaffPortal()
+    // Switch to passes tab
+    const passTab = document.querySelector('#staffPortalTabs button:first-child')
+    if (passTab) window.switchStaffTab('passes', passTab)
+  }
+
+  // ============================================================
+  // ADMIN VISITOR ENTRY PASSES — Live Data Functions
+  // ============================================================
+
+  window.__adminPassesAll = []
+  window.__adminPassesCategoryFilter = 'ALL'
+  window.__adminPassesGateFilter = 'ALL'
+  window.__adminPassesSearchQuery = ''
+
+  window.loadLiveAdminEntryPasses = async function() {
+    try {
+      const orgId = localStorage.getItem('rwa_active_org_id') || ''
+      const url = '/api/entry-passes' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')
+      const res = await (window.apiFetch || fetch)(url).catch(() => null)
+      if (!res || !res.ok) throw new Error('API unavailable')
+      const data = await res.json()
+      const passes = data.passes || []
+      const stats = data.stats || {}
+      window.__adminPassesAll = passes
+
+      const setTxt = (id, val) => {
+        const el = document.getElementById(id)
+        if (el) el.textContent = val !== undefined && val !== null ? val : '0'
+      }
+
+      setTxt('statPassesActiveToday', stats.activeToday !== undefined ? stats.activeToday : passes.filter(p => p.status === 'APPROVED' || p.status === 'CHECKED_IN').length)
+      setTxt('statPassesCheckedIn', stats.checkedInNow !== undefined ? stats.checkedInNow : passes.filter(p => p.status === 'CHECKED_IN').length)
+      setTxt('statPassesPreApproved', stats.preApproved !== undefined ? stats.preApproved : passes.filter(p => p.status === 'APPROVED').length)
+      setTxt('statPassesCheckedOut', stats.checkedOutToday !== undefined ? stats.checkedOutToday : passes.filter(p => p.status === 'CHECKED_OUT').length)
+      setTxt('statPassesDeliveries', (stats.deliveries || 0) + (stats.cabs || 0))
+
+      window.applyAdminPassesFilters()
+    } catch (err) {
+      console.error('loadLiveAdminEntryPasses error:', err)
+      const tbody = document.getElementById('adminPassesTableBody')
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-muted,#94A3B8);">No passes found. Click &quot;+ Issue Visitor Pass&quot; to create one.</td></tr>'
+      }
+    }
+  }
+
+  window.applyAdminPassesFilters = function() {
+    let list = (window.__adminPassesAll || []).slice()
+    const cat = window.__adminPassesCategoryFilter || 'ALL'
+    const gate = window.__adminPassesGateFilter || 'ALL'
+    const query = (window.__adminPassesSearchQuery || '').toLowerCase().trim()
+
+    if (cat === 'CHECKED_IN' || cat === 'APPROVED' || cat === 'CHECKED_OUT') {
+      list = list.filter(p => p.status === cat)
+    } else if (cat !== 'ALL') {
+      list = list.filter(p => p.visitorType === cat)
+    }
+
+    if (gate !== 'ALL') {
+      list = list.filter(p => (p.gateNumber || '').toLowerCase().includes(gate.toLowerCase()))
+    }
+
+    if (query) {
+      list = list.filter(p =>
+        (p.passCode || '').toLowerCase().includes(query) ||
+        (p.otpPin || '').toLowerCase().includes(query) ||
+        (p.visitorName || '').toLowerCase().includes(query) ||
+        (p.visitorPhone || '').toLowerCase().includes(query) ||
+        (p.residentUnit || '').toLowerCase().includes(query) ||
+        (p.residentName || '').toLowerCase().includes(query) ||
+        (p.vehicleNumber || '').toLowerCase().includes(query) ||
+        (p.purpose || '').toLowerCase().includes(query)
+      )
+    }
+
+    window.renderAdminPassesTable(list)
+  }
+
+  window.filterAdminPasses = function(category, btnEl) {
+    window.__adminPassesCategoryFilter = category || 'ALL'
+    const tabs = document.getElementById('adminPassesCategoryTabs')
+    if (tabs) {
+      tabs.querySelectorAll('button').forEach(b => {
+        b.className = b === btnEl ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary'
+        b.style.borderRadius = '8px'
+        b.style.fontSize = '12px'
+        b.style.fontWeight = '700'
+      })
+    }
+    window.applyAdminPassesFilters()
+  }
+
+  window.filterAdminPassesGate = function(gate) {
+    window.__adminPassesGateFilter = gate || 'ALL'
+    window.applyAdminPassesFilters()
+  }
+
+  window.searchAdminPasses = function(query) {
+    window.__adminPassesSearchQuery = query || ''
+    window.applyAdminPassesFilters()
+  }
+
+  window.renderAdminPassesTable = function(list) {
+    const tbody = document.getElementById('adminPassesTableBody')
+    if (!tbody) return
+
+    if (!list || list.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-secondary,#94A3B8);">' +
+        '<div style="font-size:28px;margin-bottom:8px;">🎫</div>' +
+        '<div style="font-weight:600;margin-bottom:4px;">No visitor passes found</div>' +
+        '<div style="font-size:12px;">Use &quot;+ Issue Visitor Pass&quot; above to generate a new pass.</div>' +
+        '</td></tr>'
+      return
+    }
+
+    const fmtTime = (d) => {
+      if (!d) return '—'
+      const dt = new Date(d)
+      return dt.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) + ' ' +
+             dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    }
+
+    const statusBadge = (status) => {
+      const map = {
+        APPROVED:    { bg: '#EFF6FF', color: '#1D4ED8', label: '🔵 Expected' },
+        CHECKED_IN:  { bg: '#F0FDF4', color: '#16A34A', label: '🟢 Inside'   },
+        CHECKED_OUT: { bg: '#F8FAFC', color: '#64748B', label: '⚪ Checked Out' },
+        CANCELLED:   { bg: '#FEF2F2', color: '#DC2626', label: '🔴 Cancelled'},
+      }
+      const s = map[status] || { bg: '#F8FAFC', color: '#64748B', label: status }
+      return '<span style="background:' + s.bg + ';color:' + s.color + ';font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;">' + s.label + '</span>'
+    }
+
+    const typeIcon = (t) => ({ GUEST:'👤', DELIVERY:'📦', CAB:'🚕', SERVICE:'🔧', STAFF:'👷', VENDOR:'🏪' }[t] || '👤')
+
+    tbody.innerHTML = list.map(p => {
+      const isApproved  = p.status === 'APPROVED'
+      const isCheckedIn = p.status === 'CHECKED_IN'
+
+      let actionsHtml = ''
+      if (isApproved) {
+        actionsHtml = '<button class="btn btn-sm btn-primary" style="font-size:11px;padding:3px 8px;border-radius:6px;margin-right:4px;" onclick="window.adminCheckInPass(\'' + p.id + '\')">Check In</button>' +
+                      '<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;border-radius:6px;color:#EF4444;" onclick="window.adminRevokePass(\'' + p.id + '\')">Revoke</button>'
+      } else if (isCheckedIn) {
+        actionsHtml = '<button class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;border-radius:6px;" onclick="window.adminCheckOutPass(\'' + p.id + '\')">Check Out</button>'
+      } else {
+        actionsHtml = '<span style="font-size:11.5px;color:var(--text-muted,#94A3B8);">Completed</span>'
+      }
+
+      let logText = '—'
+      if (p.checkedInAt) {
+        logText = 'In: ' + fmtTime(p.checkedInAt) + (p.checkedInBy ? ' (' + p.checkedInBy + ')' : '')
+      }
+      if (p.checkedOutAt) {
+        logText += '<br/>Out: ' + fmtTime(p.checkedOutAt) + (p.checkedOutBy ? ' (' + p.checkedOutBy + ')' : '')
+      }
+
+      return '<tr style="border-bottom:1px solid var(--border,#F1F5F9);transition:background 0.12s;" onmouseover="this.style.background=\'var(--bg-elevated,#F8FAFC)\'" onmouseout="this.style.background=\'\'">' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-family:monospace;font-size:12.5px;font-weight:800;color:#2563EB;">' + (p.passCode || '—') + '</div>' +
+          '<div style="font-size:11px;color:#64748B;margin-top:2px;">Gate PIN: <strong>' + (p.otpPin || '—') + '</strong></div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-weight:700;font-size:13px;color:#0F172A;">' + (p.visitorName || '—') + '</div>' +
+          '<div style="font-size:11.5px;color:#64748B;">📞 ' + (p.visitorPhone || '—') + '</div>' +
+          (p.purpose ? '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + p.purpose + '</div>' : '') +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="font-weight:700;font-size:13px;color:#0F172A;">Flat ' + (p.residentUnit || '—') + '</div>' +
+          '<div style="font-size:11.5px;color:#64748B;">' + (p.residentName || 'Resident') + '</div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' +
+          '<div style="display:flex;align-items:center;gap:6px;">' +
+            '<span style="font-size:16px;">' + typeIcon(p.visitorType) + '</span>' +
+            '<div>' +
+              '<div style="font-size:12px;font-weight:600;">' + (p.gateNumber || 'Gate 1') + '</div>' +
+              (p.vehicleNumber ? '<div style="font-size:11px;color:#64748B;font-family:monospace;">' + p.vehicleNumber + '</div>' : '<div style="font-size:11px;color:#94A3B8;">No vehicle</div>') +
+            '</div>' +
+          '</div>' +
+        '</td>' +
+        '<td style="padding:12px 16px;">' + statusBadge(p.status) + '</td>' +
+        '<td style="padding:12px 16px;font-size:11.5px;color:#475569;line-height:1.4;">' + logText + '</td>' +
+        '<td style="padding:12px 16px;text-align:right;">' + actionsHtml + '</td>' +
+      '</tr>'
+    }).join('')
+  }
+
+  window.adminCheckInPass = async function(id) {
+    try {
+      const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'check_in', guardName: 'Admin Control' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Action failed')
+      if (typeof window.showToast === 'function') window.showToast('✅ Visitor checked in!', 'success')
+      await window.loadLiveAdminEntryPasses()
+    } catch (e) {
+      if (typeof window.showToast === 'function') window.showToast(e.message, 'error')
+    }
+  }
+
+  window.adminCheckOutPass = async function(id) {
+    try {
+      const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'check_out', guardName: 'Admin Control' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Action failed')
+      if (typeof window.showToast === 'function') window.showToast('🚪 Visitor checked out!', 'info')
+      await window.loadLiveAdminEntryPasses()
+    } catch (e) {
+      if (typeof window.showToast === 'function') window.showToast(e.message, 'error')
+    }
+  }
+
+  window.adminRevokePass = async function(id) {
+    if (!confirm('Are you sure you want to cancel and revoke this visitor entry pass?')) return
+    try {
+      const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'revoke' }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || 'Revoke failed')
+      if (typeof window.showToast === 'function') window.showToast('Pass revoked', 'warning')
+      await window.loadLiveAdminEntryPasses()
+    } catch (e) {
+      if (typeof window.showToast === 'function') window.showToast(e.message, 'error')
+    }
+  }
+
+  window.openAdminCreateEntryPassModal = function() {
+    const html =
+      '<div style="display:flex;flex-direction:column;gap:14px;">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Visitor Full Name *</label>' +
+          '<input type="text" id="admPassVisitorName" class="form-input" placeholder="e.g. Ramesh Kumar" style="width:100%;font-size:13px;" /></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Phone Number</label>' +
+          '<input type="tel" id="admPassVisitorPhone" class="form-input" placeholder="10-digit mobile" style="width:100%;font-size:13px;" /></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Destination Flat *</label>' +
+          '<input type="text" id="admPassResidentUnit" class="form-input" placeholder="e.g. A-402" style="width:100%;font-size:13px;" /></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Resident / Host Name</label>' +
+          '<input type="text" id="admPassResidentName" class="form-input" placeholder="e.g. Dr. Vikram Malhotra" style="width:100%;font-size:13px;" /></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Visitor Type</label>' +
+          '<select id="admPassVisitorType" class="form-select" style="width:100%;font-size:13px;">' +
+            '<option value="GUEST">👤 Guest / Friend</option>' +
+            '<option value="DELIVERY">📦 Delivery (Zomato/Amazon)</option>' +
+            '<option value="CAB">🚕 Cab / Uber / Ola</option>' +
+            '<option value="SERVICE">🔧 Maintenance / Service</option>' +
+            '<option value="VENDOR">🏪 Vendor / Contractor</option>' +
+          '</select></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Designated Entry Gate</label>' +
+          '<select id="admPassGate" class="form-select" style="width:100%;font-size:13px;">' +
+            '<option value="Gate 1 - Main Gate">Gate 1 - Main Gate</option>' +
+            '<option value="Gate 2 - Service Gate">Gate 2 - Service Gate</option>' +
+            '<option value="Gate 3 - Rear Gate">Gate 3 - Rear Gate</option>' +
+          '</select></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div><label style="font-size:12px;font-weight:700;">Vehicle Number (Optional)</label>' +
+          '<input type="text" id="admPassVehicleNo" class="form-input" placeholder="e.g. HR 26 DQ 8832" style="width:100%;font-size:13px;" /></div>' +
+        '<div><label style="font-size:12px;font-weight:700;">Validity Duration</label>' +
+          '<select id="admPassValidHours" class="form-select" style="width:100%;font-size:13px;">' +
+            '<option value="4">4 Hours</option>' +
+            '<option value="8">8 Hours</option>' +
+            '<option value="12" selected>12 Hours (Standard)</option>' +
+            '<option value="24">24 Hours (Full Day)</option>' +
+          '</select></div>' +
+      '</div>' +
+      '<div><label style="font-size:12px;font-weight:700;">Purpose / Notes</label>' +
+        '<input type="text" id="admPassPurpose" class="form-input" placeholder="e.g. Family dinner, AC repair service" style="width:100%;font-size:13px;" /></div>' +
+      '</div>'
+
+    if (typeof window.showModal === 'function') {
+      window.showModal('🎫 Issue Society Visitor Entry Pass', html, 'Generate Pass & Notify Guard', async function() {
+        const vName = (document.getElementById('admPassVisitorName') || {}).value || ''
+        const vPhone = (document.getElementById('admPassVisitorPhone') || {}).value || ''
+        const rUnit = (document.getElementById('admPassResidentUnit') || {}).value || ''
+        const rName = (document.getElementById('admPassResidentName') || {}).value || ''
+        const vType = (document.getElementById('admPassVisitorType') || {}).value || 'GUEST'
+        const gate = (document.getElementById('admPassGate') || {}).value || 'Gate 1 - Main Gate'
+        const vNo = (document.getElementById('admPassVehicleNo') || {}).value || ''
+        const vHours = (document.getElementById('admPassValidHours') || {}).value || '12'
+        const purpose = (document.getElementById('admPassPurpose') || {}).value || ''
+
+        if (!vName.trim() || !rUnit.trim()) {
+          if (typeof window.showToast === 'function') window.showToast('Visitor name and destination flat are required', 'warning')
+          throw new Error('Required fields missing')
+        }
+
+        const orgId = localStorage.getItem('rwa_active_org_id') || ''
+        const res = await (window.apiFetch || fetch)('/api/entry-passes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            visitorName: vName.trim(),
+            visitorPhone: vPhone.trim(),
+            residentUnit: rUnit.trim(),
+            residentName: rName.trim(),
+            visitorType: vType,
+            gateNumber: gate,
+            vehicleNumber: vNo.trim(),
+            validHours: parseInt(vHours) || 12,
+            purpose: purpose.trim(),
+            organizationId: orgId,
+          }),
+        })
+
+        const data = await res.json()
+        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create pass')
+
+        if (typeof window.showToast === 'function') {
+          window.showToast('✅ Pass ' + (data.pass && data.pass.passCode) + ' issued! PIN: ' + (data.pass && data.pass.otpPin), 'success')
+        }
+        await window.loadLiveAdminEntryPasses()
+      }, '520px')
+    }
+  }
+
+  // Auto-load screens when navigating
+  if (typeof Router !== 'undefined' && typeof Router.onNavigate === 'function') {
+    Router.onNavigate(function(screenId) {
+      if (screenId === 'staff-dashboard') {
+        setTimeout(function() {
+          if (typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
+        }, 80)
+      } else if (screenId === 'admin-entry-passes') {
+        setTimeout(function() {
+          if (typeof window.loadLiveAdminEntryPasses === 'function') window.loadLiveAdminEntryPasses()
+        }, 80)
+      }
+    })
+  }
 })()

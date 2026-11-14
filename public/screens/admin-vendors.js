@@ -927,9 +927,15 @@ window.renderContractsCards = function() {
 };
 
 Screens['admin-vendors'] = function() {
-  setTimeout(function() {
-    window.loadLiveVendorsScreen();
-  }, 10);
+  function tryLoadVendors(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveVendorsScreen === 'function') {
+      window.loadLiveVendorsScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadVendors(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadVendors, 20);
 
   return Shell.render('admin-vendors', {
     title: 'Vendors & Contracts',

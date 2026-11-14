@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 function getIO() {
   if (typeof global !== 'undefined' && (global as any).__io) {
     return (global as any).__io
@@ -20,7 +22,7 @@ export async function GET(request: Request) {
 
     const { user } = await requireAuth(request).catch(() => ({ user: null }))
     if (user) {
-      if (user.organizationId) {
+      if (!organizationId && user.organizationId) {
         organizationId = user.organizationId
       }
       if (user.role === 'STAFF' || !staffPhone) {
@@ -36,6 +38,8 @@ export async function GET(request: Request) {
     if (!organizationId) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
     }
+
+    console.log('[STAFF PORTAL API] organizationId:', organizationId, 'orgIdParam:', orgIdParam)
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
@@ -78,29 +82,13 @@ export async function GET(request: Request) {
       })
     }
 
-    // Fallback if staff table is completely empty
+    // No staff record found — return a 404 instead of creating dummy data
     if (!staffMember) {
-      staffMember = await prisma.staffDuty.create({
-        data: {
-          organizationId,
-          staffName: 'Ram Singh',
-          role: 'Senior Security Guard',
-          category: 'SECURITY',
-          phone: '9876543210',
-          locationPost: 'Gate 1 - Main Entrance',
-          blockName: 'Main Gate',
-          shiftName: 'Morning Shift',
-          startTime: '06:00 AM',
-          endTime: '02:00 PM',
-          status: 'ON_DUTY',
-          salaryAmount: 22500,
-          salaryDate: '5th of every month',
-          paymentStatus: 'PAID',
-          lastPaidDate: '05 Oct 2026',
-          attendancePresent: 26,
-          attendanceTotal: 28,
-        },
-      })
+      return NextResponse.json({
+        success: false,
+        error: 'No staff member found for this organization. Please add staff in the Admin → Duty Roster screen.',
+        noStaff: true,
+      }, { status: 200 })
     }
 
     // Fetch gate entry passes for this staff member's gate post

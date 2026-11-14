@@ -8,12 +8,15 @@ window.__selectedMemberFilter = 'ALL';
 window.__selectedMemberDetail = null;
 
 Screens['admin-members'] = function() {
-  // Trigger dynamic DB load
-  setTimeout(() => {
+  function tryLoadMembers(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveMembersScreen === 'function') {
       window.loadLiveMembersScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadMembers(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadMembers, 30);
 
   return Shell.render('admin-members', {
     title: 'Members & Residents',

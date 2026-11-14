@@ -466,9 +466,15 @@ window.syncCommitteeEmergencyContacts = async function() {
 // =============================================
 
 Screens['admin-emergency'] = function() {
-  setTimeout(() => {
-    window.loadLiveEmergencyContacts(true);
-  }, 10);
+  function tryLoadEmergency(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveEmergencyContacts === 'function') {
+      window.loadLiveEmergencyContacts(true);
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadEmergency(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadEmergency, 20);
 
   return Shell.render('admin-emergency', {
     title: 'Emergency Contacts & SOS Hotline',

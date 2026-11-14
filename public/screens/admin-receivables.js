@@ -75,11 +75,15 @@ function openReceivablesModal(title, contentHtml, submitLabel, onSubmit, maxWidt
 // Screen Registration
 // =============================================
 Screens['admin-receivables'] = function() {
-  setTimeout(function() {
+  function tryLoadReceivables(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveReceivables === 'function') {
       window.loadLiveReceivables();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadReceivables(attempts + 1); }, 100);
     }
-  }, 20);
+  }
+  setTimeout(tryLoadReceivables, 30);
 
   return Shell.render('admin-receivables', {
     title: 'External Receivables',

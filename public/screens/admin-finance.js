@@ -57,11 +57,15 @@ window.saveSocietyBillingRules = function(rules) {
 };
 
 Screens['admin-charges'] = function() {
-  setTimeout(() => {
+  function tryLoadCharges(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveChargeHeads === 'function') {
       window.loadLiveChargeHeads();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadCharges(attempts + 1); }, 100);
     }
-  }, 15);
+  }
+  setTimeout(tryLoadCharges, 30);
 
   return Shell.render('admin-charges', {
     title: 'Charge Setup & Fee Rules',
@@ -718,11 +722,15 @@ window.openConfigureBillingCycleModal = function() {
 // 2. Invoices & Bills Screen
 // =============================================
 Screens['admin-invoices'] = function() {
-  setTimeout(() => {
+  function tryLoadInvoices(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveInvoicesScreen === 'function') {
       window.loadLiveInvoicesScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadInvoices(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadInvoices, 30);
 
   return Shell.render('admin-invoices', {
     title: 'Invoices & Society Bills',
@@ -1011,11 +1019,15 @@ window.__selectedPaymentStatus = 'ALL';
 window.__paymentSearchQuery = '';
 
 Screens['admin-payments'] = function() {
-  setTimeout(() => {
+  function tryLoadPayments(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLivePaymentsScreen === 'function') {
       window.loadLivePaymentsScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadPayments(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadPayments, 30);
 
   return Shell.render('admin-payments', {
     title: 'Payments & Collections Register',
@@ -1719,11 +1731,15 @@ window.exportPaymentsRegister = function() {
 // 4. Dues & Defaulters Screen
 // =============================================
 Screens['admin-dues'] = function() {
-  setTimeout(() => {
+  function tryLoadDues(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveDuesScreen === 'function') {
       window.loadLiveDuesScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadDues(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadDues, 30);
 
   return Shell.render('admin-dues', {
     title: 'Dues & Defaulters Registry',

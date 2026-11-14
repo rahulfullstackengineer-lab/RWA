@@ -94,9 +94,15 @@ function openComplaintModal(title, contentHtml, submitLabel, onSubmit, maxWidth)
 // Main Complaints List Screen
 // ============================================================
 Screens['admin-complaints'] = function () {
-  setTimeout(function () {
-    window.loadLiveComplaintsScreen();
-  }, 10);
+  function tryLoadComplaints(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveComplaintsScreen === 'function') {
+      window.loadLiveComplaintsScreen();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadComplaints(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadComplaints, 30);
 
   return Shell.render('admin-complaints', {
     title: 'Complaints & Helpdesk',

@@ -30,11 +30,15 @@ Screens['admin-ledger'] = function() {
   window.__ledgerDateFrom = fmt(firstOfMonth);
   window.__ledgerDateTo   = fmt(today);
 
-  setTimeout(() => {
+  function tryLoadLedger(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveLedger === 'function') {
       window.loadLiveLedger();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadLedger(attempts + 1); }, 100);
     }
-  }, 20);
+  }
+  setTimeout(tryLoadLedger, 30);
 
   return Shell.render('admin-ledger', {
     title: 'Society Ledger',

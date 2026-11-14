@@ -842,9 +842,15 @@ window.broadcastDutyRosterAlert = async function() {
 // =============================================
 
 Screens['admin-duty'] = function() {
-  setTimeout(() => {
-    window.loadLiveStaffDuties(true);
-  }, 10);
+  function tryLoadDuty(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveStaffDuties === 'function') {
+      window.loadLiveStaffDuties(true);
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadDuty(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadDuty, 20);
 
   return Shell.render('admin-duty', {
     title: 'Staff & Guard Duty Management',

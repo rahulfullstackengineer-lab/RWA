@@ -5,11 +5,15 @@
 window.Screens = window.Screens || {};
 
 Screens['staff-dashboard'] = function() {
-  setTimeout(() => {
-    if (typeof window.loadLiveStaffPortal === 'function') {
+  function tryLoadStaffPortal(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveStaffPortal === 'function' && document.getElementById('staffPassesTableBody')) {
       window.loadLiveStaffPortal();
+    } else if (attempts < 30) {
+      setTimeout(function() { tryLoadStaffPortal(attempts + 1); }, 100);
     }
-  }, 50);
+  }
+  setTimeout(tryLoadStaffPortal, 50);
 
   const actionsHtml = `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -39,15 +43,15 @@ Screens['staff-dashboard'] = function() {
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <h2 id="staffHeroName" style="font-size:20px;font-weight:800;margin:0;color:#F0FDF4;">Ram Singh</h2>
-              <span id="staffHeroRole" style="background:rgba(52,211,153,0.2);color:#A7F3D0;border:1px solid rgba(52,211,153,0.4);font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:12px;">Senior Security Guard</span>
-              <span id="staffHeroSocietyBadge" style="background:rgba(59,130,246,0.3);color:#93C5FD;border:1px solid rgba(147,197,253,0.4);font-size:11px;font-weight:800;padding:3px 10px;border-radius:12px;">🏢 Emerald Heights RWA</span>
+              <h2 id="staffHeroName" style="font-size:20px;font-weight:800;margin:0;color:#F0FDF4;">Security Guard</h2>
+              <span id="staffHeroRole" style="background:rgba(52,211,153,0.2);color:#A7F3D0;border:1px solid rgba(52,211,153,0.4);font-size:11.5px;font-weight:800;padding:3px 10px;border-radius:12px;">Gate Security</span>
+              <span id="staffHeroSocietyBadge" style="background:rgba(59,130,246,0.3);color:#93C5FD;border:1px solid rgba(147,197,253,0.4);font-size:11px;font-weight:800;padding:3px 10px;border-radius:12px;">🏢 Society Campus</span>
               <span id="staffHeroStatusBadge" style="background:#10B981;color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;">🟢 ON DUTY</span>
             </div>
             <div style="display:flex;align-items:center;gap:16px;margin-top:6px;font-size:13px;color:#D1FAE5;flex-wrap:wrap;">
-              <div>📍 <strong>Gate:</strong> <span id="staffHeroPost">Gate 1 - Main Entrance</span></div>
-              <div>⏰ <strong>Shift:</strong> <span id="staffHeroShift">Morning Shift (06:00 AM - 02:00 PM)</span></div>
-              <div>📞 <strong>Phone:</strong> <span id="staffHeroPhone">9876543210</span></div>
+              <div>📍 <strong>Gate:</strong> <span id="staffHeroPost">Gate 1 Desk</span></div>
+              <div>⏰ <strong>Shift:</strong> <span id="staffHeroShift">Active Shift</span></div>
+              <div>📞 <strong>Phone:</strong> <span id="staffHeroPhone">—</span></div>
             </div>
           </div>
         </div>
@@ -438,31 +442,7 @@ window.getActiveGuardName = function() {
   return 'Gate Security Guard';
 };
 
-window.loadLiveStaffPortal = async function() {
-  try {
-    const userStr = typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_user') : null;
-    let u = null;
-    try { u = userStr ? JSON.parse(userStr) : null; } catch(e) {}
-    const phone = u?.phone || '';
-    const orgId = u?.organizationId || (typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_active_org_id') : '');
-
-    let url = '/api/staff/portal';
-    const params = [];
-    if (phone) params.push(`phone=${encodeURIComponent(phone)}`);
-    if (orgId) params.push(`orgId=${encodeURIComponent(orgId)}`);
-    if (params.length) url += `?${params.join('&')}`;
-
-    const res = await (typeof apiFetch === 'function' ? apiFetch(url) : fetch(url));
-    const data = await res.json();
-
-    if (data.success) {
-      window.__staffPortalData = data;
-      window.renderStaffPortalUI(data);
-    }
-  } catch (err) {
-    console.error('Error loading staff portal data:', err);
-  }
-};
+// loadLiveStaffPortal is defined in live-features.js (loads after this file and has full UI population)
 
 window.renderStaffPortalUI = function(data) {
   const staff = data.staff || {};
@@ -480,12 +460,12 @@ window.renderStaffPortalUI = function(data) {
   const elSociety = document.getElementById('staffHeroSocietyBadge');
   const elStatus = document.getElementById('staffHeroStatusBadge');
 
-  if (elName) elName.textContent = staff.name || 'Ram Singh';
+  if (elName) elName.textContent = staff.name || 'Security Guard';
   if (elRole) elRole.textContent = staff.role || 'Senior Security Guard';
-  if (elPost) elPost.textContent = duty.currentPost || 'Gate 1 - Main Entrance';
-  if (elShift) elShift.textContent = `${duty.currentShift || 'Morning Shift'} (${duty.timing || '06:00 AM - 02:00 PM'})`;
-  if (elPhone) elPhone.textContent = staff.phone || '9876543210';
-  if (elSociety) elSociety.textContent = `🏢 ${society.name || 'Emerald Heights RWA'}`;
+  if (elPost) elPost.textContent = duty.currentPost || staff.locationPost || 'Gate 1 - Main Entrance';
+  if (elShift) elShift.textContent = duty.currentShift ? `${duty.currentShift} (${duty.timing || '06:00 AM - 02:00 PM'})` : 'Active Shift';
+  if (elPhone) elPhone.textContent = staff.phone || '—';
+  if (elSociety) elSociety.textContent = `🏢 ${society.name || 'Society Campus'}`;
   if (elStatus) {
     const s = staff.status || 'ON_DUTY';
     elStatus.textContent = s === 'ON_DUTY' ? '🟢 ON DUTY' : (s === 'UPCOMING' ? '⏳ UPCOMING' : s === 'OFF_DUTY' ? '⏸️ OFF DUTY' : '🏖️ ON LEAVE');
@@ -499,12 +479,12 @@ window.renderStaffPortalUI = function(data) {
   const elDSup = document.getElementById('dutyCardSupervisorName');
   const elDRelief = document.getElementById('dutyCardReliefName');
 
-  if (elDPost) elDPost.textContent = duty.currentPost || 'Gate 1';
-  if (elDBlock) elDBlock.textContent = duty.currentBlock || 'Main Gate';
+  if (elDPost) elDPost.textContent = duty.currentPost || staff.locationPost || 'Gate 1';
+  if (elDBlock) elDBlock.textContent = duty.currentBlock || staff.blockName || 'Main Gate';
   if (elDTiming) elDTiming.textContent = duty.timing || '06:00 AM - 02:00 PM';
-  if (elDShiftName) elDShiftName.textContent = duty.currentShift || 'Morning Shift';
-  if (elDSup && duty.supervisor) elDSup.textContent = duty.supervisor.name;
-  if (elDRelief && duty.reliefGuard) elDRelief.textContent = duty.reliefGuard.name;
+  if (elDShiftName) elDShiftName.textContent = duty.currentShift || staff.shiftName || 'Morning Shift';
+  if (elDSup) elDSup.textContent = (duty.supervisor && duty.supervisor.name) ? duty.supervisor.name : 'Supervisor on Call';
+  if (elDRelief) elDRelief.textContent = (duty.reliefGuard && duty.reliefGuard.name) ? duty.reliefGuard.name : 'Relief Guard';
 
   // Salary tab cards
   const elSMon = document.getElementById('salaryCardMonthly');
@@ -513,11 +493,11 @@ window.renderStaffPortalUI = function(data) {
   const elSLast = document.getElementById('salaryCardLastPaid');
   const elSAtt = document.getElementById('salaryCardAttendance');
 
-  if (elSMon) elSMon.textContent = `₹${(salary.monthlySalary || 22500).toLocaleString('en-IN')}`;
+  if (elSMon) elSMon.textContent = salary.monthlySalary ? `₹${Number(salary.monthlySalary).toLocaleString('en-IN')}` : '₹—';
   if (elSDate) elSDate.textContent = salary.salaryDate || '5th of every month';
   if (elSNext) elSNext.textContent = salary.nextSalaryCredit || '05 Nov 2026';
-  if (elSLast) elSLast.textContent = salary.lastPaidDate || '05 Oct 2026';
-  if (elSAtt) elSAtt.textContent = `${salary.attendancePresent || 26} / ${salary.attendanceTotal || 28} Days (${salary.attendancePercent || 93}%)`;
+  if (elSLast) elSLast.textContent = salary.lastPaidDate || '—';
+  if (elSAtt) elSAtt.textContent = salary.attendanceTotal ? `${salary.attendancePresent || 0} / ${salary.attendanceTotal} Days (${salary.attendancePercent || 0}%)` : '—';
 
   // Salary breakdown
   const b = salary.breakdown || {};
@@ -527,11 +507,11 @@ window.renderStaffPortalUI = function(data) {
   const elGross = document.getElementById('slipGross');
   const elNet = document.getElementById('slipNet');
 
-  if (elBasic) elBasic.textContent = `₹${(b.basicSalary || 16875).toLocaleString('en-IN')}`;
-  if (elAllow) elAllow.textContent = `₹${(b.shiftAllowance || 3375).toLocaleString('en-IN')}`;
-  if (elBonus) elBonus.textContent = `₹${(b.specialDutyBonus || 2250).toLocaleString('en-IN')}`;
-  if (elGross) elGross.textContent = `₹${(salary.monthlySalary || 22500).toLocaleString('en-IN')}`;
-  if (elNet) elNet.textContent = `₹${(b.netSalary || 21250).toLocaleString('en-IN')}`;
+  if (elBasic) elBasic.textContent = b.basicSalary ? `₹${Number(b.basicSalary).toLocaleString('en-IN')}` : '₹—';
+  if (elAllow) elAllow.textContent = b.shiftAllowance ? `₹${Number(b.shiftAllowance).toLocaleString('en-IN')}` : '₹—';
+  if (elBonus) elBonus.textContent = b.specialDutyBonus ? `₹${Number(b.specialDutyBonus).toLocaleString('en-IN')}` : '₹—';
+  if (elGross) elGross.textContent = salary.monthlySalary ? `₹${Number(salary.monthlySalary).toLocaleString('en-IN')}` : '₹—';
+  if (elNet) elNet.textContent = b.netSalary ? `₹${Number(b.netSalary).toLocaleString('en-IN')}` : '₹—';
 
   // Passes Tab
   const elCount = document.getElementById('staffTabPassCount');
@@ -578,8 +558,10 @@ window.renderStaffPassesTable = function(passes) {
   if (!passes || passes.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center;padding:30px;color:#94A3B8;">
-          No passes found matching this filter.
+        <td colspan="6" style="text-align:center;padding:35px 20px;color:#64748B;">
+          <div style="font-size:28px;margin-bottom:8px;">📋</div>
+          <div style="font-weight:700;font-size:14px;color:#1E293B;">No gate entry passes found</div>
+          <div style="font-size:12px;color:#94A3B8;margin-top:4px;">No visitors match the current filter. Click "+ Spot Visitor Entry" to register a walk-in.</div>
         </td>
       </tr>
     `;

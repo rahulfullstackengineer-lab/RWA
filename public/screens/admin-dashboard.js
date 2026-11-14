@@ -175,15 +175,16 @@ window.AdsManager = {
 };
 
 Screens['admin-dashboard'] = function() {
-  // Schedule live DB hydration immediately after DOM injection
-  setTimeout(() => {
-    if (typeof window.renderDashChart === 'function') {
+  function tryLoadDash(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveAdminDashboard === 'function' && typeof window.renderDashChart === 'function') {
       window.renderDashChart(null, 'donut');
-    }
-    if (typeof window.loadLiveAdminDashboard === 'function') {
       window.loadLiveAdminDashboard();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadDash(attempts + 1); }, 100);
     }
-  }, 10);
+  }
+  setTimeout(tryLoadDash, 30);
 
   const formattedDate = formatDashDate();
 

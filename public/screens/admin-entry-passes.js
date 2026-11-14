@@ -5,11 +5,15 @@
 window.Screens = window.Screens || {};
 
 Screens['admin-entry-passes'] = function() {
-  setTimeout(() => {
+  function tryLoadAdminPasses(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveAdminEntryPasses === 'function') {
       window.loadLiveAdminEntryPasses();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadAdminPasses(attempts + 1); }, 100);
     }
-  }, 50);
+  }
+  setTimeout(tryLoadAdminPasses, 50);
 
   const actionsHtml = `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">

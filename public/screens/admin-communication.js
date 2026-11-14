@@ -68,9 +68,15 @@ window.__commNoticesSearch = '';
 // 1. NOTICES BOARD SCREEN
 // ============================================================
 Screens['admin-notices'] = function() {
-  setTimeout(function() {
-    window.loadLiveNotices();
-  }, 20);
+  function tryLoadNotices(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveNotices === 'function') {
+      window.loadLiveNotices();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadNotices(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadNotices, 30);
 
   return Shell.render('admin-notices', {
     title: 'Notice Board',
@@ -738,9 +744,15 @@ window.exportNoticesCSV = function() {
 // 2. BROADCAST CENTER SCREEN
 // ============================================================
 Screens['admin-broadcasts'] = function() {
-  setTimeout(function() {
-    window.loadLiveBroadcasts();
-  }, 20);
+  function tryLoadBroadcasts(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLiveBroadcasts === 'function') {
+      window.loadLiveBroadcasts();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadBroadcasts(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadBroadcasts, 30);
 
   return Shell.render('admin-broadcasts', {
     title: 'Broadcasts',
@@ -1248,9 +1260,15 @@ window.exportBroadcastsCSV = function() {
 // 3. POLLS & VOTING SCREEN
 // ============================================================
 Screens['admin-polls'] = function() {
-  setTimeout(function() {
-    window.loadLivePolls();
-  }, 20);
+  function tryLoadPolls(attempts) {
+    attempts = attempts || 0;
+    if (typeof window.loadLivePolls === 'function') {
+      window.loadLivePolls();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadPolls(attempts + 1); }, 100);
+    }
+  }
+  setTimeout(tryLoadPolls, 30);
 
   return Shell.render('admin-polls', {
     title: 'Polls',

@@ -256,16 +256,23 @@ Screens['admin-settings'] = function() {
   }
 
   const sData = window._settingsData || {};
+  let cachedOrgName = 'Society';
+  let cachedOrgEmail = '';
+  try {
+    const u = JSON.parse(localStorage.getItem('rwa_user') || '{}');
+    if (u.organization?.name) cachedOrgName = u.organization.name;
+    if (u.email) cachedOrgEmail = u.email;
+  } catch(e) {}
   const org = sData.organization || {
-    name: 'Greenwood Heights RWA',
-    registrationNo: 'CHD/RWA/2026/0042-696',
-    address: 'village -sangrain',
-    city: 'Chandigarh',
-    pincode: '176303',
-    phone: '1234567890',
-    email: 'i.am.rahul4550@gmail.com',
+    name: cachedOrgName,
+    registrationNo: '',
+    address: '',
+    city: '',
+    pincode: '',
+    phone: '',
+    email: cachedOrgEmail,
     plan: 'GROWTH',
-    totalUnits: 112,
+    totalUnits: 0,
   };
 
   const settings = sData.settings || {

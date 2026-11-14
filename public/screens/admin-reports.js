@@ -11,11 +11,15 @@ window.__reportsActiveTab = 'statements'; // 'statements' | 'trend' | 'hub'
 // Screen Definition
 // =============================================
 Screens['admin-reports'] = function() {
-  setTimeout(function() {
+  function tryLoadReports(attempts) {
+    attempts = attempts || 0;
     if (typeof window.loadLiveReports === 'function') {
       window.loadLiveReports();
+    } else if (attempts < 20) {
+      setTimeout(function() { tryLoadReports(attempts + 1); }, 100);
     }
-  }, 20);
+  }
+  setTimeout(tryLoadReports, 30);
 
   return Shell.render('admin-reports', {
     title: 'Reports & Accounts',
