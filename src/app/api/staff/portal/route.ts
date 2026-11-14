@@ -75,113 +75,112 @@ export async function GET(request: Request) {
     }
 
     // Default to first Security Guard in organization if not matched
-    if (!staffMember) {
-      staffMember = await prisma.staffDuty.findFirst({
-        where: { organizationId, category: 'SECURITY' },
-        orderBy: { order: 'asc' },
-      })
-    }
-
-    // No staff record found — return a 404 instead of creating dummy data
-    if (!staffMember) {
-      return NextResponse.json({
-        success: false,
-        error: 'No staff member found for this organization. Please add staff in the Admin → Duty Roster screen.',
-        noStaff: true,
-      }, { status: 200 })
+    // If no staff member duty record exists yet, provide an active guard context without writing dummy records to DB
+    const activeStaff = staffMember || {
+      id: "default",
+      staffName: user?.name || "Gate Security Guard",
+      role: "Security Guard",
+      category: "SECURITY",
+      phone: staffPhone || "—",
+      altPhone: null,
+      locationPost: "Gate 1 - Main Entrance",
+      blockName: "Main Gate",
+      shiftName: "General Duty",
+      startTime: "08:00 AM",
+      endTime: "08:00 PM",
+      status: "ON_DUTY",
+      salaryAmount: 0,
+      salaryDate: "—",
+      paymentStatus: "—",
+      lastPaidDate: "—",
+      attendancePresent: 0,
+      attendanceTotal: 0,
+      notes: null,
     }
 
     // Fetch gate entry passes for this staff member's gate post
     const allPasses = await prisma.entryPass.findMany({
       where: { organizationId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     })
 
     // Active passes for verification
-    const activePasses = allPasses.filter(p => p.status === 'APPROVED' || p.status === 'CHECKED_IN')
-    const checkedInPasses = allPasses.filter(p => p.status === 'CHECKED_IN')
-    const completedPasses = allPasses.filter(p => p.status === 'CHECKED_OUT')
+    const activePasses = allPasses.filter(p => p.status === "APPROVED" || p.status === "CHECKED_IN")
+    const checkedInPasses = allPasses.filter(p => p.status === "CHECKED_IN")
+    const completedPasses = allPasses.filter(p => p.status === "CHECKED_OUT")
 
     // Find supervisor
     const supervisor = await prisma.staffDuty.findFirst({
-      where: { organizationId, category: 'SUPERVISOR' },
-    }) || {
-      staffName: 'Ramesh Paswan',
-      role: 'Facility & Security Supervisor',
-      phone: '9876543215',
-    }
+      where: { organizationId, category: "SUPERVISOR" },
+    })
 
     // Find relief guard
-    const reliefGuard = await prisma.staffDuty.findFirst({
+    const reliefGuard = staffMember ? await prisma.staffDuty.findFirst({
       where: {
         organizationId,
-        category: 'SECURITY',
+        category: "SECURITY",
         id: { not: staffMember.id },
       },
-    }) || {
-      staffName: 'Dharmendra Kumar',
-      role: 'Evening Relief Guard (Gate 1)',
-      phone: '9876543211',
-      shiftName: 'Evening Shift (02:00 PM - 10:00 PM)',
-    }
+    }) : null
 
     // Salary slip calculation
-    const basePay = Math.round((staffMember.salaryAmount || 22500) * 0.75)
-    const allowance = Math.round((staffMember.salaryAmount || 22500) * 0.15)
-    const dutyBonus = (staffMember.salaryAmount || 22500) - basePay - allowance
-    const pfDeduction = 1250
-    const netTakeHome = (staffMember.salaryAmount || 22500) - pfDeduction
+    const basePay = activeStaff.salaryAmount ? Math.round(activeStaff.salaryAmount * 0.75) : 0
+    const allowance = activeStaff.salaryAmount ? Math.round(activeStaff.salaryAmount * 0.15) : 0
+    const dutyBonus = activeStaff.salaryAmount ? activeStaff.salaryAmount - basePay - allowance : 0
+    const pfDeduction = activeStaff.salaryAmount ? 1250 : 0
+    const netTakeHome = activeStaff.salaryAmount ? activeStaff.salaryAmount - pfDeduction : 0
 
     return NextResponse.json({
       success: true,
       society: {
         id: org?.id,
-        name: org?.name || 'Emerald Heights RWA',
-        address: org?.address || 'Campus Gates & Towers',
+        name: org?.name || "Society Campus",
+        address: org?.address || "Campus Gates & Towers",
+        city: org?.city,
       },
       staff: {
-        id: staffMember.id,
-        name: staffMember.staffName,
-        role: staffMember.role,
-        category: staffMember.category,
-        phone: staffMember.phone,
-        altPhone: staffMember.altPhone,
-        locationPost: staffMember.locationPost,
-        blockName: staffMember.blockName,
-        shiftName: staffMember.shiftName,
-        startTime: staffMember.startTime,
-        endTime: staffMember.endTime,
-        status: staffMember.status,
-        notes: staffMember.notes,
+        id: activeStaff.id,
+        name: activeStaff.staffName,
+        role: activeStaff.role,
+        category: activeStaff.category,
+        phone: activeStaff.phone,
+        altPhone: activeStaff.altPhone,
+        locationPost: activeStaff.locationPost,
+        blockName: activeStaff.blockName,
+        shiftName: activeStaff.shiftName,
+        startTime: activeStaff.startTime,
+        endTime: activeStaff.endTime,
+        status: activeStaff.status,
+        notes: activeStaff.notes,
       },
       duty: {
-        currentPost: staffMember.locationPost,
-        currentBlock: staffMember.blockName || 'Campus Wide',
-        currentShift: staffMember.shiftName,
-        timing: `${staffMember.startTime} – ${staffMember.endTime}`,
-        status: staffMember.status,
-        supervisor: {
+        currentPost: activeStaff.locationPost,
+        currentBlock: activeStaff.blockName || "Campus Wide",
+        currentShift: activeStaff.shiftName,
+        timing: `${activeStaff.startTime || "08:00 AM"} – ${activeStaff.endTime || "08:00 PM"}`,
+        status: activeStaff.status,
+        supervisor: supervisor ? {
           name: supervisor.staffName,
           role: supervisor.role,
           phone: supervisor.phone,
-        },
-        reliefGuard: {
+        } : null,
+        reliefGuard: reliefGuard ? {
           name: reliefGuard.staffName,
           role: reliefGuard.role,
           phone: reliefGuard.phone,
-          shift: reliefGuard.shiftName || '02:00 PM - 10:00 PM',
-        },
+          shift: reliefGuard.shiftName || "02:00 PM - 10:00 PM",
+        } : null,
       },
       salary: {
-        monthlySalary: staffMember.salaryAmount || 22500,
-        salaryDate: staffMember.salaryDate || '5th of every month',
-        nextSalaryCredit: '05 Nov 2026',
-        paymentStatus: staffMember.paymentStatus || 'PAID',
-        lastPaidDate: staffMember.lastPaidDate || '05 Oct 2026',
-        bankAccount: 'State Bank of India (••• 4128)',
-        attendancePresent: staffMember.attendancePresent || 26,
-        attendanceTotal: staffMember.attendanceTotal || 28,
-        attendancePercent: Math.round(((staffMember.attendancePresent || 26) / (staffMember.attendanceTotal || 28)) * 100),
+        monthlySalary: activeStaff.salaryAmount || 0,
+        salaryDate: activeStaff.salaryDate || "—",
+        nextSalaryCredit: "—",
+        paymentStatus: activeStaff.paymentStatus || "—",
+        lastPaidDate: activeStaff.lastPaidDate || "—",
+        bankAccount: "Bank Account on record",
+        attendancePresent: activeStaff.attendancePresent || 0,
+        attendanceTotal: activeStaff.attendanceTotal || 0,
+        attendancePercent: activeStaff.attendanceTotal ? Math.round(((activeStaff.attendancePresent || 0) / (activeStaff.attendanceTotal || 1)) * 100) : 0,
         breakdown: {
           basicSalary: basePay,
           shiftAllowance: allowance,
