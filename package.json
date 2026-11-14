@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node scripts/prepare-prisma.js && node server.js",
+    "prebuild": "node scripts/prepare-prisma.js",
     "build": "next build",
     "start": "node server.js",
     "lint": "eslint",
-    "postinstall": "prisma generate",
-    "db:push": "prisma db push",
-    "db:seed": "prisma db seed",
+    "postinstall": "node scripts/prepare-prisma.js && prisma generate",
+    "db:prep": "node scripts/prepare-prisma.js",
+    "db:push": "node scripts/prepare-prisma.js && prisma db push",
+    "db:migrate": "node scripts/prepare-prisma.js && prisma migrate deploy",
+    "db:seed": "node scripts/prepare-prisma.js && prisma db seed",
     "test:socket": "node scripts/test-socket.js"
   },
   "dependencies": {
