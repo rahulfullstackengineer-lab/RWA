@@ -4,6 +4,13 @@
 window.Screens = window.Screens || {};
 var Screens = window.Screens;
 
+// One logo for the whole app. Replace public/brand/rwa-logo.svg to change it everywhere.
+window.RWA_LOGO_SRC = '/brand/rwa-logo.svg';
+window.rwaLogoHtml = function (className) {
+  const cls = className ? `rwa-logo ${className}` : 'rwa-logo';
+  return `<img class="${cls}" src="${window.RWA_LOGO_SRC}" alt="RWA" />`;
+};
+
 var Router = (() => {
   let _current = null;
   let _params  = {};
@@ -333,45 +340,47 @@ var Shell = (() => {
     let tabs = [];
     if (portal === 'resident') {
       tabs = [
-        { id: 'resident-dashboard',  icon: '🏠', label: 'Home' },
-        { id: 'resident-bills',      icon: '📄', label: 'Bills' },
-        { id: 'resident-complaints', icon: '🎫', label: 'Tickets' },
-        { id: 'resident-notices',    icon: '📢', label: 'Notices' },
-        { id: 'menu',                icon: '☰', label: 'Menu', isMenu: true },
+        { id: 'resident-dashboard',  icon: 'home', label: 'Home' },
+        { id: 'resident-bills',      icon: 'orders', label: 'Bills' },
+        { id: 'resident-complaints', icon: 'tickets', label: 'Tickets' },
+        { id: 'resident-notices',    icon: 'notices', label: 'Notices' },
+        { id: 'menu',                icon: 'menu', label: 'Menu', isMenu: true },
       ];
     } else if (portal === 'staff') {
       tabs = [
-        { id: 'staff-dashboard',     icon: '👮', label: 'Gate' },
-        { id: 'admin-entry-passes',  icon: '🎫', label: 'Passes' },
-        { id: 'admin-duty',          icon: '📅', label: 'Roster' },
-        { id: 'menu',                icon: '☰', label: 'Menu', isMenu: true },
+        { id: 'staff-dashboard',     icon: 'shield', label: 'Gate' },
+        { id: 'admin-entry-passes',  icon: 'orders', label: 'Passes' },
+        { id: 'admin-duty',          icon: 'calendar', label: 'Roster' },
+        { id: 'menu',                icon: 'menu', label: 'Menu', isMenu: true },
       ];
     } else if (portal === 'platform') {
       tabs = [
-        { id: 'platform-dashboard',     icon: '🏠', label: 'Overview' },
-        { id: 'platform-orgs',          icon: '🏢', label: 'Societies' },
-        { id: 'platform-subscriptions', icon: '💎', label: 'Plans' },
-        { id: 'platform-audit',         icon: '🔍', label: 'Logs' },
-        { id: 'menu',                   icon: '☰', label: 'Menu', isMenu: true },
+        { id: 'platform-dashboard',     icon: 'home', label: 'Overview' },
+        { id: 'platform-orgs',          icon: 'building', label: 'Societies' },
+        { id: 'platform-subscriptions', icon: 'diamond', label: 'Plans' },
+        { id: 'platform-audit',         icon: 'stats', label: 'Logs' },
+        { id: 'menu',                   icon: 'menu', label: 'Menu', isMenu: true },
       ];
     } else {
       tabs = [
-        { id: 'admin-dashboard',   icon: '🏠', label: 'Home' },
-        { id: 'admin-units',       icon: '🚪', label: 'Units' },
-        { id: 'admin-members',     icon: '👥', label: 'Members' },
-        { id: 'admin-invoices',    icon: '💳', label: 'Finance' },
-        { id: 'menu',              icon: '☰', label: 'Menu', isMenu: true },
+        { id: 'admin-dashboard',   icon: 'home', label: 'Home' },
+        { id: 'admin-units',       icon: 'building', label: 'Units' },
+        { id: 'admin-members',     icon: 'users', label: 'Members' },
+        { id: 'admin-invoices',    icon: 'finance', label: 'Finance' },
+        { id: 'menu',              icon: 'menu', label: 'Menu', isMenu: true },
       ];
     }
+
+    const menuIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>`;
 
     return `
       <nav class="mobile-bottom-nav">
         ${tabs.map(t => `
-          <div class="mobile-nav-tab ${active === t.id ? 'active' : ''}"
+          <button type="button" class="mobile-nav-tab ${active === t.id ? 'active' : ''}"
                onclick="${t.isMenu ? 'toggleSidebar(true)' : `Router.go('${t.id}')`}">
-            <div class="mobile-nav-icon">${t.icon}</div>
-            <div class="mobile-nav-label">${t.label}</div>
-          </div>
+            <span class="mobile-nav-icon">${t.icon === 'menu' ? menuIcon : getSidebarIcon(t.icon)}</span>
+            <span class="mobile-nav-label">${t.label}</span>
+          </button>
         `).join('')}
       </nav>
     `;
@@ -466,20 +475,22 @@ var Shell = (() => {
         if (rawStats) adminStats = JSON.parse(rawStats);
       } catch(e) {}
 
-      const totalUnits = adminStats?.totalUnits || 48;
-      const planQuota = adminStats?.planQuota || 50;
-      const occRate = adminStats?.occupancyRate || 100;
-      gaugePercent = Math.min(100, Math.round((totalUnits / planQuota) * 100));
+      const totalUnits = Number(adminStats?.totalUnits) || 0;
+      const planQuota = Number(adminStats?.planQuota) || 0;
+      const occRate = Number(adminStats?.occupancyRate) || 0;
+      gaugePercent = planQuota > 0 ? Math.min(100, Math.round((totalUnits / planQuota) * 100)) : 0;
 
       cardTitle = 'Society Units Quota';
-      cardDesc = `${totalUnits} of ${planQuota} units registered in society tier (${occRate}% occupied).`;
-      cardBtnText = 'Manage Units →';
+      cardDesc = planQuota > 0
+        ? `${totalUnits} of ${planQuota} units registered (${occRate}% occupied).`
+        : `${totalUnits} units registered.`;
+      cardBtnText = 'Manage Units';
       cardBtnAction = "Router.go('admin-units')";
-      cardBtnStyle = 'background:linear-gradient(135deg, #4F46E5 0%, #2563EB 100%);box-shadow:0 4px 12px rgba(79,70,229,0.28);';
+      cardBtnStyle = 'background:#18181B;color:#FFFFFF;box-shadow:none;border-radius:2px;';
       gaugeText = `${gaugePercent}%`;
-      gaugeBgStroke = '#E0E7FF';
-      gaugeFgStroke = '#4F46E5';
-      gaugeTextColor = '#4338CA';
+      gaugeBgStroke = '#E4E4E7';
+      gaugeFgStroke = '#18181B';
+      gaugeTextColor = '#18181B';
     } else {
       cardTitle = 'Platform Health';
       cardDesc = 'All society database clusters operating normally.';
@@ -498,38 +509,17 @@ var Shell = (() => {
       <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
 
       <div class="sidebar ${isSidebarCollapsed ? 'collapsed' : ''}" id="appSidebar">
-        <!-- 1. Top macOS Window Control Dots + Collapse Toggle -->
-        <div class="sidebar-top-bar">
-          <div class="mac-traffic-dots">
-            <span class="mac-dot dot-red"></span>
-            <span class="mac-dot dot-yellow"></span>
-            <span class="mac-dot dot-green"></span>
-          </div>
-          <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="${isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}" aria-label="Toggle sidebar collapse">
-            ${isSidebarCollapsed 
-              ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
-              : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`}
-          </button>
-        </div>
-
-        <!-- 2. Storeify Brand Logo Header -->
         <div class="sidebar-brand-header">
-          <div class="sidebar-brand-logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-              <path d="M7 11C7 8.23858 9.23858 6 12 6H20C22.7614 6 25 8.23858 25 11V12C25 14.7614 22.7614 17 20 17H11C8.23858 17 6 19.2386 6 22V22C6 24.7614 8.23858 27 11 27H20C22.7614 27 25 24.7614 25 22" stroke="url(#storeifyGrad)" stroke-width="3.6" stroke-linecap="round"/>
-              <defs>
-                <linearGradient id="storeifyGrad" x1="6" y1="6" x2="26" y2="27" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#7C3AED"/>
-                  <stop offset="0.5" stop-color="#6366F1"/>
-                  <stop offset="1" stop-color="#4F46E5"/>
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+          ${window.rwaLogoHtml('sidebar-brand-logo')}
           <div class="sidebar-brand-text">
-            <div class="brand-name">Storeify</div>
+            <div class="brand-name">RWA</div>
             <div class="brand-sub" id="sidebarOrgName" title="${orgName}">${orgName}</div>
           </div>
+          <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" onclick="toggleSidebarCollapse()" title="${isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}" aria-label="Toggle sidebar collapse">
+            ${isSidebarCollapsed
+              ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+              : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`}
+          </button>
         </div>
 
         <!-- 3. Search Box with Instant Live Filtering -->
@@ -634,11 +624,12 @@ var Shell = (() => {
               </button>
             ` : ''}
             ${actions}
-            <div style="position:relative;display:inline-flex;align-items:center;">
+            <div class="header-notif-wrap">
               <button class="icon-btn" id="headerNotifBtn" data-tip="Notifications" onclick="toggleHeaderNotificationsMenu(event, '${portal}')" aria-label="Notifications & Alerts">
-                🔔<div class="notif-dot" id="headerNotifDot"></div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <div class="notif-dot" id="headerNotifDot"></div>
               </button>
-              <div id="headerNotifDropdown" class="header-dropdown-menu notif-dropdown" style="display:none;position:absolute;top:calc(100% + 10px);right:0;width:400px;max-width:92vw;background:var(--bg-surface,#ffffff);border:1px solid var(--border,#E2E8F0);border-radius:16px;box-shadow:0 20px 40px -8px rgba(15,23,42,0.22);z-index:10000;overflow:hidden;" onclick="event.stopPropagation()"></div>
+              <div id="headerNotifDropdown" class="header-dropdown-menu notif-dropdown" style="display:none;" onclick="event.stopPropagation()"></div>
             </div>
             <div style="position:relative;display:inline-flex;align-items:center;">
               <div class="avatar ${avatarColor}" id="headerUserAvatar" style="cursor:pointer" onclick="toggleUserAccountMenu(event, '${portal}')" title="Logged in as ${userName} · Account Options">${userInitial}</div>
@@ -1047,24 +1038,15 @@ window.toggleHeaderNotificationsMenu = async function(event, portal) {
   }
 
   dropdown.innerHTML = `
-    <div class="dropdown-header" style="display:flex;justify-content:space-between;align-items:center;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:15px;font-weight:800;color:var(--text-primary);">🔔 Alerts & Feed</span>
-        <span id="notifDropdownBadge" class="badge badge-purple" style="font-size:10px;">Loading...</span>
-      </div>
-      <button class="btn btn-ghost btn-xs" onclick="window.markAllNotificationsAsReadFromDropdown(event)" style="font-size:11px;color:var(--text-muted);padding:2px 6px;">
-        ✓ Mark read
-      </button>
+    <div class="notif-drop-head">
+      <div class="notif-drop-title">Alerts</div>
+      <span id="notifDropdownBadge" class="notif-drop-badge">Loading</span>
+      <button type="button" class="notif-drop-read" onclick="window.markAllNotificationsAsReadFromDropdown(event)">Mark read</button>
     </div>
-    <div id="notifDropdownList" style="max-height:360px;overflow-y:auto;padding:4px 0;">
-      <div style="padding:24px;text-align:center;color:var(--text-muted);font-size:12px;">Loading alerts...</div>
+    <div id="notifDropdownList" class="notif-drop-list">
+      <div class="notif-drop-empty">Loading alerts...</div>
     </div>
-    <div style="padding:10px 14px;border-top:1px solid var(--border-light);background:var(--bg-elevated);text-align:center;">
-      <button class="btn btn-ghost btn-sm w-full" style="justify-content:center;font-size:12px;font-weight:700;color:var(--blue);"
-        onclick="window.closeHeaderDropdowns(); Router.go('${portal==='resident' ? 'resident-notifications' : 'admin-notifications'}');">
-        View All Society Notifications →
-      </button>
-    </div>
+    <button type="button" class="notif-drop-all" onclick="window.closeHeaderDropdowns(); Router.go('${portal==='resident' ? 'resident-notifications' : 'admin-notifications'}');">View all</button>
   `;
 
   dropdown.style.display = 'block';
@@ -1081,7 +1063,7 @@ window.toggleHeaderNotificationsMenu = async function(event, portal) {
       const badge = document.getElementById('notifDropdownBadge');
       if (badge) {
         badge.textContent = unreadCount > 0 ? `${unreadCount} New` : 'All caught up';
-        badge.className = `badge ${unreadCount > 0 ? 'badge-blue' : 'badge-green'}`;
+        badge.className = 'notif-drop-badge';
       }
 
       if (typeof window.updateNotificationBellBadge === 'function') {
@@ -1091,13 +1073,7 @@ window.toggleHeaderNotificationsMenu = async function(event, portal) {
       const list = document.getElementById('notifDropdownList');
       if (list) {
         if (notifs.length === 0) {
-          list.innerHTML = `
-            <div style="padding:32px 16px;text-align:center;color:var(--text-muted);">
-              <div style="font-size:24px;margin-bottom:6px;">🔔</div>
-              <div style="font-size:13px;font-weight:600;">No Notifications Yet</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">All society circulars, dues, and alerts will appear here.</div>
-            </div>
-          `;
+          list.innerHTML = `<div class="notif-drop-empty">No alerts yet.</div>`;
         } else {
           list.innerHTML = notifs.slice(0, 10).map(n => {
             const isUnread = !n.isRead;
@@ -1173,7 +1149,7 @@ window.markAllNotificationsAsReadFromDropdown = async function(e) {
       const badge = document.getElementById('notifDropdownBadge');
       if (badge) {
         badge.textContent = 'All caught up';
-        badge.className = 'badge badge-green';
+        badge.className = 'notif-drop-badge';
       }
       if (typeof window.updateNotificationBellBadge === 'function') {
         window.updateNotificationBellBadge(false);

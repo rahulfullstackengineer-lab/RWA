@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 // POST /api/emergency/sos — Resident or Admin triggers high-priority Panic SOS
@@ -26,40 +26,27 @@ export async function POST(request: Request) {
     const residentName = fullUser?.name || 'Resident'
     const phone = fullUser?.phone || ''
 
-    // 1. Broadcast immediate live socket siren alert across guard screens & admin desks
-    emitLiveSocketEvent('sos:alarm-triggered', {
+    await notifyUsers({
       orgId,
-      userId: user.id,
-      residentName,
-      phone,
-      unitNumber,
-      type,
-      note,
-      timestamp: new Date().toISOString(),
-    })
-
-    // 2. Dispatch in-app high-priority notification to all Admins in the society
-    const adminUsers = await prisma.user.findMany({
-      where: {
-        organizationId: orgId,
-        role: { in: ['RWA_ADMIN', 'ADMIN', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER'] },
+      roles: ['admin', 'staff'],
+      excludeUserId: user.id,
+      title: `🚨 EMERGENCY SOS: Flat ${unitNumber}`,
+      message: `${residentName} (${phone}) triggered an urgent ${type} alarm.${note ? ' ' + note : ''}`,
+      type: 'EMERGENCY',
+      event: 'sos:alarm-triggered',
+      referenceType: 'SOS',
+      referenceId: user.id,
+      data: {
+        orgId,
+        userId: user.id,
+        residentName,
+        phone,
+        unitNumber,
+        type,
+        note,
+        timestamp: new Date().toISOString(),
       },
-      select: { id: true },
     })
-
-    if (adminUsers.length > 0) {
-      await prisma.notification.createMany({
-        data: adminUsers.map(a => ({
-          organizationId: orgId,
-          userId: a.id,
-          title: `🚨 EMERGENCY SOS: Flat ${unitNumber}`,
-          message: `${residentName} (${phone}) has triggered an urgent ${type} SOS alarm. Guard tablet and security desk alerted.`,
-          type: 'EMERGENCY',
-          referenceType: 'SOS',
-          referenceId: user.id,
-        })),
-      })
-    }
 
     await logAudit({
       organizationId: orgId,

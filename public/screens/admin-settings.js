@@ -833,8 +833,8 @@ window.viewPlatformGstInvoice = function(invNo, period, units, rate, total) {
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700;color:var(--text-primary);">BILLED TO:</div>
-            <div style="font-weight:600;margin-top:2px;">Greenwood Heights RWA</div>
-            <div style="color:var(--text-muted);">Reg: CHD/RWA/2026/0042-696</div>
+            <div style="font-weight:600;margin-top:2px;">${localStorage.getItem('rwa_active_org_name') || 'This society'}</div>
+            <div style="color:var(--text-muted);">Reg: ${localStorage.getItem('rwa_active_org_reg') || 'Not set'}</div>
             <div style="color:var(--text-muted);">village -sangrain, Chandigarh</div>
           </div>
         </div>
@@ -879,9 +879,9 @@ Screens['admin-subscription'] = function() {
   const data = window.__societySubscriptionData || {};
   const sub = data.subscription || {
     organization: {
-      name: 'Greenwood Heights RWA',
-      totalUnits: 112,
-      registrationNo: 'CHD/RWA/2026/0042-696',
+      name: localStorage.getItem('rwa_active_org_name') || '',
+      totalUnits: 0,
+      registrationNo: '',
     },
     plan: {
       id: 'plan_growth',
@@ -891,17 +891,17 @@ Screens['admin-subscription'] = function() {
       description: 'Complete financial automation, online UPI gateway, and statutory compliance',
     },
     effectiveUnitPrice: 50,
-    liveUnitCount: 112,
+    liveUnitCount: 0,
     billingCycle: 'MONTHLY',
     status: 'ACTIVE',
-    monthlyTotal: 5600,
-    annualTotal: 60480,
+    monthlyTotal: 0,
+    annualTotal: 0,
     nextBillingDate: '2026-11-01',
     autoDebitEnabled: true,
   };
 
   const org = sub.organization || {};
-  const liveUnits = sub.liveUnitCount || org.totalUnits || 112;
+  const liveUnits = sub.liveUnitCount || org.totalUnits || 0;
   const currentRate = sub.effectiveUnitPrice || 50;
   const currentMonthly = sub.monthlyTotal || (liveUnits * currentRate);
   const currentAnnual = sub.annualTotal || Math.round(currentMonthly * 12 * 0.9);
@@ -976,9 +976,9 @@ Screens['admin-subscription'] = function() {
               <span class="badge badge-green" style="font-size:11px;">● ${sub.status || 'ACTIVE'}</span>
               ${sub.autoDebitEnabled ? '<span class="badge badge-blue" style="font-size:11px;">⚡ AutoPay Active</span>' : ''}
             </div>
-            <div style="font-size:20px;font-weight:800;color:var(--text-primary);">${org.name || 'Greenwood Heights RWA'}</div>
+            <div style="font-size:20px;font-weight:800;color:var(--text-primary);">${org.name || 'This society'}</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">
-              Registration No: <code style="font-weight:600;">${org.registrationNo || 'CHD/RWA/2026/0042-696'}</code> · Next Renewal: <strong>${sub.nextBillingDate || '1st November 2026'}</strong>
+              Registration No: <code style="font-weight:600;">${org.registrationNo || 'Not set'}</code> · Next Renewal: <strong>${sub.nextBillingDate || 'Not scheduled'}</strong>
             </div>
           </div>
 
@@ -2366,12 +2366,14 @@ window.exportVehiclesRegistry = function() {
 // Admin Profile Screen (Stays in Admin Portal)
 // =============================================
 Screens['admin-profile'] = function() {
-  const user = (typeof Auth !== 'undefined' && Auth.currentUser) ? Auth.currentUser() : {};
-  const userName = user.name || 'Test name';
-  const userPhone = user.phone || '1234567890';
-  const userEmail = user.email || 'admin@rwamanager.com';
+  let storedUser = {};
+  try { storedUser = JSON.parse(localStorage.getItem('rwa_user') || '{}'); } catch (e) {}
+  const user = (typeof Auth !== 'undefined' && Auth.currentUser) ? (Auth.currentUser() || storedUser) : storedUser;
+  const userName = user.name || 'Administrator';
+  const userPhone = user.phone || '';
+  const userEmail = user.email || 'Not added';
   const userRole = (user.role || 'RWA_ADMIN').replace('_', ' ');
-  const orgName = (user.organization && user.organization.name) || 'Greenwood Heights RWA';
+  const orgName = (user.organization && user.organization.name) || localStorage.getItem('rwa_active_org_name') || 'This society';
   const userInitial = userName.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
 
   return Shell.render('admin-profile', {

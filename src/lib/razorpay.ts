@@ -76,13 +76,12 @@ export function verifyPaymentSignature(params: {
   paymentId: string
   signature: string
 }): boolean {
-  // If it's a mock order from dev, allow test verification
-  if (params.orderId.startsWith('order_mock_')) {
+  if (process.env.NODE_ENV !== 'production' && params.orderId.startsWith('order_mock_')) {
     return true
   }
 
   if (!isRazorpayConfigured) {
-    return true // Allow dev fallback
+    return false
   }
 
   try {

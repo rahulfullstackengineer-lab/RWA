@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -41,7 +41,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ polls: [], totalUnits: 0, stats: { openPolls: 0, closedPolls: 0, totalVotesCast: 0, avgTurnout: 0 } })
+    const orgId = user.organizationId
     const polls = getStoredPolls(orgId)
 
     const totalUnitsCount = (await prisma.unit.count({ where: { organizationId: orgId } }).catch(() => 0)) || 0
@@ -142,32 +143,23 @@ export async function POST(request: Request) {
     savePolls(orgId, polls)
 
     if (status === 'OPEN') {
-      emitLiveSocketEvent('new-poll', {
-        id: newPoll.id,
-        title: newPoll.title,
-        eligibility: newPoll.eligibilityLabel,
-        closes: newPoll.closesFormatted,
-      }, { orgId })
-
-      // 1. Create DB notifications for residents
       try {
-        const residents = await prisma.user.findMany({
-          where: { organizationId: orgId, status: 'ACTIVE' },
-          select: { id: true },
+        await notifyUsers({
+          orgId,
+          roles: ['resident'],
+          title: `🗳️ New Society Poll: ${newPoll.title}`,
+          message: `Voting is now live. Cast your ballot before ${newPoll.closesFormatted}.`,
+          type: 'POLL',
+          event: 'new-poll',
+          referenceType: 'POLL',
+          referenceId: newPoll.id,
+          data: {
+            id: newPoll.id,
+            title: newPoll.title,
+            eligibility: newPoll.eligibilityLabel,
+            closes: newPoll.closesFormatted,
+          },
         })
-        if (residents.length > 0) {
-          await prisma.notification.createMany({
-            data: residents.map((r) => ({
-              organizationId: orgId,
-              userId: r.id,
-              title: `🗳️ New Society Poll: ${newPoll.title}`,
-              message: `Voting is now live. Cast your ballot before ${newPoll.closesFormatted}.`,
-              type: 'POLL',
-              referenceType: 'POLL',
-              referenceId: newPoll.id,
-            })),
-          })
-        }
       } catch (errNotif) {
         console.error('Error creating poll notifications:', errNotif)
       }
@@ -188,14 +180,25 @@ export async function POST(request: Request) {
           },
         })
 
-        emitLiveSocketEvent('new-notice', {
-          id: notice.id,
+        await notifyUsers({
+          orgId,
+          roles: ['admin', 'resident', 'staff'],
+          excludeUserId: user.id,
           title: notice.title,
-          content: notice.content,
-          type: notice.type,
-          publishedBy: notice.publishedBy,
-          publishedAt: notice.publishedAt,
-        }, { orgId })
+          message: `Voting is open until ${newPoll.closesFormatted}.`,
+          type: 'NOTICE',
+          event: 'new-notice',
+          referenceType: 'NOTICE',
+          referenceId: notice.id,
+          data: {
+            id: notice.id,
+            title: notice.title,
+            content: notice.content,
+            type: notice.type,
+            publishedBy: notice.publishedBy,
+            publishedAt: notice.publishedAt,
+          },
+        })
       } catch (errNotice) {
         console.error('Error publishing poll notice:', errNotice)
       }
@@ -248,8 +251,11 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'This poll is closed or not active for voting' }, { status: 400 })
       }
 
+      if (user.role !== 'RESIDENT' || !user.unit?.unitNumber) {
+        return NextResponse.json({ error: 'Only a resident linked to a flat can vote' }, { status: 403 })
+      }
       poll.voters = poll.voters || []
-      const effectiveUnit = (voterUnit || (user.unit ? user.unit.unitNumber : '') || (user as any).unitNumber || '').trim().toUpperCase()
+      const effectiveUnit = user.unit.unitNumber.trim().toUpperCase()
 
       const existingVote = poll.voters.find((v: any) =>
         effectiveUnit ? (v.unit && v.unit.toUpperCase() === effectiveUnit) : (v.userId && v.userId === user.id)
@@ -311,11 +317,23 @@ export async function PATCH(request: Request) {
         poll.winningOption = sortedOptions[0]?.label || 'No votes cast'
       }
 
-      emitLiveSocketEvent('poll-status-changed', {
-        pollId: poll.id,
-        status: poll.status,
-        winningOption: poll.winningOption,
-      }, { orgId })
+      await notifyUsers({
+        orgId,
+        roles: ['admin', 'resident'],
+        excludeUserId: user.id,
+        title: status === 'CLOSED' ? `Poll closed: ${poll.title}` : `Poll updated: ${poll.title}`,
+        message: status === 'CLOSED' ? `Result: ${poll.winningOption || 'No votes cast'}` : `This poll is now ${status}.`,
+        type: 'POLL',
+        event: 'poll-status-changed',
+        referenceType: 'POLL',
+        referenceId: poll.id,
+        data: {
+          pollId: poll.id,
+          title: poll.title,
+          status: poll.status,
+          winningOption: poll.winningOption,
+        },
+      })
 
       await logAudit({
         organizationId: orgId,

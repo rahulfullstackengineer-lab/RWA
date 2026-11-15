@@ -292,7 +292,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ assets: [], metrics: {} })
+    const orgId = user.organizationId
     const assets = getStoredAssets(orgId)
     const metrics = calculateAssetMetrics(assets)
 

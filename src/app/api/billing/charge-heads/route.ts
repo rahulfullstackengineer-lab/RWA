@@ -8,14 +8,10 @@ export async function GET(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ success: true, chargeHeads: [], fundHeads: [], society: null })
     }
 
     const [chargeHeads, fundHeads, org] = await Promise.all([
@@ -58,11 +54,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name and amount are required' }, { status: 400 })
     }
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })

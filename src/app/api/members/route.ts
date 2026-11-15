@@ -17,14 +17,10 @@ export async function GET(request: Request) {
     const role = searchParams.get('role') || ''
     const status = searchParams.get('status') || ''
 
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ members: [] })
     }
 
     // 1. Fetch all registered users in this organization
@@ -154,7 +150,12 @@ export async function GET(request: Request) {
 
     const allMembers = [...members, ...newlyCreatedMembers]
 
-    return NextResponse.json({ members: allMembers })
+    const safeMembers = allMembers.map((member) => {
+      const safe = { ...member }
+      delete (safe as { passwordHash?: string }).passwordHash
+      return safe
+    })
+    return NextResponse.json({ members: safeMembers })
   } catch (err: unknown) {
     console.error('Error fetching members:', err)
     return NextResponse.json({ error: 'Failed to fetch members: ' + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
@@ -180,11 +181,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
     }
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No organization attached to this request' }, { status: 400 })
@@ -208,8 +205,36 @@ export async function POST(request: Request) {
       )
     }
 
+    const blockedRoles = ['PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    const officeRoles = ['RWA_ADMIN', 'TREASURER', 'COMMITTEE_MEMBER']
+    const allowedRoles = ['RESIDENT', 'STAFF', 'COMMITTEE_MEMBER', 'TREASURER', 'RWA_ADMIN']
+    const requestedRole = String(role || 'RESIDENT').trim()
+    if (!allowedRoles.includes(requestedRole) || blockedRoles.includes(requestedRole)) {
+      return NextResponse.json({ error: 'That role cannot be assigned from this screen' }, { status: 400 })
+    }
+    if (officeRoles.includes(requestedRole) && !['RWA_ADMIN', 'PLATFORM_ADMIN'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only the society admin can assign an office role' }, { status: 403 })
+    }
+
+    if (existing?.organizationId && existing.organizationId !== orgId) {
+      return NextResponse.json(
+        { error: 'This mobile number already belongs to another society' },
+        { status: 409 }
+      )
+    }
+
+    if (resolvedUnitId) {
+      const unitInSociety = await prisma.unit.findFirst({
+        where: { id: resolvedUnitId, organizationId: orgId },
+      })
+      if (!unitInSociety) {
+        return NextResponse.json({ error: 'That flat is not in this society' }, { status: 400 })
+      }
+      resolvedUnitId = unitInSociety.id
+    }
+
     const rawPin = (pin || password || '').trim()
-    const passwordHash = rawPin ? await bcrypt.hash(rawPin, 10) : null
+    const passwordHash = !existing && rawPin ? await bcrypt.hash(rawPin, 10) : null
     let member
 
     if (existing) {
@@ -218,11 +243,10 @@ export async function POST(request: Request) {
         data: {
           name: name.trim(),
           email: email?.trim() || existing.email,
-          role: role || existing.role || 'RESIDENT',
+          role: requestedRole,
           unitId: resolvedUnitId || existing.unitId,
-          organizationId: orgId,
+          organizationId: existing.organizationId || orgId,
           status: 'ACTIVE',
-          ...(passwordHash ? { passwordHash } : {}),
         },
         include: {
           unit: {
@@ -237,7 +261,7 @@ export async function POST(request: Request) {
           name: name.trim(),
           phone: cleanPhone,
           email: email?.trim() || null,
-          role: role || 'RESIDENT',
+          role: requestedRole,
           unitId: resolvedUnitId,
           passwordHash,
           status: 'ACTIVE',
@@ -274,12 +298,8 @@ export async function POST(request: Request) {
     try {
       const admins = await prisma.user.findMany({
         where: {
-          OR: [
-            { organizationId: orgId, role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PLATFORM_ADMIN', 'PRESIDENT'] } },
-            { organizationId: orgId, role: { not: 'RESIDENT' } },
-            { role: { in: ['RWA_ADMIN', 'PLATFORM_ADMIN'] } },
-            { phone: '8219587657' },
-          ],
+          organizationId: orgId,
+          role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER'] },
         },
         select: { id: true },
       })
@@ -313,8 +333,7 @@ export async function POST(request: Request) {
         orgId,
         timestamp: new Date().toISOString(),
       }
-      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId })
-      emitLiveSocketEvent('resident-onboarded', socketPayload)
+      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId, roles: ['admin'] })
     } catch (notifErr) {
       console.warn('Notification creation error in members POST:', notifErr)
     }

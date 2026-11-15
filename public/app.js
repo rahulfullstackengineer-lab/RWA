@@ -120,49 +120,28 @@
     if (!container) {
       container = document.createElement('div');
       container.id = 'toast-container';
-      container.style.cssText = `
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        pointer-events: none;
-      `;
+      document.body.appendChild(container);
+    } else if (container.parentElement !== document.body) {
       document.body.appendChild(container);
     }
+    container.className = 'toast-stack';
+
+    const kind = type === 'success' || type === 'error' || type === 'warning' ? type : 'info';
+    const label = kind === 'success' ? 'Done' : kind === 'error' ? 'Error' : kind === 'warning' ? 'Check' : 'Note';
+    const text = String(message == null ? '' : message)
+      .replace(/^(?:[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F\u200D\s]+)+/u, '')
+      .trim() || String(message == null ? '' : message);
 
     const toast = document.createElement('div');
-    const color = type === 'success' ? 'var(--green)' : type === 'error' ? 'var(--red)' : 'var(--blue)';
-    const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
-
-    toast.style.cssText = `
-      background: var(--bg-surface);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
-      border-left: 4px solid ${color};
-      border-radius: var(--r-md);
-      padding: 12px 18px;
-      font-size: 13px;
-      font-weight: 500;
-      box-shadow: var(--shadow-lg);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      animation: slideUp 0.2s ease;
-      pointer-events: auto;
-      min-width: 260px;
-    `;
-    toast.innerHTML = `<span style="color:${color};font-weight:800;font-size:15px;">${icon}</span> <span>${message}</span>`;
-    container.appendChild(toast);
+    toast.className = 'app-toast app-toast-' + kind;
+    toast.innerHTML = `<span class="app-toast-label">${label}</span><span class="app-toast-text"></span>`;
+    toast.querySelector('.app-toast-text').textContent = text;
+    container.prepend(toast);
 
     setTimeout(() => {
-      toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      toast.style.transition = 'all 0.3s ease';
-      setTimeout(() => toast.remove(), 300);
-    }, 3200);
+      toast.classList.add('app-toast-out');
+      setTimeout(() => toast.remove(), 220);
+    }, 3400);
   };
 
   // Global Modal Helper for legacy callers

@@ -369,8 +369,8 @@ window.loadLiveLedger = async function() {
   } catch (err) {
     console.error('Error loading ledger:', err);
     var sub = document.getElementById('ledgerSubtitle');
-    if (sub) sub.innerHTML = '<span style="color:var(--red)">Failed to load ledger. Showing demo data.</span>';
-    window.__ledgerEntries = window.generateDemoLedgerEntries();
+    if (sub) sub.textContent = 'Failed to load the ledger.';
+    window.__ledgerEntries = [];
     window.applyLedgerFilters();
   }
 };
@@ -379,28 +379,7 @@ window.loadLiveLedger = async function() {
 // Demo Data Fallback
 // =============================================
 window.generateDemoLedgerEntries = function() {
-  var today = new Date();
-  var fmt = function(d) { return d.toISOString(); };
-  var days = function(n) { var d = new Date(today); d.setDate(d.getDate() - n); return fmt(d); };
-
-  return [
-    { id:'d1',  date:days(28), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Sep 2026',   unitNumber:'A-101', unitId:'u1', ownerName:'Rajesh Kumar',  refNumber:'INV-240901', amount:5500,  debit:5500,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-240901' },
-    { id:'d2',  date:days(27), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Sep 2026',   unitNumber:'A-102', unitId:'u2', ownerName:'Priya Sharma',   refNumber:'INV-240902', amount:5500,  debit:5500,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-240902' },
-    { id:'d3',  date:days(26), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Sep 2026',   unitNumber:'B-201', unitId:'u3', ownerName:'Arun Patel',     refNumber:'INV-240903', amount:6200,  debit:6200,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-240903' },
-    { id:'d4',  date:days(25), type:'PAYMENT', drCr:'CR', narration:'Maintenance received — Online (Ref: pay_Qx901)', unitNumber:'A-101', unitId:'u1', ownerName:'Rajesh Kumar',  refNumber:'pay_Qx901', amount:5500,  debit:0,     credit:5500,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-240901' },
-    { id:'d5',  date:days(22), type:'EXPENSE', drCr:'DR', narration:'Expense: Security Agency (ShieldGuard Services)', unitNumber:'Common', unitId:'', ownerName:'ShieldGuard Services', refNumber:'EXP-0094', amount:42000, debit:42000, credit:0,     fundHead:'Security Fund',    chargeHead:'Security Charges',       invoiceRef:'' },
-    { id:'d6',  date:days(20), type:'PAYMENT', drCr:'CR', narration:'Maintenance received — Cash (Ref: CHQ-201)',      unitNumber:'A-102', unitId:'u2', ownerName:'Priya Sharma',   refNumber:'CHQ-201',   amount:5500,  debit:0,     credit:5500,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-240902' },
-    { id:'d7',  date:days(18), type:'PAYMENT', drCr:'CR', narration:'Maintenance received — NEFT (Ref: UTR-88921)',    unitNumber:'B-201', unitId:'u3', ownerName:'Arun Patel',     refNumber:'UTR-88921', amount:6200,  debit:0,     credit:6200,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-240903' },
-    { id:'d8',  date:days(14), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Oct 2026',   unitNumber:'A-101', unitId:'u1', ownerName:'Rajesh Kumar',  refNumber:'INV-241001', amount:5500,  debit:5500,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-241001' },
-    { id:'d9',  date:days(14), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Oct 2026',   unitNumber:'A-102', unitId:'u2', ownerName:'Priya Sharma',   refNumber:'INV-241002', amount:5500,  debit:5500,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-241002' },
-    { id:'d10', date:days(13), type:'INVOICE', drCr:'DR', narration:'Invoice raised — Oct 2026',   unitNumber:'B-201', unitId:'u3', ownerName:'Arun Patel',     refNumber:'INV-241003', amount:6200,  debit:6200,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Invoice Raised',         invoiceRef:'INV-241003' },
-    { id:'d11', date:days(12), type:'EXPENSE', drCr:'DR', narration:'Expense: Electricity — BESCOM Common Area',       unitNumber:'Common', unitId:'', ownerName:'BESCOM',           refNumber:'EXP-0095', amount:8500,  debit:8500,  credit:0,     fundHead:'Utilities Fund',   chargeHead:'Electricity',            invoiceRef:'' },
-    { id:'d12', date:days(10), type:'PAYMENT', drCr:'CR', narration:'Maintenance received — Online (Ref: pay_Ry512)', unitNumber:'A-101', unitId:'u1', ownerName:'Rajesh Kumar',  refNumber:'pay_Ry512', amount:5500,  debit:0,     credit:5500,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-241001' },
-    { id:'d13', date:days(8),  type:'EXPENSE', drCr:'DR', narration:'Expense: Garden & Landscaping (GreenThumb)',     unitNumber:'Common', unitId:'', ownerName:'GreenThumb',       refNumber:'EXP-0096', amount:6200,  debit:6200,  credit:0,     fundHead:'Maintenance Fund', chargeHead:'Landscaping',            invoiceRef:'' },
-    { id:'d14', date:days(5),  type:'EXPENSE', drCr:'DR', narration:'Expense: Water Supply (BWSSB)',                  unitNumber:'Common', unitId:'', ownerName:'BWSSB',            refNumber:'EXP-0097', amount:4800,  debit:4800,  credit:0,     fundHead:'Utilities Fund',   chargeHead:'Water Charges',          invoiceRef:'' },
-    { id:'d15', date:days(3),  type:'PAYMENT', drCr:'CR', narration:'Maintenance received — UPI (Ref: GPay-7721)',    unitNumber:'A-102', unitId:'u2', ownerName:'Priya Sharma',   refNumber:'GPay-7721', amount:5500,  debit:0,     credit:5500,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-241002' },
-    { id:'d16', date:days(1),  type:'PAYMENT', drCr:'CR', narration:'Maintenance received — NEFT (Ref: UTR-99210)',   unitNumber:'B-201', unitId:'u3', ownerName:'Arun Patel',     refNumber:'UTR-99210', amount:6200,  debit:0,     credit:6200,  fundHead:'Maintenance Fund', chargeHead:'Maintenance Collection', invoiceRef:'INV-241003' },
-  ];
+  return [];
 };
 
 // =============================================

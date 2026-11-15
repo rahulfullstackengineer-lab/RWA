@@ -229,8 +229,16 @@ window.loadLiveExpenses = async function() {
     var activeOrgId = localStorage.getItem('rwa_active_org_id') || localStorage.getItem('rwa_active_society_id') || '';
     var url = '/api/expenses' + (activeOrgId ? '?orgId=' + encodeURIComponent(activeOrgId) : '');
     var res = await (window.apiFetch || fetch)(url).catch(function() { return null; });
-
-    if (!res || !res.ok) throw new Error('API unavailable');
+    if (!res || !res.ok) {
+      window.__expensesAll = [];
+      window.updateExpenseKPIs([]);
+      window.renderExpenseCategoryBreakdown([]);
+      window.renderExpensesAnalytics([]);
+      window.applyExpenseFilters();
+      var missed = document.getElementById('expensesSubtitle');
+      if (missed) missed.textContent = 'Expenses could not be loaded. Sign in to a society and try again.';
+      return;
+    }
 
     var data = await res.json();
     var expenses = data.expenses || [];
@@ -340,14 +348,12 @@ window.updateExpenseKPIs = function(expenses) {
   var pendingAmt   = expenses.filter(function(e) { return e.status === 'PENDING_APPROVAL'; }).reduce(function(s, e) { return s + Number(e.amount || e.totalAmount || 0); }, 0);
   var paidAmt      = expenses.filter(function(e) { return e.status === 'PAID'; }).reduce(function(s, e) { return s + Number(e.amount || e.totalAmount || 0); }, 0);
   var pendingCount = expenses.filter(function(e) { return e.status === 'PENDING_APPROVAL'; }).length;
-  var monthlyBudget = 100000;
-  var remaining    = Math.max(0, monthlyBudget - total);
 
   var el = function(id) { return document.getElementById(id); };
   if (el('expStatTotal'))     el('expStatTotal').textContent     = '₹' + total.toLocaleString('en-IN');
   if (el('expStatPending'))   el('expStatPending').textContent   = '₹' + pendingAmt.toLocaleString('en-IN');
   if (el('expStatPaid'))      el('expStatPaid').textContent      = '₹' + paidAmt.toLocaleString('en-IN');
-  if (el('expStatBudgetRem')) el('expStatBudgetRem').textContent = '₹' + remaining.toLocaleString('en-IN');
+  if (el('expStatBudgetRem')) el('expStatBudgetRem').textContent = '—';
 
   var banner = el('expensesPendingBanner');
   if (banner) {

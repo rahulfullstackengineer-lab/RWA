@@ -313,7 +313,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ vendors: [], contracts: [], metrics: {}, totalCount: 0, activeCount: 0 })
+    const orgId = user.organizationId
     const data = getStoredData(orgId)
 
     // Dynamically update contracts with live status

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { verifyPassword, hashPassword, createSession } from '@/lib/auth'
+import { verifyPassword, hashPassword, createSession, verifyOTP } from '@/lib/auth'
 import { findUserByPhone, normalizePhone } from '@/lib/phone'
 import fs from 'fs'
 import path from 'path'
@@ -34,7 +34,7 @@ function findInStaffStore(cleanPhone: string, tenDigit: string) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { phone, password, pin, confirmPin, name, action } = body
+    const { phone, password, pin, confirmPin, name, action, currentPin, otp } = body
     const secret = (pin || password || '').trim()
 
     if (!phone) {
@@ -118,35 +118,15 @@ export async function POST(request: Request) {
       if (!matchingStaff) {
         const stored = findInStaffStore(cleanPhone, tenDigit)
         if (stored) {
-          const defaultHash = await hashPassword(stored.staff.pin || '1234')
-
-          let u = await findUserByPhone(cleanPhone)
-          if (!u) {
-            u = await prisma.user.create({
-              data: {
-                phone: tenDigit || cleanPhone,
-                name: stored.staff.name,
-                role: 'STAFF',
-                status: 'ACTIVE',
-                passwordHash: defaultHash,
-                organizationId: stored.orgId,
-              },
-            })
-          }
-
-          matchingStaff = await prisma.staffDuty.create({
-            data: {
-              organizationId: stored.orgId,
-              staffName: stored.staff.name,
-              role: stored.staff.role,
-              category: stored.staff.department?.toUpperCase().includes('SEC') ? 'SECURITY' : 'MAINTENANCE',
-              phone: stored.staff.phone || tenDigit,
-              locationPost: stored.staff.department === 'Security' ? 'Gate 1 Entrance Desk' : `${stored.staff.department} Post`,
-              shiftName: stored.staff.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-              salaryAmount: Number(stored.staff.salary) || 12000,
-              status: 'ON_DUTY',
-            },
-            include: { organization: true },
+          return NextResponse.json({
+            success: true,
+            exists: true,
+            hasPin: false,
+            isFirstTime: true,
+            isStaff: true,
+            name: stored.staff.name,
+            role: 'STAFF',
+            societyName: null,
           })
         }
       }
@@ -202,7 +182,23 @@ export async function POST(request: Request) {
         : null
 
       if (!user) {
-        // Check unit
+        const storedStaff = findInStaffStore(cleanPhone, tenDigit)
+        if (storedStaff) {
+          user = await prisma.user.create({
+            data: {
+              phone: cleanPhone,
+              name: name?.trim() || storedStaff.staff.name,
+              role: 'STAFF',
+              status: 'ACTIVE',
+              passwordHash: newHash,
+              organizationId: storedStaff.orgId,
+            },
+            include: { organization: true, unit: true },
+          })
+        }
+      }
+
+      if (!user) {
         const matchingUnit = await prisma.unit.findFirst({
           where: {
             OR: [
@@ -233,34 +229,44 @@ export async function POST(request: Request) {
             include: { organization: true, unit: true },
           })
         } else {
-          // Register new resident or admin
-          const assignedRole = (body.role === 'RWA_ADMIN' || body.role === 'ADMIN') ? 'RWA_ADMIN' : 'RESIDENT'
-          let defaultOrgId = body.organizationId || null
-          if (!defaultOrgId) {
-            const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-            defaultOrgId = firstOrg?.id || null
-          }
-
           user = await prisma.user.create({
             data: {
               phone: cleanPhone,
-              name: name?.trim() || (assignedRole === 'RWA_ADMIN' ? `Admin ${cleanPhone.slice(-4)}` : `Resident ${cleanPhone.slice(-4)}`),
-              role: assignedRole,
+              name: name?.trim() || `Resident ${cleanPhone.slice(-4)}`,
+              role: 'RESIDENT',
               status: 'ACTIVE',
               passwordHash: newHash,
-              organizationId: defaultOrgId,
+              organizationId: null,
             },
             include: { organization: true, unit: true },
           })
         }
-      } else {
-        // Update user's PIN
+      }
+
+      if (matched && user) {
+        if (user.passwordHash) {
+          const suppliedCurrent = typeof currentPin === 'string' ? currentPin.trim() : ''
+          const suppliedOtp = otp ? String(otp).trim() : ''
+          let proved = false
+          if (suppliedCurrent) {
+            proved = await verifyPassword(suppliedCurrent, user.passwordHash)
+          }
+          if (!proved && suppliedOtp) {
+            proved = await verifyOTP(cleanPhone, suppliedOtp)
+          }
+          if (!proved) {
+            return NextResponse.json(
+              { error: 'Enter your current PIN, or the OTP sent to this mobile number, before setting a new PIN.' },
+              { status: 403 }
+            )
+          }
+        }
+
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
             passwordHash: newHash,
             name: name?.trim() ? name.trim() : user.name,
-            role: body.role && user.role === 'RESIDENT' && (body.role === 'RWA_ADMIN' || body.role === 'ADMIN') ? 'RWA_ADMIN' : user.role,
           },
           include: { organization: true, unit: true },
         })
@@ -360,50 +366,18 @@ export async function POST(request: Request) {
       })
 
       const storedStaff = findInStaffStore(cleanPhone, tenDigit)
-      if (!matchingStaff && storedStaff) {
-        matchingStaff = await prisma.staffDuty.create({
-          data: {
-            organizationId: storedStaff.orgId,
-            staffName: storedStaff.staff.name,
-            role: storedStaff.staff.role,
-            category: storedStaff.staff.department?.toUpperCase().includes('SEC') ? 'SECURITY' : 'MAINTENANCE',
-            phone: storedStaff.staff.phone || tenDigit,
-            locationPost: storedStaff.staff.department === 'Security' ? 'Gate 1 Entrance Desk' : `${storedStaff.staff.department} Post`,
-            shiftName: storedStaff.staff.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-            salaryAmount: Number(storedStaff.staff.salary) || 12000,
-            status: 'ON_DUTY',
-          },
-          include: { organization: true },
-        })
+      if (matchingStaff || storedStaff) {
+        return NextResponse.json({
+          error: 'First-time login: Please set up your 4-digit Security PIN first.',
+          needsPinSetup: true,
+          name: matchingStaff?.staffName || storedStaff?.staff?.name || 'Staff',
+        }, { status: 403 })
       }
 
-      if (matchingStaff) {
-        const staffPin = storedStaff?.staff?.pin || '1234'
-        const defaultHash = await hashPassword(staffPin)
-        user = await prisma.user.create({
-          data: {
-            phone: cleanPhone,
-            name: matchingStaff.staffName,
-            role: 'STAFF',
-            status: 'ACTIVE',
-            passwordHash: defaultHash,
-            organizationId: matchingStaff.organizationId,
-          },
-          include: {
-            organization: true,
-            unit: {
-              include: {
-                block: true,
-              },
-            },
-          },
-        })
-      } else {
-        return NextResponse.json({
-          error: 'No account found with this phone number. Please register your ID.',
-          needsRegistration: true,
-        }, { status: 404 })
-      }
+      return NextResponse.json({
+        error: 'No account found with this phone number. Please register your ID.',
+        needsRegistration: true,
+      }, { status: 404 })
     }
 
     if (!user) {
@@ -429,15 +403,7 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Validate PIN strictly using bcrypt hash comparison or standard demo PINs
-    let isPinValid = await verifyPassword(secret, user.passwordHash)
-    const storedForAuth = findInStaffStore(cleanPhone, tenDigit)
-    if (storedForAuth?.staff?.pin && secret === storedForAuth.staff.pin) {
-      isPinValid = true
-    }
-    if (!isPinValid && (secret === '1234' || secret === '123456' || secret === 'admin123' || secret === 'resident123')) {
-      isPinValid = true
-    }
+    const isPinValid = await verifyPassword(secret, user.passwordHash)
 
     if (!isPinValid) {
       return NextResponse.json(

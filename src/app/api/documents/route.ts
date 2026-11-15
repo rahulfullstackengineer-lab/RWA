@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -486,7 +486,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ folders: [], documents: [], allDocuments: [], folderCounts: {}, counts: { total: 0, committeeOnly: 0, allResidents: 0, auditor: 0 } })
+    const orgId = user.organizationId
     const data = getStoredDocumentsData(orgId, user.name || 'Managing Committee')
 
     const url = new URL(request.url)
@@ -664,7 +665,18 @@ export async function POST(request: Request) {
         details: `Uploaded document "${newDoc.name}" into folder "${newDoc.folder}" (Visibility: ${newDoc.visibility})`,
       })
 
-      emitLiveSocketEvent('document_uploaded', { document: newDoc })
+      await notifyUsers({
+        orgId,
+        roles: newDoc.visibility === 'ALL_RESIDENTS' ? ['admin', 'resident', 'staff'] : ['admin'],
+        excludeUserId: user.id,
+        title: `Document shared: ${newDoc.name}`,
+        message: newDoc.visibility === 'ALL_RESIDENTS' ? 'A new society document is available.' : 'A new office document was uploaded.',
+        type: 'DOCUMENT',
+        event: 'document_uploaded',
+        referenceType: 'DOCUMENT',
+        referenceId: newDoc.id,
+        data: { document: newDoc },
+      })
       return NextResponse.json({ success: true, document: newDoc })
     }
 

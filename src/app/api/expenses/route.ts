@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { requireAuth, requireAdmin } from '@/lib/auth'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(request: Request) {
@@ -10,13 +10,9 @@ export async function GET(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
+    const orgId = user.organizationId
     if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
-    if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ expenses: [] })
     }
 
     const status = searchParams.get('status') || undefined
@@ -41,8 +37,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { user, error } = await requireAuth(request)
-    if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    const { user, error } = await requireAdmin(request)
+    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
 
     const body = await request.json()
     const {
@@ -80,15 +76,25 @@ export async function POST(request: Request) {
       },
     })
 
-    // Emit live socket event
-    emitLiveSocketEvent('new-expense-recorded', {
-      id: expense.id,
-      title: expense.title,
-      amount: expense.totalAmount,
-      category: expense.category,
-      vendorName: expense.vendorName,
-      status: expense.status,
-    }, { orgId })
+    await notifyUsers({
+      orgId,
+      roles: ['admin'],
+      excludeUserId: user.id,
+      title: `Expense recorded: ${expense.title}`,
+      message: `₹${Number(expense.totalAmount).toLocaleString('en-IN')} under ${expense.category}`,
+      type: 'EXPENSE',
+      event: 'new-expense-recorded',
+      referenceType: 'EXPENSE',
+      referenceId: expense.id,
+      data: {
+        id: expense.id,
+        title: expense.title,
+        amount: expense.totalAmount,
+        category: expense.category,
+        vendorName: expense.vendorName,
+        status: expense.status,
+      },
+    })
 
     // Log Immutable Audit Trail Event
     await logAudit({
@@ -119,8 +125,8 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { user, error } = await requireAuth(request)
-    if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    const { user, error } = await requireAdmin(request)
+    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
 
     const body = await request.json()
     const { id, status } = body
@@ -129,8 +135,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Expense ID and status are required' }, { status: 400 })
     }
 
+    const existingExpense = await prisma.expense.findFirst({
+      where: { id, organizationId: user.organizationId || '__none__' },
+    })
+    if (!existingExpense) {
+      return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+    }
+
     const updated = await prisma.expense.update({
-      where: { id },
+      where: { id: existingExpense.id },
       data: {
         status,
         approvedBy: status === 'APPROVED' ? (user.name || 'Admin') : (status === 'REJECTED' ? null : undefined),
@@ -141,11 +154,18 @@ export async function PATCH(request: Request) {
 
     const targetOrgId = user.organizationId || updated.organizationId
     if (targetOrgId) {
-      emitLiveSocketEvent('expense-status-updated', {
-        id: updated.id,
-        title: updated.title,
-        status: updated.status,
-      }, { orgId: targetOrgId })
+      await notifyUsers({
+        orgId: targetOrgId,
+        roles: ['admin'],
+        excludeUserId: user.id,
+        title: `Expense ${updated.status}: ${updated.title}`,
+        message: `₹${Number(updated.totalAmount).toLocaleString('en-IN')} is now ${updated.status}.`,
+        type: 'EXPENSE',
+        event: 'expense-status-updated',
+        referenceType: 'EXPENSE',
+        referenceId: updated.id,
+        data: { id: updated.id, title: updated.title, status: updated.status, amount: updated.totalAmount },
+      })
     }
 
     // Audit log

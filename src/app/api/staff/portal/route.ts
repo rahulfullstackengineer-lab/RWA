@@ -1,45 +1,28 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { notifyUsers } from '@/lib/socket-server'
 
 export const dynamic = 'force-dynamic'
-
-function getIO() {
-  if (typeof global !== 'undefined' && (global as any).__io) {
-    return (global as any).__io
-  }
-  return null
-}
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const phoneParam = searchParams.get('phone')?.trim()
-    const orgIdParam = searchParams.get('orgId')?.trim()
 
-    let organizationId = orgIdParam || null
-    let staffPhone = phoneParam || null
-
-    const { user } = await requireAuth(request).catch(() => ({ user: null }))
-    if (user) {
-      if (!organizationId && user.organizationId) {
-        organizationId = user.organizationId
-      }
-      if (user.role === 'STAFF' || !staffPhone) {
-        staffPhone = user.phone
-      }
+    const { user, error } = await requireAuth(request)
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
+
+    const organizationId = user.organizationId
+    const staffPhone = user.role === 'STAFF' ? user.phone : (phoneParam || user.phone)
 
     if (!organizationId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      organizationId = firstOrg?.id || null
+      return NextResponse.json({ success: true, society: null, staff: null, salary: null, passes: { activeCount: 0, checkedInCount: 0, completedCount: 0, totalToday: 0, list: [] } })
     }
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
-    }
-
-    console.log('[STAFF PORTAL API] organizationId:', organizationId, 'orgIdParam:', orgIdParam)
+    console.log('[STAFF PORTAL API] organizationId:', organizationId)
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
@@ -208,6 +191,14 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { user, error } = await requireAuth(request)
+    if (error || !user || !['STAFF', 'RWA_ADMIN', 'TREASURER'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only security or the society admin can verify a pass' }, { status: 403 })
+    }
+    if (!user.organizationId) {
+      return NextResponse.json({ error: 'No society is attached to this account' }, { status: 400 })
+    }
+
     const body = await request.json()
     const { action, passCodeOrPin, passId, guardName, locationPost } = body
 
@@ -217,14 +208,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Please enter Pass Code or 4-digit PIN' }, { status: 400 })
       }
 
-      // Search pass by passCode or otpPin or phone
       const pass = await prisma.entryPass.findFirst({
         where: {
+          organizationId: user.organizationId,
           OR: [
             { passCode: code },
             { passCode: `PASS-${code}` },
             { otpPin: code },
-            { visitorPhone: code },
           ],
         },
       })
@@ -256,42 +246,23 @@ export async function POST(request: Request) {
         },
       })
 
-      // Notify resident
-      if (pass.organizationId) {
-        try {
-          const residentUsers = await prisma.user.findMany({
-            where: {
-              organizationId: pass.organizationId,
-              unit: { unitNumber: pass.residentUnit },
-            },
-            select: { id: true },
-          })
-
-          if (residentUsers.length > 0) {
-            await prisma.notification.createMany({
-              data: residentUsers.map(u => ({
-                organizationId: pass.organizationId,
-                userId: u.id,
-                title: `🔔 Visitor Checked In: ${pass.visitorName}`,
-                message: `Your guest ${pass.visitorName} (${pass.visitorType}) was verified & checked in at ${locationPost || pass.gateNumber} by guard ${guardName || 'Security'}.`,
-                type: 'VISITOR_ALERT',
-                referenceType: 'EntryPass',
-                referenceId: pass.id,
-              })),
-            })
-          }
-        } catch (e) {
-          console.warn('Could not dispatch resident notification:', e)
-        }
-      }
-
-      const io = getIO()
-      if (io) {
-        io.emit('passes:updated', {
-          action: 'CHECKED_IN',
-          pass: updatedPass,
-        })
-      }
+      const flatResidents = await prisma.user.findMany({
+        where: { organizationId: pass.organizationId, unit: { unitNumber: pass.residentUnit } },
+        select: { id: true },
+      })
+      await notifyUsers({
+        orgId: pass.organizationId,
+        roles: ['admin'],
+        userIds: flatResidents.map((person) => person.id),
+        excludeUserId: user.id,
+        title: `Visitor arrived: ${pass.visitorName}`,
+        message: `${pass.visitorName} checked in at ${locationPost || pass.gateNumber} for flat ${pass.residentUnit}.`,
+        type: 'VISITOR_ALERT',
+        event: 'passes:updated',
+        referenceType: 'EntryPass',
+        referenceId: pass.id,
+        data: { action: 'CHECKED_IN', pass: updatedPass },
+      })
 
       return NextResponse.json({
         success: true,
@@ -305,9 +276,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Pass ID is required' }, { status: 400 })
       }
 
+      const pass = await prisma.entryPass.findFirst({
+        where: { id: passId, organizationId: user.organizationId },
+      })
+      if (!pass) {
+        return NextResponse.json({ error: 'Entry pass not found in this society' }, { status: 404 })
+      }
+
       const now = new Date()
       const updatedPass = await prisma.entryPass.update({
-        where: { id: passId },
+        where: { id: pass.id },
         data: {
           status: 'CHECKED_OUT',
           checkedOutAt: now,
@@ -315,13 +293,23 @@ export async function POST(request: Request) {
         },
       })
 
-      const io = getIO()
-      if (io) {
-        io.emit('passes:updated', {
-          action: 'CHECKED_OUT',
-          pass: updatedPass,
-        })
-      }
+      const checkoutResidents = await prisma.user.findMany({
+        where: { organizationId: pass.organizationId, unit: { unitNumber: pass.residentUnit } },
+        select: { id: true },
+      })
+      await notifyUsers({
+        orgId: pass.organizationId,
+        roles: ['admin'],
+        userIds: checkoutResidents.map((person) => person.id),
+        excludeUserId: user.id,
+        title: `Visitor left: ${updatedPass.visitorName}`,
+        message: `${updatedPass.visitorName} checked out from flat ${updatedPass.residentUnit}.`,
+        type: 'VISITOR_ALERT',
+        event: 'passes:updated',
+        referenceType: 'EntryPass',
+        referenceId: updatedPass.id,
+        data: { action: 'CHECKED_OUT', pass: updatedPass },
+      })
 
       return NextResponse.json({
         success: true,

@@ -111,6 +111,11 @@
     'bills-generated': true,
     'new-bill-generated': true,
     'bills-updated-bulk': true,
+    'passes:updated': true,
+    'duty:roster-updated': true,
+    'sos:alarm-triggered': true,
+    'poll-status-changed': true,
+    'amenity-booking-updated': true,
   };
 
   function connectLiveSocket() {
@@ -658,13 +663,18 @@
       const content = document.getElementById('notContent').value.trim()
       const type = document.getElementById('notType').value
 
-      await fetch('/api/notices', {
+      const noticeRes = await fetch('/api/notices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, content, type }),
-      }).catch(() => {})
+      })
+      if (!noticeRes.ok) {
+        const failed = await noticeRes.json().catch(() => ({}))
+        showToast(failed.error || 'Notice was not published', 'error')
+        return
+      }
 
-      showToast(`📢 Notice broadcasted to all 342 residents!`, 'success')
+      showToast('Notice published to this society.', 'success')
       if (typeof Router !== 'undefined') {
         Router.go(Router.current())
       }
@@ -2521,10 +2531,10 @@
       const orgId = localStorage.getItem('rwa_active_org_id') || ''
       const url   = '/api/staff/portal' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')
       const res   = await (window.apiFetch || fetch)(url).catch(() => null)
-      if (!res || !res.ok) throw new Error('API unavailable')
+      if (!res || !res.ok) return
 
       const data = await res.json()
-      if (!data.success) throw new Error(data.error || 'Failed to load staff portal')
+      if (!data.success) return
 
       window.__staffPortalData   = data
       window.__staffPassesAll    = (data.passes && data.passes.list) ? data.passes.list : []
@@ -2986,7 +2996,7 @@
       const orgId = localStorage.getItem('rwa_active_org_id') || ''
       const url = '/api/entry-passes' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')
       const res = await (window.apiFetch || fetch)(url).catch(() => null)
-      if (!res || !res.ok) throw new Error('API unavailable')
+      if (!res || !res.ok) return
       const data = await res.json()
       const passes = data.passes || []
       const stats = data.stats || {}

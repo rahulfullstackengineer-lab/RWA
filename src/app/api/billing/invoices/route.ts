@@ -14,14 +14,10 @@ export async function GET(request: Request) {
     const unitId = searchParams.get('unitId') || undefined
     const invoiceId = searchParams.get('id') || undefined
 
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ success: true, invoices: [], invoice: null })
     }
 
     // STRICT RESIDENT DATA ISOLATION:
@@ -220,11 +216,7 @@ export async function POST(request: Request) {
       )
     }
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })

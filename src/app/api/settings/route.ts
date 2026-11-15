@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
+import { requireAuth, requireAdmin } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
 import fs from 'fs'
@@ -156,7 +156,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ success: true, organization: null, settings: null })
+    const orgId = user.organizationId
     const organization = await prisma.organization.findUnique({
       where: { id: orgId },
     })
@@ -185,18 +186,20 @@ export async function GET(request: Request) {
       }
     }
 
+    const officeRoles = ['RWA_ADMIN', 'TREASURER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    if (!officeRoles.includes(user.role)) {
+      storedSettings.payment = {
+        ...storedSettings.payment,
+        accountNumber: '',
+        ifscCode: '',
+        branch: '',
+        razorpayKeyId: '',
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      organization: organization || {
-        id: orgId,
-        name: 'Greenwood Heights RWA',
-        registrationNo: 'CHD/RWA/2026/0042',
-        address: 'Sector 22',
-        city: 'Chandigarh',
-        pincode: '160022',
-        phone: user.phone || '98765 43210',
-        email: user.email || 'admin@rwa.org',
-      },
+      organization,
       settings: storedSettings,
     })
   } catch (err: unknown) {
@@ -207,7 +210,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { user, error } = await requireAuth(request)
+    const { user, error } = await requireAdmin(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const orgId = user.organizationId!

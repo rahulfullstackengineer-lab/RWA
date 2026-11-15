@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(request: Request) {
@@ -9,7 +9,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ notices: [], totalResidents: 0 })
+    const orgId = user.organizationId
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type') || undefined
     const statusParam = searchParams.get('status')
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
       where: { organizationId: orgId, status: 'ACTIVE' },
     })
 
-    return NextResponse.json({ notices, totalResidents: totalResidents || 342 })
+    return NextResponse.json({ notices, totalResidents })
   } catch (err: unknown) {
     console.error('Error fetching notices:', err)
     return NextResponse.json({ error: 'Failed to fetch notices' }, { status: 500 })
@@ -82,37 +83,27 @@ export async function POST(request: Request) {
     })
 
     if (status === 'PUBLISHED') {
-      // Broadcast live notification to all users in the society via Socket.io
-      emitLiveSocketEvent('new-notice', {
-        id: notice.id,
-        title: notice.title,
-        content: notice.content,
-        type: notice.type,
-        publishedBy: notice.publishedBy,
-        publishedAt: notice.publishedAt,
-        pinned: !!notice.pinnedUntil,
-      }, { orgId })
-
-      // Create DB notifications for all members/residents of the society
-      const societyUsers = await prisma.user.findMany({
-        where: { organizationId: orgId },
-        select: { id: true },
+      const notifIcon = notice.type === 'ELECTION' ? '🗳️' : notice.type === 'MAINTENANCE' ? '🔧' : notice.type === 'EVENT' ? '🎉' : '📢'
+      await notifyUsers({
+        orgId,
+        roles: ['admin', 'resident', 'staff'],
+        excludeUserId: user.id,
+        title: `${notifIcon} New Society Notice: ${notice.title}`,
+        message: notice.content,
+        type: 'NOTICE',
+        event: 'new-notice',
+        referenceType: 'NOTICE',
+        referenceId: notice.id,
+        data: {
+          id: notice.id,
+          title: notice.title,
+          content: notice.content,
+          type: notice.type,
+          publishedBy: notice.publishedBy,
+          publishedAt: notice.publishedAt,
+          pinned: !!notice.pinnedUntil,
+        },
       })
-
-      if (societyUsers.length > 0) {
-        const notifIcon = notice.type === 'ELECTION' ? '🗳️' : notice.type === 'MAINTENANCE' ? '🔧' : notice.type === 'EVENT' ? '🎉' : '📢'
-        await prisma.notification.createMany({
-          data: societyUsers.map((u) => ({
-            organizationId: orgId,
-            userId: u.id,
-            title: `${notifIcon} New Society Notice: ${notice.title}`,
-            message: notice.content.substring(0, 160) + (notice.content.length > 160 ? '...' : ''),
-            type: 'NOTICE',
-            referenceType: 'NOTICE',
-            referenceId: notice.id,
-          })),
-        })
-      }
     }
 
     // Log Immutable Audit Trail Event

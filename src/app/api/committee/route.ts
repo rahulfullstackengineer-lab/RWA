@@ -186,7 +186,7 @@ async function getInitialRealData(orgId: string): Promise<CommitteeStoreData> {
     secretBallot: true,
     proxyAllowed: false,
     votingMode: 'SECRET_BALLOT',
-    totalEligibleVoters: totalUnitsCount || 342,
+    totalEligibleVoters: totalUnitsCount,
     totalVotesCast: 0,
     positions: [
       {
@@ -338,7 +338,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ members: [], election: null, availableResidents: [], availableUnits: [] })
+    const orgId = user.organizationId
     const committeeData = await getStoredCommitteeData(orgId)
 
     // Also fetch registered residents and units for modal pickers
@@ -501,7 +502,7 @@ export async function POST(request: Request) {
         secretBallot: true,
         proxyAllowed: false,
         votingMode: 'SECRET_BALLOT',
-        totalEligibleVoters: totalUnitsCount || 342,
+        totalEligibleVoters: totalUnitsCount,
         totalVotesCast: 0,
         positions: [
           { id: 'POS-01', title: 'President', seats: 1, eligibility: 'Flat owner member for 2+ years', nominations: [] },

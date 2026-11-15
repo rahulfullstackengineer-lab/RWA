@@ -11,15 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
     }
 
-    let orgId = user.organizationId
-    if (!orgId) {
-      const url = new URL(request.url)
-      orgId = url.searchParams.get('orgId') || request.headers.get('x-active-org-id')
-      if (!orgId) {
-        const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-        orgId = firstOrg?.id || null
-      }
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No society organization found' }, { status: 400 })

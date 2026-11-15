@@ -19,11 +19,7 @@ export async function POST(request: Request) {
       invoiceIds = [],
     } = body
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })

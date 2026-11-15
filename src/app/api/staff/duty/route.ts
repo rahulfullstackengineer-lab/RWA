@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 const SAMPLE_STAFF_PHONES = [
@@ -52,26 +52,19 @@ async function broadcastDutyNotification(
   dutyId: string
 ) {
   try {
-    const users = await prisma.user.findMany({
-      where: { organizationId: orgId },
-      select: { id: true },
+    await notifyUsers({
+      orgId,
+      roles: ['admin', 'resident', 'staff'],
+      title,
+      message,
+      type: 'STAFF_DUTY',
+      event: 'duty:roster-updated',
+      referenceType: 'STAFF_DUTY',
+      referenceId: dutyId,
+      data: { message, dutyId },
     })
-
-    if (users.length > 0) {
-      await prisma.notification.createMany({
-        data: users.map((u) => ({
-          organizationId: orgId,
-          userId: u.id,
-          title,
-          message: message.substring(0, 200),
-          type: 'STAFF_DUTY',
-          referenceType: 'STAFF_DUTY',
-          referenceId: dutyId,
-        })),
-      })
-    }
   } catch (err) {
-    console.error('Error broadcasting duty notification to residents:', err)
+    console.error('Error broadcasting duty notification:', err)
   }
 }
 
@@ -83,7 +76,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ success: true, duties: [], metrics: {} })
+    const orgId = user.organizationId
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const status = searchParams.get('status')
@@ -272,12 +266,6 @@ export async function POST(request: Request) {
       )
     }
 
-    emitLiveSocketEvent('duty:roster-updated', {
-      action: 'CREATED',
-      duty,
-      message: `${duty.staffName} assigned to ${duty.locationPost}`,
-    })
-
     return NextResponse.json({ success: true, duty })
   } catch (err: any) {
     console.error('Error creating staff duty assignment:', err)
@@ -398,12 +386,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    emitLiveSocketEvent('duty:roster-updated', {
-      action: 'UPDATED',
-      duty: updated,
-      message: `${updated.staffName} duty updated at ${updated.locationPost}`,
-    })
-
     return NextResponse.json({ success: true, duty: updated })
   } catch (err: any) {
     console.error('Error updating staff duty:', err)
@@ -461,11 +443,6 @@ export async function PATCH(request: Request) {
       updated.id
     )
 
-    emitLiveSocketEvent('duty:roster-updated', {
-      action: 'PATCHED',
-      duty: updated,
-    })
-
     return NextResponse.json({ success: true, duty: updated })
   } catch (err: any) {
     console.error('Error patching staff duty:', err)
@@ -511,9 +488,14 @@ export async function DELETE(request: Request) {
       }
     }
 
-    emitLiveSocketEvent('duty:roster-updated', {
-      action: 'DELETED',
-      id,
+    await notifyUsers({
+      orgId,
+      roles: ['admin', 'staff'],
+      title: 'Duty removed from the roster',
+      message: 'A staff duty post was removed.',
+      type: 'STAFF_DUTY',
+      event: 'duty:roster-updated',
+      data: { action: 'DELETED', id, message: 'A staff duty post was removed.' },
     })
 
     return NextResponse.json({ success: true, deleted })

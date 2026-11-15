@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { normalizePhone } from '@/lib/phone'
 
 export async function GET(request: Request) {
   const { user, error } = await requireAuth(request)
@@ -46,8 +47,25 @@ export async function PATCH(request: Request) {
     if (password && typeof password === 'string' && password.length >= 6) {
       updateData.passwordHash = await hashPassword(password)
     }
-    if (unitId !== undefined) {
-      updateData.unitId = unitId || null
+    if (unitId) {
+      const { prisma: unitPrisma } = await import('@/lib/prisma')
+      const unit = await unitPrisma.unit.findFirst({ where: { id: unitId } })
+      if (!unit) {
+        return NextResponse.json({ error: 'That flat was not found' }, { status: 404 })
+      }
+      if (user.organizationId && unit.organizationId !== user.organizationId) {
+        return NextResponse.json({ error: 'That flat is not in your society' }, { status: 403 })
+      }
+      const phone = normalizePhone(user.phone)
+      const listed = phone && (normalizePhone(unit.ownerPhone) === phone || normalizePhone(unit.tenantPhone) === phone)
+      if (!listed) {
+        return NextResponse.json(
+          { error: 'You can only link a flat that already lists your mobile number. Ask the society admin to add you.' },
+          { status: 403 }
+        )
+      }
+      updateData.unitId = unit.id
+      if (!user.organizationId) updateData.organizationId = unit.organizationId
     }
 
     const updatedUser = await prisma.user.update({
@@ -62,21 +80,6 @@ export async function PATCH(request: Request) {
         },
       },
     })
-
-    // If unitId was set and unit exists, link owner/tenant info if not assigned
-    if (unitId && updatedUser.unit) {
-      const u = updatedUser.unit as any
-      if (!u.ownerName || u.ownerName === 'Unassigned' || u.ownerName === 'Vacant') {
-        await prisma.unit.update({
-          where: { id: unitId },
-          data: {
-            ownerName: updatedUser.name,
-            ownerPhone: updatedUser.phone,
-            occupancyStatus: u.occupancyStatus === 'VACANT' ? 'OWNER_OCCUPIED' : u.occupancyStatus,
-          },
-        }).catch(() => {})
-      }
-    }
 
     const updatedUserUnit = updatedUser.unit as any
     return NextResponse.json({

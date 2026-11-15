@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { verifyPaymentSignature } from '@/lib/razorpay'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
   try {
@@ -138,14 +138,22 @@ export async function POST(request: Request) {
       notification: notif,
     }, { userId: user.id })
 
-    // Also notify admins in org room
-    emitLiveSocketEvent('new-payment-received', {
-      title: 'New Maintenance Payment Received',
+    await notifyUsers({
+      orgId: invoice.organizationId,
+      roles: ['admin'],
+      excludeUserId: user.id,
+      title: 'New maintenance payment received',
       message: `Flat ${invoice.unit.unitNumber} paid ₹${invoice.totalAmount.toLocaleString('en-IN')}`,
-      amount: invoice.totalAmount,
-      unitNumber: invoice.unit.unitNumber,
-      paidAt: new Date(),
-    }, { orgId: invoice.organizationId })
+      type: 'PAYMENT',
+      event: 'new-payment-received',
+      referenceType: 'INVOICE',
+      referenceId: invoice.id,
+      data: {
+        amount: invoice.totalAmount,
+        unitNumber: invoice.unit.unitNumber,
+        paidAt: new Date(),
+      },
+    })
 
     return NextResponse.json({
       success: true,

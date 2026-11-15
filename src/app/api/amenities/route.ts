@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -339,7 +340,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId || 'default-org'
+    const orgId = user.organizationId
+    if (!orgId) return NextResponse.json({ success: true, amenities: [], bookings: [], metrics: {} })
     const data = getStoredData(orgId)
     const metrics = calculateAmenityMetrics(data.amenities, data.bookings)
 
@@ -360,7 +362,8 @@ export async function POST(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId || 'default-org'
+    const orgId = user.organizationId
+    if (!orgId) return NextResponse.json({ error: 'Join a society before managing amenities' }, { status: 400 })
     const data = getStoredData(orgId)
     const body = await request.json()
     const { action } = body
@@ -391,10 +394,21 @@ export async function POST(request: Request) {
         newValues: { status: 'CONFIRMED', approvedBy: user.name },
       })
 
-      emitLiveSocketEvent('amenity-booking-updated', {
-        action: 'approved',
-        booking,
-      }, { orgId })
+      const approvedResidents = await prisma.user.findMany({
+        where: { organizationId: orgId, unit: { unitNumber: booking.unit } },
+        select: { id: true },
+      })
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        userIds: approvedResidents.map((person) => person.id),
+        excludeUserId: user.id,
+        title: `Booking confirmed: ${booking.amenity}`,
+        message: `${booking.name} (${booking.unit}) on ${booking.dateDisplay || booking.date}, ${booking.slot}`,
+        type: 'AMENITY',
+        event: 'amenity-booking-updated',
+        data: { action: 'approved', booking },
+      })
 
       const metrics = calculateAmenityMetrics(data.amenities, data.bookings)
       return NextResponse.json({ success: true, booking, metrics })
@@ -425,10 +439,21 @@ export async function POST(request: Request) {
         newValues: { status: 'REJECTED', reason },
       })
 
-      emitLiveSocketEvent('amenity-booking-updated', {
-        action: 'rejected',
-        booking,
-      }, { orgId })
+      const rejectedResidents = await prisma.user.findMany({
+        where: { organizationId: orgId, unit: { unitNumber: booking.unit } },
+        select: { id: true },
+      })
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        userIds: rejectedResidents.map((person) => person.id),
+        excludeUserId: user.id,
+        title: `Booking declined: ${booking.amenity}`,
+        message: `${booking.unit}: ${reason}`,
+        type: 'AMENITY',
+        event: 'amenity-booking-updated',
+        data: { action: 'rejected', booking },
+      })
 
       const metrics = calculateAmenityMetrics(data.amenities, data.bookings)
       return NextResponse.json({ success: true, booking, metrics })
@@ -614,16 +639,30 @@ export async function POST(request: Request) {
       newValues: newBooking,
     })
 
-    emitLiveSocketEvent('new-amenity-booking', {
-      id: newBooking.id,
-      amenityName: newBooking.amenity,
-      bookedByName: newBooking.name,
-      unit: newBooking.unit,
-      date: newBooking.date,
-      timeSlot: newBooking.slot,
-      purpose: newBooking.purpose,
-      status: newBooking.status,
-    }, { orgId })
+    const bookingResidents = await prisma.user.findMany({
+      where: { organizationId: orgId, unit: { unitNumber: newBooking.unit } },
+      select: { id: true },
+    })
+    await notifyUsers({
+      orgId,
+      roles: ['admin', 'staff'],
+      userIds: bookingResidents.map((person) => person.id),
+      excludeUserId: user.id,
+      title: newBooking.status === 'CONFIRMED' ? `Booking confirmed: ${newBooking.amenity}` : `Booking request: ${newBooking.amenity}`,
+      message: `${newBooking.name} (${newBooking.unit}) on ${newBooking.dateDisplay}, ${newBooking.slot}`,
+      type: 'AMENITY',
+      event: 'new-amenity-booking',
+      data: {
+        id: newBooking.id,
+        amenityName: newBooking.amenity,
+        bookedByName: newBooking.name,
+        unit: newBooking.unit,
+        date: newBooking.date,
+        timeSlot: newBooking.slot,
+        purpose: newBooking.purpose,
+        status: newBooking.status,
+      },
+    })
 
     const metrics = calculateAmenityMetrics(data.amenities, data.bookings)
     return NextResponse.json({ success: true, booking: newBooking, amenity: targetAmenity, metrics })
@@ -639,7 +678,7 @@ export async function DELETE(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId || 'default-org'
+    const orgId = user.organizationId
     const data = getStoredData(orgId)
     const url = new URL(request.url)
     const bookingId = url.searchParams.get('bookingId')

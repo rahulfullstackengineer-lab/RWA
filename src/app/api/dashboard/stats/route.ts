@@ -11,7 +11,8 @@ export async function GET(request: Request) {
 
     const orgId = user.organizationId
     if (!orgId) {
-      return NextResponse.json({ error: 'No organization attached to this user' }, { status: 400 })
+      const emptyStats = { totalUnits: 0, occupiedUnits: 0, vacantUnits: 0, occupancyRate: 0, totalMembers: 0, billedAmount: 0, collectedAmount: 0, pendingAmount: 0, collectionRate: 0, openComplaints: 0, resolvedComplaints: 0 }
+      return NextResponse.json({ organization: null, stats: emptyStats, monthlyTrend: [], trends: { year: [], '6m': [], month: [] }, expenses: [], complianceItems: [], recentNotices: [], recentComplaints: [] })
     }
 
     // 1. Units metrics
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     const occupiedUnits = await prisma.unit.count({
       where: {
         organizationId: orgId,
-        occupancyStatus: { in: ['OWNER_OCCUPIED', 'TENANT_OCCUPIED'] },
+        occupancyStatus: { in: ['OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'TENANTED'] },
       },
     })
     const vacantUnits = totalUnits - occupiedUnits

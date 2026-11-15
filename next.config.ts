@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["189.72.153.88"],
+  devIndicators: false,
+  allowedDevOrigins: ["189.72.153.88", "127.0.0.1"],
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {

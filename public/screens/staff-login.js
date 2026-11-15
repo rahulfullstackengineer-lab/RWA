@@ -27,33 +27,21 @@ Screens['staff-login'] = function() {
   const lastPhone = (typeof localStorage !== 'undefined' && localStorage.getItem('rwa_login_phone')) || '9876543210';
 
   return `
-    <div class="cutora-auth-screen staff-mode fade-in" id="cutoraStaffContainer">
-      <!-- Motion: 4s seamless upward glide loop -->
-      <video
-        id="staffHeroVideo"
-        class="cutora-video-layer"
-        autoplay
-        loop
-        muted
-        playsinline
-        preload="auto"
-      >
-        <source src="/cutora-motion.mp4" type="video/mp4" />
-        <source src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/197f7e27-faac-4bdc-916c-615ac962bf86.mp4" type="video/mp4" />
-      </video>
-
-      <!-- Readability: Left wash with deep security navy & emerald guard shield tone -->
-      <div class="cutora-overlay" style="background:linear-gradient(90deg, rgba(6, 78, 59, 0.78) 0%, rgba(15, 23, 42, 0.72) calc(200 * var(--u)), transparent calc(500 * var(--u))), linear-gradient(180deg, rgba(0, 0, 0, 0.65) 0%, rgba(0, 0, 0, 0.3) calc(140 * var(--u)), transparent calc(300 * var(--u))), linear-gradient(0deg, rgba(6, 78, 59, 0.5) 0%, transparent calc(420 * var(--u)));"></div>
+    <div class="cutora-auth-screen cutora-auth-modern staff-mode fade-in" id="cutoraStaffContainer">
+      <div class="cutora-modern-bg" aria-hidden="true">
+        <span class="cutora-orb cutora-orb-amber"></span>
+        <span class="cutora-orb cutora-orb-blue"></span>
+        <span class="cutora-orb cutora-orb-violet"></span>
+      </div>
+      <div class="cutora-overlay"></div>
 
       <!-- Hero Column (Left, White Typography) -->
       <div class="cutora-hero-col">
         <!-- Top Bar -->
         <div class="cutora-topbar">
           <div class="cutora-brand" onclick="Router.go('staff-login')" style="cursor:pointer;">
-            <div class="cutora-brand-tile" style="background:#064E3B;border:1px solid #34D399;box-shadow:0 0 16px rgba(52,211,153,0.35);">
-              <span class="cutora-brand-glyph">👮</span>
-            </div>
-            <span class="cutora-brand-text">Cutora · Staff &amp; Security</span>
+            ${window.rwaLogoHtml()}
+            <span class="cutora-brand-text">RWA</span>
           </div>
 
           <div style="display:flex;align-items:center;gap:12px;">
@@ -69,17 +57,17 @@ Screens['staff-login'] = function() {
         <!-- Pitch (Bottom-Left) -->
         <div class="cutora-pitch">
           <div class="cutora-headline-clip">
-            <span id="staffHeroHeadline1" class="cutora-headline-line line-1" style="color:#F0FDF4;">
+            <span id="staffHeroHeadline1" class="cutora-headline-line line-1">
               ${window.STAFF_PITCH_SLIDES[0].line1}
             </span>
           </div>
           <div class="cutora-headline-clip">
-            <span id="staffHeroHeadline2" class="cutora-headline-line line-2" style="color:#34D399;">
+            <span id="staffHeroHeadline2" class="cutora-headline-line line-2">
               ${window.STAFF_PITCH_SLIDES[0].line2}
             </span>
           </div>
 
-          <p id="staffHeroSubline" class="cutora-subline" style="color:#D1FAE5;">
+          <p id="staffHeroSubline" class="cutora-subline">
             ${window.STAFF_PITCH_SLIDES[0].sub}
           </p>
 
@@ -142,43 +130,6 @@ Screens['staff-login'] = function() {
             </button>
           </div>
 
-          <!-- Quick 1-Click Demo Staff Login Bar -->
-          <div style="margin-bottom:calc(14 * var(--u));background:#F8FAFC;border:1px solid #E2E8F0;border-radius:calc(12 * var(--u));padding:calc(10 * var(--u)) calc(12 * var(--u));">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:calc(8 * var(--u));">
-              <span style="font-size:11.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;">⚡ 1-Click Demo Staff Login:</span>
-              <span style="font-size:11px;font-weight:700;color:#059669;background:#ECFDF5;padding:2px 8px;border-radius:6px;">PIN: 1234</span>
-            </div>
-            <div style="display:flex;gap:calc(6 * var(--u));flex-wrap:wrap;">
-              <button
-                type="button"
-                onclick="window.quickFillStaffGuard('9876543210', 'Ram Singh (Gate 1 Guard)')"
-                style="flex:1;min-width:130px;background:#FFFFFF;border:1.5px solid #BBF7D0;border-radius:calc(8 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u));font-size:calc(11.5 * var(--u));font-weight:700;color:#166534;display:flex;align-items:center;justify-content:center;gap:calc(5 * var(--u));cursor:pointer;transition:all 0.15s ease;box-shadow:0 2px 6px rgba(16,185,129,0.08);"
-                title="Log in as Ram Singh (Senior Head Guard Gate 1)"
-              >
-                <span>🛡️</span>
-                <span>Ram Singh (Gate 1)</span>
-              </button>
-              <button
-                type="button"
-                onclick="window.quickFillStaffGuard('9876543211', 'Dharmendra Kumar (Gate 2 Guard)')"
-                style="flex:1;min-width:130px;background:#FFFFFF;border:1.5px solid #CBD5E1;border-radius:calc(8 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u));font-size:calc(11.5 * var(--u));font-weight:700;color:#334155;display:flex;align-items:center;justify-content:center;gap:calc(5 * var(--u));cursor:pointer;transition:all 0.15s ease;box-shadow:0 2px 6px rgba(0,0,0,0.04);"
-                title="Log in as Dharmendra Kumar (Gate 2 Guard)"
-              >
-                <span>🚪</span>
-                <span>Dharmendra (Gate 2)</span>
-              </button>
-              <button
-                type="button"
-                onclick="window.quickFillStaffGuard('9876543215', 'Ramesh Paswan (Supervisor)')"
-                style="flex:1;min-width:130px;background:#FFFFFF;border:1.5px solid #BFDBFE;border-radius:calc(8 * var(--u));padding:calc(8 * var(--u)) calc(8 * var(--u));font-size:calc(11.5 * var(--u));font-weight:700;color:#1E40AF;display:flex;align-items:center;justify-content:center;gap:calc(5 * var(--u));cursor:pointer;transition:all 0.15s ease;box-shadow:0 2px 6px rgba(37,99,235,0.08);"
-                title="Log in as Ramesh Paswan (Campus Supervisor)"
-              >
-                <span>👔</span>
-                <span>Ramesh (Supervisor)</span>
-              </button>
-            </div>
-          </div>
-
           <!-- Dynamic Real-Time Staff Detection Status Pill -->
           <div id="staffLoginStatusPill" style="display:none;margin-bottom:calc(12 * var(--u));"></div>
 
@@ -205,10 +156,7 @@ Screens['staff-login'] = function() {
           <div id="staffCutoraFormBody">
             <!-- 4-to-6 Digit Security PIN Field -->
             <div class="cutora-field-group">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-                <label class="cutora-label" for="staffPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-                <a class="cutora-forgot-link" onclick="window.handleStaffResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;color:#059669;font-weight:700;">Set / Reset PIN</a>
-              </div>
+              <label class="cutora-label" for="staffPinInput">4-to-6 Digit Security PIN</label>
               <div class="cutora-input-box">
                 <div class="cutora-country-code" style="color:#059669;font-weight:700;">🔒 PIN</div>
                 <input
@@ -267,11 +215,8 @@ Screens['staff-login'] = function() {
           </div>
 
           <!-- Bottom Footer Note -->
-          <div style="margin-top:calc(20 * var(--u));padding-top:calc(14 * var(--u));border-top:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;font-size:calc(12 * var(--u));color:#64748B;flex-wrap:wrap;gap:8px;">
-            <div>Need help? Ask RWA Admin desk</div>
-            <a onclick="Router.go('staff-dashboard')" style="color:#059669;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
-              🎫 Direct Gate Visitors Terminal →
-            </a>
+          <div style="margin-top:calc(20 * var(--u));padding-top:calc(14 * var(--u));border-top:1px solid #E2E8F0;font-size:calc(12 * var(--u));color:#64748B;">
+            Need help? Ask RWA Admin desk
           </div>
         </div>
       </div>
@@ -361,29 +306,6 @@ window.initCutoraStaffAuth = function() {
   if (phoneEl && phoneEl.value && phoneEl.value.replace(/[^0-9]/g, '').length === 10) {
     window.handleStaffPhoneInputCheck(phoneEl);
   }
-};
-
-// ============================================================
-// Quick Fill 1-Click Demo Login for Staff
-// ============================================================
-
-window.quickFillStaffGuard = function(phone, name) {
-  if (typeof window.switchToStaffNormalLoginMode === 'function') {
-    window.switchToStaffNormalLoginMode();
-  }
-  const phoneEl = document.getElementById('staffPhoneInput');
-  const pinEl = document.getElementById('staffPinInput');
-  if (phoneEl) phoneEl.value = phone;
-  if (pinEl) pinEl.value = '1234';
-
-  if (typeof showToast === 'function') {
-    showToast(`👮 ${name} credentials filled! Signing in to Gate Terminal...`, 'info');
-  }
-
-  window.handleStaffPhoneInputCheck(phoneEl);
-  setTimeout(() => {
-    window.handleStaffPinLoginSubmit();
-  }, 350);
 };
 
 // Dynamic Phone Status Checker for Staff
@@ -616,10 +538,7 @@ window.switchToStaffNormalLoginMode = function() {
   formBody.innerHTML = `
     <!-- 4-to-6 Digit Security PIN Field -->
     <div class="cutora-field-group">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-        <label class="cutora-label" for="staffPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-        <a class="cutora-forgot-link" onclick="window.handleStaffResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;color:#059669;font-weight:700;">Set / Reset PIN</a>
-      </div>
+      <label class="cutora-label" for="staffPinInput">4-to-6 Digit Security PIN</label>
       <div class="cutora-input-box">
         <div class="cutora-country-code" style="color:#059669;font-weight:700;">🔒 PIN</div>
         <input
@@ -766,7 +685,7 @@ window.handleStaffResetPinModal = function() {
       <div style="background:#F0FDF4;border:1px solid #A7F3D0;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;">
         <span style="font-size:24px;">🛡️</span>
         <div style="font-size:12.5px;color:#065F46;line-height:1.45;">
-          Enter your registered Staff Mobile Number and create a new 4-digit Security PIN. For emergency shift login, demo PIN <strong>1234</strong> is available.
+          Enter your current PIN, or the OTP sent to this number, before choosing a new one.
         </div>
       </div>
 
@@ -783,6 +702,17 @@ window.handleStaffResetPinModal = function() {
             style="flex:1;border:none;padding:10px 12px;font-size:14px;font-weight:600;outline:none;"
           />
         </div>
+      </div>
+
+      <div class="form-group" style="margin:0;">
+        <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:6px;">Current PIN or OTP</label>
+        <input
+          type="password"
+          id="modalStaffResetProof"
+          placeholder="Current PIN, or the OTP sent to this number"
+          maxlength="6"
+          style="width:100%;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;outline:none;"
+        />
       </div>
 
       <div class="form-group" style="margin:0;">
@@ -845,6 +775,7 @@ window.executeStaffPinReset = async function() {
   const phone = phoneEl ? phoneEl.value.trim().replace(/\s+/g, '') : '';
   const pin = newPinEl ? newPinEl.value.trim() : '';
   const confirmPin = confirmPinEl ? confirmPinEl.value.trim() : '';
+  const proof = (document.getElementById('modalStaffResetProof')?.value || '').trim();
 
   if (!phone || phone.length < 10) {
     if (typeof showToast === 'function') showToast('Please enter a valid 10-digit mobile number', 'warning');
@@ -858,6 +789,10 @@ window.executeStaffPinReset = async function() {
     if (typeof showToast === 'function') showToast('New PIN and Confirm PIN do not match', 'warning');
     return;
   }
+  if (!proof) {
+    if (typeof showToast === 'function') showToast('Enter your current PIN or the OTP sent to this number', 'warning');
+    return;
+  }
 
   try {
     const res = await fetch('/api/auth/login', {
@@ -867,6 +802,8 @@ window.executeStaffPinReset = async function() {
         phone,
         pin,
         confirmPin,
+        currentPin: proof,
+        otp: proof,
         action: 'reset_pin'
       })
     });

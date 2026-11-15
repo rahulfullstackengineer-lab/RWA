@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   try {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    if (!user.organizationId) return NextResponse.json({ notifications: [], unreadCount: 0 })
 
     // Auto-sync / backfill any resident onboarding notifications for society admins
     const isAdmin = ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(user.role)

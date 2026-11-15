@@ -138,7 +138,7 @@ model Unit {
   unitType        String   @default("FLAT")
   floor           Int?
   areaSqft        Float?
-  occupancyStatus String   @default("OWNER_OCCUPIED")
+  occupancyStatus String   @default("VACANT")
   ownerName       String?
   ownerPhone      String?
   ownerEmail      String?

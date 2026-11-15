@@ -181,74 +181,17 @@ window.loadLiveNotices = async function() {
       var data = await res.json();
       if (data.notices) {
         window.__commNotices = data.notices;
+        window.__noticeAudience = Number(data.totalResidents) || 0;
         window.renderNoticesList();
         return;
       }
     }
   } catch (e) {
-    console.warn('API notices fetch failed, using stored notices:', e);
+    console.warn('API notices fetch failed:', e);
   }
 
-  // Graceful fallback
-  if (!window.__commNotices || window.__commNotices.length === 0) {
-    window.__commNotices = [
-      {
-        id: 'N-042',
-        title: 'Annual General Meeting (AGM) 2026 Notice & Agenda',
-        content: 'Notice is hereby given that the 14th Annual General Body Meeting of the Association will be held on Sunday, October 29, 2026 at 10:00 AM at the Society Clubhouse. Agenda includes presentation of audited accounts, election of Managing Committee members for 2026-28, and review of sinking fund repainting budget.',
-        type: 'MEETING',
-        status: 'PUBLISHED',
-        pinnedUntil: '2026-10-29T00:00:00.000Z',
-        publishedAt: '2026-10-01T10:00:00.000Z',
-        publishedBy: 'Honorary Secretary',
-        channels: 'IN_APP,SMS,EMAIL',
-      },
-      {
-        id: 'N-041',
-        title: 'Overhead Water Tank Chlorination & Cleaning (Block A & B)',
-        content: 'Residents are informed that routine semi-annual tank scrubbing and chlorination is scheduled for Thursday, Oct 15, 2026 between 9:00 AM and 2:00 PM. Water supply will remain paused during this maintenance window. Please store adequate drinking water in advance.',
-        type: 'MAINTENANCE',
-        status: 'PUBLISHED',
-        pinnedUntil: '2026-10-15T00:00:00.000Z',
-        publishedAt: '2026-10-10T08:30:00.000Z',
-        publishedBy: 'Estate Manager',
-        channels: 'IN_APP,WHATSAPP',
-      },
-      {
-        id: 'N-040',
-        title: 'Grand Diwali Cultural Evening & Community Dinner — Oct 20',
-        content: 'Join us for Diwali Milan 2026 at Central Greens lawn! Rangoli competition starting at 4:30 PM followed by musical performances, fireworks display, and buffet dinner. Resident registration is open via resident portal under events.',
-        type: 'EVENT',
-        status: 'PUBLISHED',
-        pinnedUntil: null,
-        publishedAt: '2026-10-05T12:00:00.000Z',
-        publishedBy: 'Cultural Committee',
-        channels: 'ALL',
-      },
-      {
-        id: 'N-039',
-        title: 'Passenger Lift #2 Modernization & Safety Inspection (Block C)',
-        content: 'OTIS engineers will be conducting mandatory quarterly safety drive rope replacement on Lift #2 from Oct 16 to Oct 18. Service lift will operate normally for resident transit.',
-        type: 'MAINTENANCE',
-        status: 'PUBLISHED',
-        pinnedUntil: null,
-        publishedAt: '2026-10-04T15:00:00.000Z',
-        publishedBy: 'Maintenance Desk',
-        channels: 'IN_APP',
-      },
-      {
-        id: 'N-038',
-        title: 'October 2026 Society Maintenance Invoices Issued',
-        content: 'Monthly maintenance bills for October 2026 have been generated. Due date without late fee surcharge is Oct 10, 2026. Payments can be completed online via UPI, Netbanking or NEFT.',
-        type: 'GENERAL',
-        status: 'DRAFT',
-        pinnedUntil: null,
-        publishedAt: null,
-        publishedBy: 'Treasurer',
-        channels: 'IN_APP,SMS',
-      },
-    ];
-  }
+  window.__commNotices = [];
+  window.__noticeAudience = 0;
 
   window.renderNoticesList();
 };
@@ -332,9 +275,7 @@ window.renderNoticesList = function() {
     var isPinned = !!n.pinnedUntil;
     var meta = TYPE_METAS[n.type] || TYPE_METAS.GENERAL;
     var pubDate = n.publishedAt ? new Date(n.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Draft';
-    var readCount = Math.floor(Math.random() * 80) + 180;
-    var totalResidents = 342;
-    var readPct = Math.round((readCount / totalResidents) * 100);
+    var totalResidents = Number(window.__noticeAudience) || 0;
 
     return `
       <div style="display:flex;gap:16px;align-items:flex-start;padding:18px 20px;
@@ -378,12 +319,7 @@ window.renderNoticesList = function() {
             </div>
 
             ${n.status === 'PUBLISHED' ? `
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div class="progress-bar" style="width:110px;height:6px;">
-                  <div class="progress-fill green" style="width:${readPct}%"></div>
-                </div>
-                <span style="font-size:11px;font-weight:600;color:var(--text-muted);">${readCount}/${totalResidents} Read (${readPct}%)</span>
-              </div>
+              <span style="font-size:11px;font-weight:600;color:var(--text-muted);">Sent to ${totalResidents} residents</span>
             ` : `
               <span style="font-size:11px;color:var(--text-muted);font-style:italic;">Draft Notice · Ready to publish</span>
             `}
@@ -1126,7 +1062,7 @@ window.sendBroadcastNow = async function() {
         window.__commBroadcasts.unshift(data.broadcast);
         window.renderBroadcastsTable();
         if (typeof window.showToast === 'function') {
-          window.showToast('📡 Broadcast successfully dispatched to ' + (data.recipientCount || 342) + ' residents!', 'success');
+          window.showToast('📡 Broadcast dispatched to ' + (data.sentCount || data.recipientCount || 0) + ' residents.', 'success');
         }
         // Reset form
         document.getElementById('bcTitleInput').value = '';
@@ -1136,34 +1072,14 @@ window.sendBroadcastNow = async function() {
       }
     }
   } catch (e) {
-    console.warn('API send broadcast fallback:', e);
+    console.warn('API send broadcast failed:', e);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📡 Send Broadcast Now'; }
   }
 
-  // Local fallback
-  var newBc = {
-    id: 'BC-' + Math.floor(100 + Math.random() * 900),
-    title: title,
-    message: message,
-    audienceLabel: window.selectedBcAudience === 'DEFAULTERS_ONLY' ? 'Defaulters Only (111)' : 'All Residents (342)',
-    channels: channels,
-    sent: 342,
-    delivered: 340,
-    read: 12,
-    failed: 2,
-    date: 'Just now',
-    status: 'DELIVERED',
-    senderName: 'RWA Admin',
-  };
-  window.__commBroadcasts.unshift(newBc);
-  window.renderBroadcastsTable();
   if (typeof window.showToast === 'function') {
-    window.showToast('📡 Broadcast successfully transmitted!', 'success');
+    window.showToast('Broadcast was not sent. Check your connection and try again.', 'error');
   }
-  document.getElementById('bcTitleInput').value = '';
-  document.getElementById('bcMessageInput').value = '';
-  window.updateBroadcastCharCount('');
 };
 
 window.scheduleBroadcastPrompt = function() {
@@ -1631,28 +1547,10 @@ window.openCreatePollModal = function() {
         }
       }
     } catch (e) {
-      console.warn('API create poll fallback:', e);
+      console.warn('API create poll failed:', e);
     }
 
-    // Local fallback
-    var newP = {
-      id: 'POLL-' + Math.floor(100 + Math.random() * 900),
-      title: title,
-      description: desc,
-      status: 'OPEN',
-      eligibility: elig,
-      eligibilityLabel: elig === 'OWNERS_ONLY' ? 'Owners only (314 units)' : 'All Members (342)',
-      isAnonymous: isAnon,
-      closes: closes,
-      closesFormatted: new Date(closes).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      totalEligible: 314,
-      quorumPercent: quorum,
-      totalVotes: 0,
-      options: options.map((label, idx) => ({ id: 'opt_' + (idx + 1), label: label, votes: 0, pct: 0 })),
-    };
-    window.__commPolls.unshift(newP);
-    window.renderPollsList();
-    if (typeof window.showToast === 'function') window.showToast('🗳️ Poll published & voting open!', 'success');
+    if (typeof window.showToast === 'function') window.showToast('Poll was not created. Check your connection and try again.', 'error');
   }, '620px');
 };
 

@@ -113,6 +113,37 @@ Screens['platform-dashboard'] = function() {
         </div>
       </div>
 
+      <div class="card" style="margin-top:24px;">
+        <div class="card-header" style="flex-wrap:wrap;gap:10px;">
+          <div>
+            <div class="card-title">Society dashboard video</div>
+            <div class="card-subtitle">The video published here autoplays at the top of every society admin dashboard</div>
+          </div>
+        </div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155;">
+              Title
+              <input id="platDashVideoTitle" class="form-input" placeholder="Festival greeting" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155;">
+              Video link
+              <input id="platDashVideoUrl" class="form-input" placeholder="https://...mp4 or a YouTube link" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155;">
+              Or upload a file
+              <input id="platDashVideoFile" type="file" accept="video/mp4,video/webm,video/ogg" class="form-input" />
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;">
+            <button class="btn btn-primary btn-sm" onclick="window.savePlatformDashboardVideo()">Publish on dashboards</button>
+          </div>
+          <div id="platDashVideoList" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Loading dashboard videos...</div>
+          </div>
+        </div>
+      </div>
+
       <!-- 4. Sponsor Advertisements, Banners & Video Campaigns Section -->
       <div class="card" style="margin-top:24px;">
         <div class="card-header" style="flex-wrap:wrap;gap:10px;">
@@ -741,9 +772,103 @@ window.loadLivePlatformData = async function() {
     if (typeof window.renderPlatformAdsTable === 'function') {
       window.renderPlatformAdsTable();
     }
+    if (typeof window.loadPlatformDashboardVideos === 'function') {
+      window.loadPlatformDashboardVideos();
+    }
   } catch (err) {
     console.error('Failed to load platform data:', err);
   }
+};
+
+function platEscape(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+window.loadPlatformDashboardVideos = async function() {
+  const list = document.getElementById('platDashVideoList');
+  if (!list) return;
+  try {
+    const res = await window.apiFetch('/api/platform/dashboard-video');
+    if (!res || !res.ok) {
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Sign in as the super admin to manage dashboard videos.</div>';
+      return;
+    }
+    const data = await res.json();
+    const videos = data.videos || [];
+    if (!videos.length) {
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">No dashboard video yet. Add a link or upload a file, then publish it.</div>';
+      return;
+    }
+    list.innerHTML = videos.map(function(video) {
+      return '<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;">' +
+        '<div style="min-width:0;">' +
+          '<div style="font-size:14px;font-weight:800;color:#0F172A;">' + platEscape(video.title) + '</div>' +
+          '<div style="font-size:12px;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;">' + platEscape(video.videoUrl) + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-shrink:0;">' +
+          (video.active
+            ? '<span class="badge badge-green">Playing</span>'
+            : '<button class="btn btn-ghost btn-xs" onclick="window.activatePlatformDashboardVideo(\'' + platEscape(video.id) + '\')">Set live</button>') +
+          '<button class="btn btn-ghost btn-xs" style="color:#DC2626;" onclick="window.deletePlatformDashboardVideo(\'' + platEscape(video.id) + '\')">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Dashboard videos could not be loaded.</div>';
+  }
+};
+
+window.savePlatformDashboardVideo = async function() {
+  const title = (document.getElementById('platDashVideoTitle')?.value || '').trim();
+  const videoUrl = (document.getElementById('platDashVideoUrl')?.value || '').trim();
+  const fileInput = document.getElementById('platDashVideoFile');
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+  if (!title) {
+    if (typeof showToast === 'function') showToast('Enter a title for the video', 'warning');
+    return;
+  }
+  if (!videoUrl && !file) {
+    if (typeof showToast === 'function') showToast('Paste a video link or choose a file', 'warning');
+    return;
+  }
+  const form = new FormData();
+  form.append('title', title);
+  if (videoUrl) form.append('videoUrl', videoUrl);
+  if (file) form.append('file', file);
+  const res = await window.apiFetch('/api/platform/dashboard-video', { method: 'POST', body: form });
+  const data = await res.json().catch(function() { return {}; });
+  if (!res.ok || !data.success) {
+    if (typeof showToast === 'function') showToast(data.error || 'Could not publish the video', 'error');
+    return;
+  }
+  if (document.getElementById('platDashVideoTitle')) document.getElementById('platDashVideoTitle').value = '';
+  if (document.getElementById('platDashVideoUrl')) document.getElementById('platDashVideoUrl').value = '';
+  if (fileInput) fileInput.value = '';
+  if (typeof showToast === 'function') showToast('Dashboard video is live', 'success');
+  window.loadPlatformDashboardVideos();
+};
+
+window.activatePlatformDashboardVideo = async function(id) {
+  const res = await window.apiFetch('/api/platform/dashboard-video', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: id }),
+  });
+  if (!res.ok) {
+    if (typeof showToast === 'function') showToast('Could not switch the live video', 'error');
+    return;
+  }
+  window.loadPlatformDashboardVideos();
+};
+
+window.deletePlatformDashboardVideo = async function(id) {
+  if (!confirm('Remove this dashboard video?')) return;
+  const res = await window.apiFetch('/api/platform/dashboard-video?id=' + encodeURIComponent(id), { method: 'DELETE' });
+  if (!res.ok) {
+    if (typeof showToast === 'function') showToast('Could not delete the video', 'error');
+    return;
+  }
+  window.loadPlatformDashboardVideos();
 };
 
 window.renderPlatformAdsTable = function() {

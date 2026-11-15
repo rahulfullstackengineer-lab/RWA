@@ -26,22 +26,12 @@ Screens['auth-login'] = function() {
   const lastOrgName = (typeof localStorage !== 'undefined' && localStorage.getItem('rwa_active_org_name')) || '';
 
   return `
-    <div class="cutora-auth-screen fade-in" id="cutoraAuthContainer">
-      <!-- Motion: 4s seamless upward glide loop -->
-      <video
-        id="cutoraHeroVideo"
-        class="cutora-video-layer"
-        autoplay
-        loop
-        muted
-        playsinline
-        preload="auto"
-      >
-        <source src="/cutora-motion.mp4" type="video/mp4" />
-        <source src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/197f7e27-faac-4bdc-916c-615ac962bf86.mp4" type="video/mp4" />
-      </video>
-
-      <!-- Readability: 150u left wash, 140u top wash, 420u warm bottom wash -->
+    <div class="cutora-auth-screen cutora-auth-modern fade-in" id="cutoraAuthContainer">
+      <div class="cutora-modern-bg" aria-hidden="true">
+        <span class="cutora-orb cutora-orb-amber"></span>
+        <span class="cutora-orb cutora-orb-blue"></span>
+        <span class="cutora-orb cutora-orb-violet"></span>
+      </div>
       <div class="cutora-overlay"></div>
 
       <!-- Hero Column (Left, White Typography) -->
@@ -49,10 +39,8 @@ Screens['auth-login'] = function() {
         <!-- Top Bar (57u from top, 92.5u from left) -->
         <div class="cutora-topbar">
           <div class="cutora-brand" onclick="Router.go('auth-login')">
-            <div class="cutora-brand-tile">
-              <span class="cutora-brand-glyph">R</span>
-            </div>
-            <span class="cutora-brand-text">Cutora · RWA</span>
+            ${window.rwaLogoHtml()}
+            <span class="cutora-brand-text">RWA</span>
           </div>
 
           <a class="cutora-top-link" onclick="Router.go('resident-login')" title="Open Resident Portal Login">
@@ -121,37 +109,6 @@ Screens['auth-login'] = function() {
             </button>
           </div>
 
-          <!-- Quick 1-Click Demo Login Bar -->
-          <div style="display:flex;gap:calc(8 * var(--u));margin-bottom:calc(14 * var(--u));flex-wrap:wrap;">
-            <button
-              type="button"
-              onclick="window.quickFillAdmin()"
-              style="flex:1;min-width:130px;background:#F1F5F9;border:1px solid #CBD5E1;border-radius:calc(8 * var(--u));padding:calc(7 * var(--u)) calc(10 * var(--u));font-size:calc(11.5 * var(--u));font-weight:700;color:#0F172A;display:flex;align-items:center;justify-content:center;gap:calc(6 * var(--u));cursor:pointer;transition:all 0.15s ease;"
-              title="Auto-fill Demo Admin credentials and log in"
-            >
-              <span>🏢</span>
-              <span>Admin (1-Click)</span>
-            </button>
-            <button
-              type="button"
-              onclick="window.quickFillResident()"
-              style="flex:1;min-width:130px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:calc(8 * var(--u));padding:calc(7 * var(--u)) calc(10 * var(--u));font-size:calc(11.5 * var(--u));font-weight:600;color:#475569;display:flex;align-items:center;justify-content:center;gap:calc(6 * var(--u));cursor:pointer;transition:all 0.15s ease;"
-              title="Auto-fill Demo Resident credentials and log in"
-            >
-              <span>🏠</span>
-              <span>Resident (1-Click)</span>
-            </button>
-            <button
-              type="button"
-              onclick="window.quickFillStaff()"
-              style="flex:1;min-width:130px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:calc(8 * var(--u));padding:calc(7 * var(--u)) calc(10 * var(--u));font-size:calc(11.5 * var(--u));font-weight:700;color:#166534;display:flex;align-items:center;justify-content:center;gap:calc(6 * var(--u));cursor:pointer;transition:all 0.15s ease;"
-              title="Auto-fill Demo Security Guard credentials and log in"
-            >
-              <span>👮</span>
-              <span>Guard / Staff (1-Click)</span>
-            </button>
-          </div>
-
           <!-- Real-Time User & Society Detection Status Pill -->
           <div id="loginUserStatusPill" style="display:none;margin-bottom:calc(12 * var(--u));"></div>
 
@@ -178,10 +135,7 @@ Screens['auth-login'] = function() {
           <div id="cutoraFormBody">
             <!-- 4-to-6 Digit Security PIN Field -->
             <div class="cutora-field-group">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-                <label class="cutora-label" for="loginPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-                <a class="cutora-forgot-link" onclick="window.handleResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;">Set / Reset PIN</a>
-              </div>
+              <label class="cutora-label" for="loginPinInput">4-to-6 Digit Security PIN</label>
               <div class="cutora-input-box">
                 <div class="cutora-country-code" style="color:var(--cutora-amber);font-weight:700;">🔒 PIN</div>
                 <input
@@ -539,10 +493,7 @@ window.switchToNormalLoginMode = function() {
   body.innerHTML = `
     <!-- 4-to-6 Digit Security PIN Field -->
     <div class="cutora-field-group">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-        <label class="cutora-label" for="loginPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-        <a class="cutora-forgot-link" onclick="window.handleResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;">Set / Reset PIN</a>
-      </div>
+      <label class="cutora-label" for="loginPinInput">4-to-6 Digit Security PIN</label>
       <div class="cutora-input-box">
         <div class="cutora-country-code" style="color:var(--cutora-amber);font-weight:700;">🔒 PIN</div>
         <input
@@ -741,6 +692,28 @@ window.handleResetPinModal = async function() {
     return;
   }
 
+  const proof = prompt(`Enter your current PIN for +91 ${phone}. If you forgot it, type FORGOT to receive an OTP.`, '');
+  if (!proof) return;
+
+  let currentPin = '';
+  let otp = '';
+  if (proof.trim().toUpperCase() === 'FORGOT') {
+    const sent = await fetch('/api/auth/otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, action: 'send' }),
+    });
+    const sentData = await sent.json().catch(() => ({}));
+    if (!sent.ok) {
+      showToast(sentData.error || 'Could not send an OTP', 'warning');
+      return;
+    }
+    otp = (prompt('Enter the OTP sent to this mobile number:', '') || '').trim();
+    if (!otp) return;
+  } else {
+    currentPin = proof.trim();
+  }
+
   const newPin = prompt(`Set your new 4-to-6 digit Security PIN for +91 ${phone}:`, '');
   if (!newPin) return;
 
@@ -754,7 +727,7 @@ window.handleResetPinModal = async function() {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, pin: cleanPin, action: 'reset_pin' })
+      body: JSON.stringify({ phone, pin: cleanPin, action: 'reset_pin', currentPin, otp })
     });
     const data = await res.json();
     if (!res.ok || !data.success) {
@@ -769,62 +742,6 @@ window.handleResetPinModal = async function() {
   } catch (e) {
     showToast('Network error setting PIN', 'warning');
   }
-};
-
-window.quickFillAdmin = function() {
-  if (typeof window.switchToNormalLoginMode === 'function') {
-    window.switchToNormalLoginMode();
-  }
-  const phoneInput = document.getElementById('loginPhoneInput');
-  const pinInput = document.getElementById('loginPinInput');
-  if (phoneInput) phoneInput.value = '9876543210';
-  if (pinInput) pinInput.value = '1234';
-  if (typeof showToast === 'function') {
-    showToast('🏢 RWA Admin (9876543210 · PIN 1234) filled. Signing in...', 'info');
-  }
-  window.handlePinLogin();
-};
-
-window.quickFillResident = function() {
-  if (typeof window.switchToNormalLoginMode === 'function') {
-    window.switchToNormalLoginMode();
-  }
-  const phoneInput = document.getElementById('loginPhoneInput');
-  const pinInput = document.getElementById('loginPinInput');
-  if (phoneInput) phoneInput.value = '9876543212';
-  if (pinInput) pinInput.value = '1234';
-  if (typeof showToast === 'function') {
-    showToast('🏠 Resident (Flat A-101 · PIN 1234) filled. Signing in...', 'info');
-  }
-  window.handlePinLogin();
-};
-
-window.quickFillSuperAdmin = function() {
-  if (typeof window.switchToNormalLoginMode === 'function') {
-    window.switchToNormalLoginMode();
-  }
-  const phoneInput = document.getElementById('loginPhoneInput');
-  const pinInput = document.getElementById('loginPinInput');
-  if (phoneInput) phoneInput.value = '8219587657';
-  if (pinInput) pinInput.value = '1234';
-  if (typeof showToast === 'function') {
-    showToast('Super Admin (8219587657) & PIN filled. Signing in...', 'info');
-  }
-  window.handlePinLogin();
-};
-
-window.quickFillStaff = function() {
-  if (typeof window.switchToNormalLoginMode === 'function') {
-    window.switchToNormalLoginMode();
-  }
-  const phoneInput = document.getElementById('loginPhoneInput') || document.getElementById('resPhoneInput');
-  const pinInput = document.getElementById('loginPinInput') || document.getElementById('resPinInput');
-  if (phoneInput) phoneInput.value = '9876543210';
-  if (pinInput) pinInput.value = '1234';
-  if (typeof showToast === 'function') {
-    showToast('👮 Security Guard Ram Singh (Gate 1 · PIN 1234) filled. Signing in...', 'info');
-  }
-  window.handlePinLogin();
 };
 
 window.handlePinLogin = async function() {
@@ -1286,35 +1203,8 @@ var WIZARD_STEPS = [
 ];
 
 window.getOnboardingState = function() {
-  const saved = localStorage.getItem('rwa_onboarding_draft');
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      // Discard legacy mock seeds
-      if (parsed?.society?.name === 'Sector 22 Residents Welfare Association' || parsed?.admin?.name === 'Rajesh Kumar') {
-        localStorage.removeItem('rwa_onboarding_draft');
-      } else if (parsed && parsed.admin && parsed.society && parsed.structure) {
-        // If user selected Cooperative Group Housing (CGHS), but blocks are still old default "Tower A" (10 floors), auto-adapt to CGHS
-        if (parsed.society.housingType === 'Cooperative Group Housing (CGHS)' && 
-            parsed.structure.blocks && 
-            parsed.structure.blocks.length > 0 && 
-            parsed.structure.blocks[0].name.toLowerCase().includes('tower')) {
-          parsed.structure.blocks = [
-            { id: 'b1', name: 'Block A', floors: 4, unitsPerFloor: 2, unitPrefix: 'A-', defaultType: 'Category A (3 BHK)', areaSqft: 1850 },
-            { id: 'b2', name: 'Block B', floors: 4, unitsPerFloor: 2, unitPrefix: 'B-', defaultType: 'Category A (3 BHK)', areaSqft: 1850 },
-            { id: 'b3', name: 'Block C', floors: 4, unitsPerFloor: 2, unitPrefix: 'C-', defaultType: 'Category B (2 BHK)', areaSqft: 1350 },
-            { id: 'b4', name: 'Block D', floors: 4, unitsPerFloor: 2, unitPrefix: 'D-', defaultType: 'Category B (2 BHK)', areaSqft: 1350 }
-          ];
-          parsed.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
-          parsed.structure.generateShareCert = true;
-          parsed.structure.shareCertPrefix = 'SC-';
-          window.recomputeStructureUnits(parsed);
-          window.saveOnboardingState(parsed);
-        }
-        return parsed;
-      }
-    } catch (e) {}
-  }
+  if (window.__onboardingState) return window.__onboardingState;
+  try { localStorage.removeItem('rwa_onboarding_draft'); } catch (e) {}
 
   const defaultState = {
     admin: {
@@ -1323,16 +1213,16 @@ window.getOnboardingState = function() {
       email: '',
       pin: '',
       password: '',
-      designation: 'President & Admin'
+      designation: ''
     },
     society: {
       name: '',
       registrationNo: '',
       authority: '',
-      housingType: 'Cooperative Group Housing (CGHS)',
+      housingType: '',
       address: '',
-      city: 'Chandigarh',
-      state: 'Chandigarh (UT)',
+      city: '',
+      state: '',
       pincode: ''
     },
     structure: {
@@ -1368,13 +1258,12 @@ window.getOnboardingState = function() {
   };
 
   window.recomputeStructureUnits(defaultState);
+  window.__onboardingState = defaultState;
   return defaultState;
 };
 
 window.saveOnboardingState = function(state) {
-  try {
-    localStorage.setItem('rwa_onboarding_draft', JSON.stringify(state));
-  } catch (e) {}
+  window.__onboardingState = state;
 };
 
 window.updateWizField = function(section, key, val) {
@@ -2144,6 +2033,7 @@ window.submitSocietyOnboarding = async function() {
     }
 
     localStorage.removeItem('rwa_onboarding_draft');
+    window.__onboardingState = null;
 
     showToast(`🎉 Congratulations! ${state.society.name} has been launched successfully in the database!`, 'success');
     setTimeout(() => {
@@ -2210,6 +2100,7 @@ window.wizardNextStep = function(currentStep) {
 window.resetOnboardingDraft = function() {
   if (confirm('Start fresh with a clean society registration form?')) {
     localStorage.removeItem('rwa_onboarding_draft');
+    window.__onboardingState = null;
     showToast('Onboarding form reset to blank', 'info');
     Router.go('onboarding-1');
   }
@@ -2219,40 +2110,23 @@ window.resetOnboardingDraft = function() {
 function wizardLayout(step, content) {
   const steps = WIZARD_STEPS;
   const progressPercent = Math.round((step / steps.length) * 100);
-  const stepIcons = ['🏛️', '🏢', '👥', '⚖️', '🚀'];
+  const stepIcons = ['1', '2', '3', '4', '5'];
 
   return `
     <div class="wizard-screen fade-in" id="cutoraWizardContainer">
-      <!-- Motion: 4s seamless upward glide video loop like Auth page -->
-      <video
-        id="wizHeroVideo"
-        class="cutora-video-layer"
-        autoplay
-        loop
-        muted
-        playsinline
-        preload="auto"
-      >
-        <source src="/cutora-motion.mp4" type="video/mp4" />
-        <source src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/197f7e27-faac-4bdc-916c-615ac962bf86.mp4" type="video/mp4" />
-      </video>
-
-      <!-- Warm Cinematic Overlay matching Auth page -->
-      <div class="cutora-overlay" style="z-index: 2; pointer-events: none; background: radial-gradient(circle at 50% 30%, rgba(20, 10, 0, 0.42) 0%, rgba(10, 5, 0, 0.72) 100%), linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, transparent 220px, rgba(20, 10, 0, 0.52) 100%);"></div>
-
       <div class="wizard-header">
         <div class="wizard-header-main">
           <div class="wizard-brand">
-            <div class="wizard-brand-icon">🏛️</div>
+            ${window.rwaLogoHtml('wizard-brand-icon')}
             <div>
               <div class="wizard-brand-title">
-                <span>Cutora</span>
+                <span>RWA</span>
                 <span class="wizard-brand-badge">Launch Studio</span>
               </div>
               <div class="wizard-brand-sub">
                 <span>Society Onboarding</span>
                 <span>·</span>
-                <span style="color:#B45309;font-weight:700;">${progressPercent}% Complete</span>
+                <span class="wizard-progress-label">${progressPercent}% complete</span>
               </div>
             </div>
           </div>
@@ -2274,7 +2148,6 @@ function wizardLayout(step, content) {
 
           <div class="wizard-header-actions">
             <button class="btn btn-ghost btn-sm wiz-header-btn" onclick="resetOnboardingDraft()" title="Clear form & start over">
-              <span class="wiz-btn-icon">🔄</span>
               <span class="wiz-btn-label">Reset</span>
             </button>
             <button class="btn btn-ghost btn-sm wiz-header-btn" onclick="Router.go('auth-login')" title="Exit onboarding">
@@ -2304,18 +2177,17 @@ function wizardLayout(step, content) {
 
       <div class="wizard-footer">
         <div class="wizard-footer-step-text" style="display:flex;align-items:center;gap:8px;">
-          <span class="badge" style="background:rgba(245,154,8,0.12);color:#B45309;border:1px solid rgba(245,154,8,0.3);font-size:11px;font-weight:700;">Step ${step} of ${steps.length}</span>
+          <span class="wizard-progress-label">Step ${step} of ${steps.length}</span>
           <span style="font-weight:700;color:var(--text-primary);">${steps[step-1]}</span>
         </div>
         <div class="wizard-footer-actions">
           ${step > 1 ? `<button class="btn btn-secondary" onclick="Router.go('onboarding-${step-1}')" style="padding:10px 18px;font-weight:600;">← Back</button>` : '<div></div>'}
           ${step < steps.length ? `
-            <button class="btn btn-primary" onclick="window.wizardNextStep(${step})" style="padding:10px 24px;font-weight:700;gap:8px;background:linear-gradient(135deg, #111827 0%, #1F2937 100%);color:#F59A08;border:1px solid rgba(245,154,8,0.4);box-shadow:0 4px 14px rgba(0,0,0,0.15);">
+            <button class="btn btn-primary wiz-next-btn" onclick="window.wizardNextStep(${step})">
               <span>Continue to Step ${step+1}</span>
-              <span>→</span>
             </button>
           ` : `
-            <button id="launchFooterBtn" class="btn btn-primary" onclick="submitSocietyOnboarding()" style="font-weight:800;padding:11px 26px;gap:8px;background:linear-gradient(135deg, #111827 0%, #1F2937 100%);color:#F59A08;border:1px solid rgba(245,154,8,0.45);box-shadow:0 6px 18px rgba(0,0,0,0.18);">
+            <button id="launchFooterBtn" class="btn btn-primary wiz-next-btn" onclick="submitSocietyOnboarding()">
               <span class="btn-text-desktop">🚀 Launch Society & Go to Admin Dashboard</span>
               <span class="btn-text-mobile">🚀 Launch Society</span>
             </button>
@@ -2371,7 +2243,7 @@ Screens['onboarding-1'] = function() {
         <h2 style="margin-bottom:4px;">Society & Admin Profile</h2>
         <p class="wiz-desc" style="margin-bottom:0;">Register your official RWA society details and configure the primary administrator account with bank-grade PIN security.</p>
       </div>
-      <div class="badge" style="background:rgba(245,154,8,0.12);color:#B45309;border:1px solid rgba(245,154,8,0.3);font-size:12px;padding:6px 12px;font-weight:800;">✨ Step 1 of 5 · Society & Security Setup</div>
+      <div class="wizard-progress-label">Step 1 of 5 · Society and security</div>
     </div>
 
     <div class="onboarding-grid-2" style="margin-top:16px;">
@@ -2412,8 +2284,9 @@ Screens['onboarding-1'] = function() {
 
         <div class="form-group">
           <label class="form-label" style="font-weight:600;">Housing Layout Type *</label>
-          <select id="wizHousingType" class="form-select" style="width:100%;font-weight:600;" onchange="handleHousingTypeSelect(this.value)">
-            <option value="Cooperative Group Housing (CGHS)" ${state.society.housingType === 'Cooperative Group Housing (CGHS)' ? 'selected' : ''}>🏛️ Cooperative Group Housing (CGHS)</option>
+            <select id="wizHousingType" class="form-select" style="width:100%;font-weight:600;" onchange="handleHousingTypeSelect(this.value)">
+            <option value="" ${!state.society.housingType ? 'selected' : ''}>Select housing layout</option>
+            <option value="Cooperative Group Housing (CGHS)" ${state.society.housingType === 'Cooperative Group Housing (CGHS)' ? 'selected' : ''}>Cooperative Group Housing (CGHS)</option>
             <option value="Multi-Tower Apartments" ${state.society.housingType === 'Multi-Tower Apartments' ? 'selected' : ''}>🏢 Multi-Tower High-Rise Apartments</option>
             <option value="Plotted / Villa Colony" ${state.society.housingType === 'Plotted / Villa Colony' ? 'selected' : ''}>🏘️ Plotted / Villa Gated Colony</option>
             <option value="CHB Housing Complex" ${state.society.housingType === 'CHB Housing Complex' ? 'selected' : ''}>🏢 CHB Multi-Pocket Flats</option>
@@ -2446,6 +2319,7 @@ Screens['onboarding-1'] = function() {
           <div class="form-group">
             <label class="form-label">City / Jurisdiction *</label>
             <select id="wizCity" class="form-select" style="width:100%;" onchange="handleCitySelect(this.value)">
+              <option value="" ${!state.society.city ? 'selected' : ''}>Select city</option>
               <option value="Chandigarh" ${state.society.city === 'Chandigarh' ? 'selected' : ''}>Chandigarh (UT)</option>
               <option value="Mohali" ${state.society.city === 'Mohali' ? 'selected' : ''}>Mohali (Punjab - GMADA)</option>
               <option value="Panchkula" ${state.society.city === 'Panchkula' ? 'selected' : ''}>Panchkula (Haryana - HUDA)</option>
@@ -2609,6 +2483,7 @@ Screens['onboarding-1'] = function() {
           <div class="form-group">
             <label class="form-label">Admin Role / Title *</label>
             <select id="wizAdminRole" class="form-select" style="width:100%;font-weight:600;" onchange="handleAdminRoleSelect(this.value)">
+              <option value="" ${!state.admin.designation ? 'selected' : ''}>Select role</option>
               <option value="President & Admin" ${state.admin.designation === 'President & Admin' ? 'selected' : ''}>RWA President</option>
               <option value="General Secretary" ${state.admin.designation === 'General Secretary' ? 'selected' : ''}>General Secretary</option>
               <option value="Treasurer" ${state.admin.designation === 'Treasurer' ? 'selected' : ''}>Treasurer</option>

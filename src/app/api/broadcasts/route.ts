@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -41,7 +41,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ broadcasts: [], stats: { totalBroadcasts: 0, totalSent: 0, totalDelivered: 0, totalRead: 0, totalFailed: 0, deliveryRate: 0 } })
+    const orgId = user.organizationId
     const broadcasts = getStoredBroadcasts(orgId)
 
     // Calculate live KPI stats
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
 
     // Determine targeted recipient cohort
     let targetUsers: any[] = []
-    let audienceLabel = 'All Residents (342)'
+    let audienceLabel = 'All Residents'
 
     if (audience === 'DEFAULTERS_ONLY') {
       audienceLabel = 'Defaulters Only'
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
         select: { id: true, name: true, phone: true },
       })
-      audienceLabel = `Defaulters Only (${targetUsers.length || 111})`
+      audienceLabel = `Defaulters Only (${targetUsers.length})`
     } else if (audience === 'OWNERS_ONLY') {
       audienceLabel = 'Flat Owners Only'
       const ownerUnits = await prisma.unit.findMany({
@@ -116,10 +117,10 @@ export async function POST(request: Request) {
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
         select: { id: true, name: true, phone: true },
       })
-      audienceLabel = `Owners Only (${targetUsers.length || 314})`
+      audienceLabel = `Owners Only (${targetUsers.length})`
     } else if (audience === 'TENANTS_ONLY') {
       const tenantUnits = await prisma.unit.findMany({
-        where: { organizationId: orgId, occupancyStatus: 'TENANT_OCCUPIED' },
+        where: { organizationId: orgId, occupancyStatus: { in: ['TENANT_OCCUPIED', 'TENANTED'] } },
         select: { id: true },
       })
       const unitIds = tenantUnits.map((u) => u.id)
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
         select: { id: true, name: true, phone: true },
       })
-      audienceLabel = `Tenants Only (${targetUsers.length || 28})`
+      audienceLabel = `Tenants Only (${targetUsers.length})`
     } else if (audience === 'BLOCK_A') {
       audienceLabel = 'Block A Residents'
       const blockA = await prisma.block.findFirst({
@@ -139,45 +140,32 @@ export async function POST(request: Request) {
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
         select: { id: true, name: true, phone: true },
       })
-      audienceLabel = `Block A Residents (${targetUsers.length || 108})`
+      audienceLabel = `Block A Residents (${targetUsers.length})`
     } else {
       // ALL_RESIDENTS
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, status: 'ACTIVE' },
         select: { id: true, name: true, phone: true },
       })
-      audienceLabel = `All Residents (${targetUsers.length || 342})`
+      audienceLabel = `All Residents (${targetUsers.length})`
     }
 
-    const sentCount = targetUsers.length > 0 ? targetUsers.length : 342
-    const deliveredCount = Math.max(1, sentCount - Math.floor(Math.random() * 3))
-    const failedCount = sentCount - deliveredCount
+    const sentCount = targetUsers.length
+    const deliveredCount = sentCount
+    const failedCount = 0
 
-    // Create real notifications in database if In-App channel is selected
-    if (channels.includes('In-App') || channels.includes('IN_APP')) {
-      if (targetUsers.length > 0) {
-        await prisma.notification.createMany({
-          data: targetUsers.map((u) => ({
-            organizationId: orgId,
-            userId: u.id,
-            title: `📡 ${title}`,
-            message: message.substring(0, 150) + (message.length > 150 ? '...' : ''),
-            type: priority === 'URGENT' ? 'ALERT' : 'INFO',
-            referenceType: 'BROADCAST',
-          })),
-        })
-      }
+    if ((channels.includes('In-App') || channels.includes('IN_APP')) && targetUsers.length > 0) {
+      await notifyUsers({
+        orgId,
+        userIds: targetUsers.map((u) => u.id),
+        title: `📡 ${title}`,
+        message,
+        type: priority === 'URGENT' ? 'ALERT' : 'INFO',
+        event: 'new-broadcast',
+        referenceType: 'BROADCAST',
+        data: { title, message, audience: audienceLabel, channels, priority },
+      })
     }
-
-    // Broadcast live WebSocket event
-    emitLiveSocketEvent('new-broadcast', {
-      title,
-      message,
-      audience: audienceLabel,
-      channels,
-      priority,
-      sentAt: new Date(),
-    }, { orgId })
 
     // Save into broadcast history store
     const broadcasts = getStoredBroadcasts(orgId)

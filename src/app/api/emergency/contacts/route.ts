@@ -240,7 +240,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ success: true, contacts: [], metrics: {} })
+    const orgId = user.organizationId
     let contacts = await prisma.emergencyContact.findMany({
       where: { organizationId: orgId },
       orderBy: [
@@ -250,18 +251,7 @@ export async function GET(request: Request) {
       ],
     })
 
-    // If no contacts exist yet for this society, seed default committee + emergency contacts
-    if (contacts.length === 0) {
-      await seedDefaultEmergencyContacts(orgId)
-      contacts = await prisma.emergencyContact.findMany({
-        where: { organizationId: orgId },
-        orderBy: [
-          { isPriority: 'desc' },
-          { order: 'asc' },
-          { createdAt: 'asc' },
-        ],
-      })
-    }
+    // An empty list stays empty until the society adds real contacts.
 
     const metrics = {
       total: contacts.length,

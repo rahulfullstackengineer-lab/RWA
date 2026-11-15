@@ -31,33 +31,21 @@ Screens['resident-login'] = function() {
   const lastPhone = (typeof localStorage !== 'undefined' && localStorage.getItem('rwa_login_phone')) || '';
 
   return `
-    <div class="cutora-auth-screen resident-mode fade-in" id="cutoraResidentContainer">
-      <!-- Motion: 4s seamless upward glide loop -->
-      <video
-        id="resHeroVideo"
-        class="cutora-video-layer"
-        autoplay
-        loop
-        muted
-        playsinline
-        preload="auto"
-      >
-        <source src="/cutora-motion.mp4" type="video/mp4" />
-        <source src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/197f7e27-faac-4bdc-916c-615ac962bf86.mp4" type="video/mp4" />
-      </video>
-
-      <!-- Readability: 150u left wash, 140u top wash, 420u warm bottom wash with subtle emerald tone -->
-      <div class="cutora-overlay" style="background:linear-gradient(90deg, rgba(6, 78, 59, 0.6) 0%, rgba(0, 0, 0, 0.35) calc(150 * var(--u)), transparent calc(450 * var(--u))), linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.2) calc(140 * var(--u)), transparent calc(300 * var(--u))), linear-gradient(0deg, rgba(6, 78, 59, 0.42) 0%, transparent calc(420 * var(--u)));"></div>
+    <div class="cutora-auth-screen cutora-auth-modern resident-mode fade-in" id="cutoraResidentContainer">
+      <div class="cutora-modern-bg" aria-hidden="true">
+        <span class="cutora-orb cutora-orb-amber"></span>
+        <span class="cutora-orb cutora-orb-blue"></span>
+        <span class="cutora-orb cutora-orb-violet"></span>
+      </div>
+      <div class="cutora-overlay"></div>
 
       <!-- Hero Column (Left, White Typography) -->
       <div class="cutora-hero-col">
         <!-- Top Bar (57u from top, 92.5u from left) -->
         <div class="cutora-topbar">
           <div class="cutora-brand" onclick="Router.go('resident-login')">
-            <div class="cutora-brand-tile" style="background:#064E3B;border:1px solid rgba(52,211,153,0.3);">
-              <span class="cutora-brand-glyph">🏠</span>
-            </div>
-            <span class="cutora-brand-text">Cutora · Resident</span>
+            ${window.rwaLogoHtml()}
+            <span class="cutora-brand-text">RWA</span>
           </div>
 
           <a class="cutora-top-link" onclick="Router.go('auth-login')" title="Open RWA Admin Portal">
@@ -152,10 +140,7 @@ Screens['resident-login'] = function() {
           <div id="resCutoraFormBody">
             <!-- 4-to-6 Digit Security PIN Field -->
             <div class="cutora-field-group">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-                <label class="cutora-label" for="resPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-                <a class="cutora-forgot-link" onclick="window.handleResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;color:#059669;">Set / Reset PIN</a>
-              </div>
+              <label class="cutora-label" for="resPinInput">4-to-6 Digit Security PIN</label>
               <div class="cutora-input-box">
                 <div class="cutora-country-code" style="color:#059669;font-weight:700;">🔒 PIN</div>
                 <input
@@ -517,10 +502,7 @@ window.switchToResidentNormalLoginMode = function() {
   body.innerHTML = `
     <!-- 4-to-6 Digit Security PIN Field -->
     <div class="cutora-field-group">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(6 * var(--u));">
-        <label class="cutora-label" for="resPinInput" style="margin-bottom:0;">4-to-6 Digit Security PIN</label>
-        <a class="cutora-forgot-link" onclick="window.handleResetPinModal()" style="font-size:calc(12.5 * var(--u));cursor:pointer;color:#059669;">Set / Reset PIN</a>
-      </div>
+      <label class="cutora-label" for="resPinInput">4-to-6 Digit Security PIN</label>
       <div class="cutora-input-box">
         <div class="cutora-country-code" style="color:#059669;font-weight:700;">🔒 PIN</div>
         <input
@@ -738,7 +720,7 @@ window.handleResidentPinLogin = async function() {
         window.switchToResidentRegisterMode(phone);
         return;
       }
-      showToast(data.error || 'Incorrect Security PIN. Please check and try again, or tap Set/Reset PIN.', 'warning');
+      showToast(data.error || 'Incorrect Security PIN. Please check and try again.', 'warning');
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<span>🔒 Sign In with Security PIN →</span>';
@@ -954,11 +936,7 @@ Screens['resident-onboard'] = function() {
         inset: 0;
         width: 100vw;
         height: 100vh;
-        background-color: #140A00;
-        background-image: url('/cutora-plate.jpg'), url('https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/e781b542-a83d-4cf2-a66a-44085485865d.jpg');
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
+        background: #F4F4F5;
         z-index: 500;
         display: flex;
         flex-direction: column;
@@ -985,9 +963,9 @@ Screens['resident-onboard'] = function() {
         z-index: 100 !important;
       }
       .resident-onboard-header {
-        background: var(--bg-surface);
-        border-bottom: 1px solid var(--border);
-        padding: 14px 24px;
+        background: #FFFFFF;
+        border-bottom: 1px solid #E4E4E7;
+        padding: 12px 20px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -995,7 +973,7 @@ Screens['resident-onboard'] = function() {
         position: sticky;
         top: 0;
         z-index: 20;
-        box-shadow: var(--shadow-xs);
+        box-shadow: none;
       }
       .header-main-bar {
         display: flex;
@@ -1023,16 +1001,16 @@ Screens['resident-onboard'] = function() {
       }
       .resident-onboard-main {
         flex: 1;
-        max-width: 1080px;
         width: 100%;
-        margin: 22px auto 70px;
+        max-width: none;
+        margin: 16px 0 32px;
         padding: 0 20px;
         box-sizing: border-box;
       }
       .resident-onboard-grid {
         display: grid;
-        grid-template-columns: 360px 1fr;
-        gap: 24px;
+        grid-template-columns: minmax(280px, 380px) 1fr;
+        gap: 16px;
         align-items: start;
       }
       .resident-onboard-sidebar {
@@ -1043,11 +1021,11 @@ Screens['resident-onboard'] = function() {
         gap: 16px;
       }
       .resident-onboard-form-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border);
-        border-radius: var(--r-xl);
-        padding: 28px;
-        box-shadow: var(--shadow-sm);
+        background: #FFFFFF;
+        border: 1px solid #E4E4E7;
+        border-radius: 2px;
+        padding: 24px;
+        box-shadow: none;
         display: flex;
         flex-direction: column;
         gap: 20px;
@@ -1061,25 +1039,58 @@ Screens['resident-onboard'] = function() {
         gap: 14px;
       }
       .occupancy-radio-card {
-        border: 1.5px solid var(--border);
-        border-radius: var(--r-md);
+        border: 1px solid #E4E4E7;
+        border-radius: 2px;
         padding: 13px 14px;
         display: flex;
         align-items: center;
         gap: 12px;
         cursor: pointer;
-        background: var(--bg-surface);
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        background: #FFFFFF;
+        transition: border-color 0.15s ease, background 0.15s ease;
         user-select: none;
       }
       .occupancy-radio-card:hover {
-        border-color: var(--green);
-        background: var(--bg-hover);
+        border-color: #18181B;
+        background: #FAFAFA;
       }
       .occupancy-radio-card.active {
-        border-color: var(--green);
-        background: var(--green-light);
-        box-shadow: 0 0 0 1px var(--green);
+        border-color: #18181B;
+        background: #F4F4F5;
+        box-shadow: none;
+      }
+      .resident-onboard-screen .form-input,
+      .resident-onboard-screen .form-select {
+        border: 1px solid #E4E4E7 !important;
+        border-radius: 2px !important;
+        background: #FFFFFF;
+        color: #18181B;
+        box-shadow: none;
+      }
+      .resident-onboard-screen .form-input:focus,
+      .resident-onboard-screen .form-select:focus {
+        border-color: #18181B !important;
+        outline: none;
+      }
+      .resident-onboard-header .btn {
+        border-radius: 2px !important;
+        border: 1px solid #E4E4E7 !important;
+        background: #FFFFFF !important;
+        color: #18181B !important;
+        box-shadow: none !important;
+      }
+      .onboard-step-num {
+        width: 26px;
+        height: 26px;
+        border-radius: 2px;
+        background: #18181B;
+        color: #FFFFFF;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        flex-shrink: 0;
       }
 
       @media (max-width: 860px) {
@@ -1155,15 +1166,13 @@ Screens['resident-onboard'] = function() {
       <header class="resident-onboard-header">
         <div class="header-main-bar">
           <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-            <div style="width:34px;height:34px;background:#10B981;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;color:#fff;box-shadow:0 4px 12px rgba(16,185,129,0.3);flex-shrink:0;">
-              🏠
-            </div>
+            ${window.rwaLogoHtml()}
             <div style="min-width:0;">
-              <div style="font-size:14px;font-weight:800;color:var(--text-primary);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                RWA Resident Portal
+              <div style="font-size:14px;font-weight:650;color:#18181B;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                RWA
               </div>
-              <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                ${isAlreadyConnected ? 'Change Society Flat' : 'Flat Onboarding'}
+              <div style="font-size:11px;color:#71717A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                ${isAlreadyConnected ? 'Change flat' : 'Flat setup'}
               </div>
             </div>
           </div>
@@ -1182,14 +1191,13 @@ Screens['resident-onboard'] = function() {
         </div>
 
         <div class="header-meta-bar">
-          <span class="badge badge-green" style="font-size:10px;padding:3px 8px;">
-            ${isAlreadyConnected ? '🔄 Switch Flat' : '✨ First-Time Setup'}
+          <span style="font-size:11px;font-weight:600;padding:3px 8px;background:#F4F4F5;color:#3F3F46;border:1px solid #E4E4E7;border-radius:2px;">
+            ${isAlreadyConnected ? 'Switch flat' : 'First-time setup'}
           </span>
 
-          <div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-full);padding:3px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;">
-            <span style="color:var(--green);font-size:11px;">●</span>
-            <span style="color:var(--text-muted)">Verified:</span>
-            <strong style="color:var(--text-primary)">+91 ${userPhone || '—'}</strong>
+          <div style="background:#FFFFFF;border:1px solid #E4E4E7;border-radius:2px;padding:3px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;color:#18181B;">
+            <span style="color:#71717A">Verified</span>
+            <strong>+91 ${userPhone || '—'}</strong>
           </div>
         </div>
       </header>
@@ -1223,67 +1231,47 @@ Screens['resident-onboard'] = function() {
           <div class="resident-onboard-sidebar">
             
             <!-- Digital Flat Card -->
-            <div class="digital-card-inner" style="background:linear-gradient(145deg, #064E3B 0%, #065F46 50%, #047857 100%);border-radius:var(--r-xl);padding:20px 18px;color:#FFFFFF;box-shadow:0 10px 28px -4px rgba(6,95,70,0.35);position:relative;overflow:hidden;border:1px solid rgba(255,255,255,0.12);">
-              <div style="position:absolute;top:-40px;right:-40px;width:120px;height:120px;background:rgba(52,211,153,0.25);border-radius:50%;filter:blur(30px);pointer-events:none;"></div>
-
+            <div class="digital-card-inner" style="background:#FFFFFF;border-radius:2px;padding:16px;color:#18181B;box-shadow:none;position:relative;overflow:hidden;border:1px solid #E4E4E7;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;">
-                <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                  <div style="width:30px;height:30px;background:rgba(255,255,255,0.18);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">
-                    🏢
-                  </div>
-                  <div style="min-width:0;">
-                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.8px;color:#A7F3D0;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                      Digital Flat Card
-                    </div>
-                    <div style="font-size:10px;color:#D1FAE5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                      Real-Time Roster Preview
-                    </div>
-                  </div>
+                <div style="min-width:0;">
+                  <div style="font-size:13px;font-weight:650;color:#18181B;">Flat preview</div>
+                  <div style="font-size:11px;color:#71717A;">Updates as you choose a society and flat</div>
                 </div>
-                <span class="badge badge-green" id="summaryRoleBadge" style="font-size:10px;padding:3px 8px;background:rgba(255,255,255,0.2);color:#FFFFFF;border:1px solid rgba(255,255,255,0.3);flex-shrink:0;">
-                  🏡 Flat Owner
+                <span id="summaryRoleBadge" style="font-size:11px;padding:3px 8px;background:#F4F4F5;color:#18181B;border:1px solid #E4E4E7;border-radius:2px;flex-shrink:0;">
+                  Flat owner
                 </span>
               </div>
 
-              <!-- Big Unit Display -->
-              <div style="background:rgba(0,0,0,0.22);border-radius:var(--r-md);padding:12px 14px;border:1px solid rgba(255,255,255,0.12);margin-bottom:12px;">
-                <div style="font-size:10px;color:#A7F3D0;font-weight:600;margin-bottom:2px;">Registered Residence</div>
-                <div id="summaryUnitDisplay" class="digital-unit-text" style="font-size:22px;font-weight:800;color:#34D399;letter-spacing:-0.02em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  Select Your Flat
+              <div style="background:#F4F4F5;border-radius:2px;padding:12px 14px;border:1px solid #E4E4E7;margin-bottom:12px;">
+                <div style="font-size:11px;color:#71717A;font-weight:600;margin-bottom:2px;">Registered residence</div>
+                <div id="summaryUnitDisplay" class="digital-unit-text" style="font-size:22px;font-weight:650;color:#18181B;letter-spacing:-0.02em;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  Select your flat
                 </div>
-                <div id="summaryBlockName" style="font-size:12px;color:#D1FAE5;margin-top:2px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                  All Towers / Blocks
+                <div id="summaryBlockName" style="font-size:12px;color:#52525B;margin-top:2px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  All towers / blocks
                 </div>
               </div>
 
-              <!-- Society & Contact Meta -->
-              <div style="display:flex;flex-direction:column;gap:6px;font-size:11px;border-top:1px solid rgba(255,255,255,0.15);padding-top:10px;">
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;border-top:1px solid #E4E4E7;padding-top:10px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                  <span style="color:#A7F3D0;flex-shrink:0;">Society:</span>
-                  <strong id="summarySocietyName" style="color:#FFFFFF;max-width:170px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Choose Society...</strong>
+                  <span style="color:#71717A;flex-shrink:0;">Society</span>
+                  <strong id="summarySocietyName" style="color:#18181B;max-width:180px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">Choose society</strong>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-                  <span style="color:#A7F3D0;flex-shrink:0;">Verified Phone:</span>
-                  <strong style="color:#FFFFFF;white-space:nowrap;">+91 ${userPhone || '—'}</strong>
+                  <span style="color:#71717A;flex-shrink:0;">Phone</span>
+                  <strong style="color:#18181B;white-space:nowrap;font-weight:600;">+91 ${userPhone || '—'}</strong>
                 </div>
               </div>
             </div>
 
-            <!-- Verification & Safety Badges -->
-            <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-xs);">
-              <div style="display:flex;align-items:flex-start;gap:8px;">
-                <span style="font-size:16px;flex-shrink:0;">🛡️</span>
-                <div style="font-size:11px;color:var(--text-secondary);line-height:1.4;">
-                  <strong style="color:var(--text-primary);display:block;margin-bottom:1px;">Verified Roster Sync</strong>
-                  Your mobile number will be mapped directly to this flat in the society master database.
-                </div>
+            <div style="background:#FFFFFF;border:1px solid #E4E4E7;border-radius:2px;padding:14px;display:flex;flex-direction:column;gap:12px;">
+              <div style="font-size:12px;color:#52525B;line-height:1.45;">
+                <strong style="color:#18181B;display:block;margin-bottom:2px;font-weight:650;">Roster sync</strong>
+                Your mobile number is mapped to this flat in the society register.
               </div>
-              <div style="display:flex;align-items:flex-start;gap:8px;">
-                <span style="font-size:16px;flex-shrink:0;">🔔</span>
-                <div style="font-size:11px;color:var(--text-secondary);line-height:1.4;">
-                  <strong style="color:var(--text-primary);display:block;margin-bottom:1px;">Instant Admin Alert</strong>
-                  The RWA Committee receives a live notification when you connect.
-                </div>
+              <div style="font-size:12px;color:#52525B;line-height:1.45;">
+                <strong style="color:#18181B;display:block;margin-bottom:2px;font-weight:650;">Admin notice</strong>
+                The society office is notified when you connect.
               </div>
             </div>
 
@@ -1295,7 +1283,7 @@ Screens['resident-onboard'] = function() {
             <!-- Step 1: Select Society -->
             <div>
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                <span style="width:26px;height:26px;border-radius:50%;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;">1</span>
+                <span class="onboard-step-num">1</span>
                 <label class="form-label" style="font-size:14px;font-weight:700;margin-bottom:0;color:var(--text-primary);">
                   Select Your Society / Apartment Complex *
                 </label>
@@ -1313,7 +1301,7 @@ Screens['resident-onboard'] = function() {
             <!-- Step 2: Property Structure Flat Selection -->
             <div id="propertyStructureSection" style="display:none;background:var(--bg-elevated);padding:18px 16px;border-radius:var(--r-lg);border:1px solid var(--border-light);flex-direction:column;gap:14px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <span style="width:26px;height:26px;border-radius:50%;background:var(--green-light);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;">2</span>
+                <span class="onboard-step-num">2</span>
                 <div style="font-size:14px;font-weight:700;color:var(--text-primary);">
                   Flat Location in Society (Property Structure)
                 </div>
@@ -1343,7 +1331,7 @@ Screens['resident-onboard'] = function() {
                     <label class="occupancy-radio-card active" id="labelOccupancyOwner" style="padding:10px 12px;">
                       <input type="radio" name="onboardOccupancy" value="OWNER" checked onchange="handleOccupancyChange('OWNER')" style="accent-color:var(--green);width:16px;height:16px;" />
                       <div>
-                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);">🏡 Flat Owner</div>
+                        <div style="font-size:13px;font-weight:650;color:#18181B;">Flat owner</div>
                         <div style="font-size:10px;color:var(--text-muted);margin-top:1px;">I own this apartment</div>
                       </div>
                     </label>
@@ -1351,7 +1339,7 @@ Screens['resident-onboard'] = function() {
                     <label class="occupancy-radio-card" id="labelOccupancyTenant" style="padding:10px 12px;">
                       <input type="radio" name="onboardOccupancy" value="TENANT" onchange="handleOccupancyChange('TENANT')" style="accent-color:var(--green);width:16px;height:16px;" />
                       <div>
-                        <div style="font-size:13px;font-weight:700;color:var(--text-primary);">🔑 Tenant</div>
+                        <div style="font-size:13px;font-weight:650;color:#18181B;">Tenant</div>
                         <div style="font-size:10px;color:var(--text-muted);margin-top:1px;">I live here on rent</div>
                       </div>
                     </label>
@@ -1363,7 +1351,7 @@ Screens['resident-onboard'] = function() {
             <!-- Step 3: Resident Details -->
             <div id="residentDetailsSection" style="display:none;background:var(--bg-elevated);padding:18px 16px;border-radius:var(--r-lg);border:1px solid var(--border-light);flex-direction:column;gap:14px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <span style="width:26px;height:26px;border-radius:50%;background:var(--amber-light);color:var(--amber);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;">3</span>
+                <span class="onboard-step-num">3</span>
                 <div style="font-size:14px;font-weight:700;color:var(--text-primary);">
                   Resident Contact Information
                 </div>
@@ -1390,8 +1378,8 @@ Screens['resident-onboard'] = function() {
 
             <!-- Submit Section -->
             <div id="submitSection" style="display:none;margin-top:6px;">
-              <button id="btnConnectFlatSubmit" class="btn btn-primary w-full" style="justify-content:center;padding:14px 16px;font-size:15px;font-weight:800;background:var(--green);border-color:var(--green);box-shadow:0 6px 20px rgba(16,185,129,0.35);border-radius:var(--r-md);transition:all 0.2s;" onclick="submitResidentFlatConnection()">
-                🚀 Connect to Flat & Enter Society Portal →
+              <button id="btnConnectFlatSubmit" class="btn btn-primary w-full" style="justify-content:center;padding:12px 16px;font-size:14px;font-weight:650;background:#18181B;border-color:#18181B;color:#FFFFFF;box-shadow:none;border-radius:2px;" onclick="submitResidentFlatConnection()">
+                Connect flat and open the portal
               </button>
               
               <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;flex-wrap:wrap;text-align:center;">
@@ -1590,13 +1578,13 @@ function updateLiveSummary() {
   
   const sumUnitDisplay = document.getElementById('summaryUnitDisplay');
   if (sumUnitDisplay) {
-    sumUnitDisplay.textContent = unitText ? unitText : 'Select Your Flat';
-    sumUnitDisplay.style.color = unitText ? '#FFFFFF' : '#34D399';
+    sumUnitDisplay.textContent = unitText ? unitText : 'Select your flat';
+    sumUnitDisplay.style.color = '#18181B';
   }
   
   const sumRole = document.getElementById('summaryRoleBadge');
   if (sumRole) {
-    sumRole.textContent = role === 'OWNER' ? '🏡 Flat Owner' : '🔑 Tenant';
+    sumRole.textContent = role === 'OWNER' ? 'Flat owner' : 'Tenant';
   }
 }
 

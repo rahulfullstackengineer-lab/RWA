@@ -188,47 +188,13 @@ export async function requireAuth(request: Request) {
       } catch {}
 
       const requestedOrg = headerOrg || cookieOrg || urlOrg
-
-      if (requestedOrg && (!user.organizationId || user.role === 'PLATFORM_ADMIN')) {
+      const platformRoles = ['PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
+      if (requestedOrg && platformRoles.includes(user.role)) {
         (user as any).organizationId = requestedOrg
-      } else if (!user.organizationId) {
-        const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-        if (firstOrg) {
-          (user as any).organizationId = firstOrg.id
-        }
       }
 
       return { user, error: null }
     }
-  }
-
-  // Development Fallback: Check for explicit active organization header or cookie
-  if (process.env.NODE_ENV !== 'production') {
-    const cookieHeader = request.headers.get('cookie')
-    let activeOrgId: string | null = request.headers.get('x-active-org-id')
-
-    if (!activeOrgId && cookieHeader) {
-      const cookies = Object.fromEntries(
-        cookieHeader.split('; ').map(c => c.split('=').map(decodeURIComponent))
-      )
-      activeOrgId = cookies['rwa_active_org_id'] || null
-    }
-
-    if (activeOrgId) {
-      const orgUser = await prisma.user.findFirst({
-        where: { organizationId: activeOrgId, role: 'RWA_ADMIN' },
-        include: { organization: true, unit: true },
-      })
-      if (orgUser) return { user: orgUser, error: null }
-    }
-
-    // Default to the most recently registered RWA_ADMIN
-    const recentUser = await prisma.user.findFirst({
-      where: { role: 'RWA_ADMIN' },
-      include: { organization: true, unit: true },
-      orderBy: { createdAt: 'desc' },
-    })
-    if (recentUser) return { user: recentUser, error: null }
   }
 
   return { user: null, error: 'Unauthorized — please sign in' }
@@ -250,8 +216,7 @@ export async function requirePlatformAdmin(request: Request) {
   const { user, error } = await requireAuth(request)
   if (error || !user) return { user: null, error: error || 'Unauthorized' }
 
-  // Strictly enforce 8219587657 or PLATFORM_ADMIN
-  const isSuperAdmin = user.phone === '8219587657' || user.role === 'PLATFORM_ADMIN'
+  const isSuperAdmin = user.role === 'PLATFORM_ADMIN' || user.role === 'PLATFORM_SUPER_ADMIN'
   if (!isSuperAdmin) {
     return { user: null, error: 'Forbidden — Platform Super-Admin portal is restricted to authorized personnel only (8219587657)' }
   }

@@ -14,13 +14,9 @@ export async function GET(request: Request) {
     const blockId = searchParams.get('blockId') || undefined
     const status = searchParams.get('status') || undefined
 
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
-    if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 })
+    if (!orgId) return NextResponse.json({ units: [], blocks: [] })
 
     const [units, blocks] = await Promise.all([
       prisma.unit.findMany({
@@ -90,11 +86,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unit number is required' }, { status: 400 })
     }
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 400 })
 
@@ -119,7 +111,7 @@ export async function POST(request: Request) {
         unitType: unitType || 'FLAT_2BHK',
         floor: floor ? parseInt(floor, 10) : 1,
         areaSqft: areaSqft ? parseFloat(areaSqft) : null,
-        occupancyStatus: occupancyStatus || 'OWNER_OCCUPIED',
+        occupancyStatus: occupancyStatus || 'VACANT',
         ownerName: ownerName?.trim() || null,
         ownerPhone: ownerPhone?.trim() || null,
         ownerEmail: ownerEmail?.trim() || null,
@@ -311,8 +303,7 @@ export async function PATCH(request: Request) {
           orgId: updated.organizationId,
           timestamp: new Date().toISOString(),
         }
-        emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId: updated.organizationId })
-        emitLiveSocketEvent('resident-onboarded', socketPayload)
+        emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId: updated.organizationId, roles: ['admin'] })
       } catch (e) {
         console.warn('Unit update notification error:', e)
       }

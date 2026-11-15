@@ -15,6 +15,50 @@ function formatDashDate(d = new Date()) {
   return `${dayName}, ${monthName} ${dateNum}${suffix} ${d.getFullYear()}`;
 }
 
+function dashVideoEmbed(url) {
+  var value = String(url || '').trim();
+  var yt = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/);
+  if (yt) return 'https://www.youtube.com/embed/' + yt[1] + '?autoplay=1&mute=1&playsinline=1&rel=0';
+  var vimeo = value.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (vimeo) return 'https://player.vimeo.com/video/' + vimeo[1] + '?autoplay=1&muted=1&playsinline=1';
+  return '';
+}
+
+function dashEscapeAttr(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+var DASH_DEFAULT_VIDEO = {
+  title: 'Society video',
+  videoUrl: 'https://www.youtube.com/watch?v=Us-oZHxj-AA'
+};
+
+function paintDashHeroVideo(video) {
+  var slot = document.getElementById('dashHeroVideo');
+  if (!slot) return;
+  var chosen = video && video.videoUrl ? video : DASH_DEFAULT_VIDEO;
+  var embed = dashVideoEmbed(chosen.videoUrl);
+  if (embed) {
+    slot.innerHTML = '<iframe src="' + dashEscapeAttr(embed) + '" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>';
+    return;
+  }
+  slot.innerHTML = '<video id="dashHeroVideoEl" src="' + dashEscapeAttr(chosen.videoUrl) + '" ' + (chosen.posterUrl ? 'poster="' + dashEscapeAttr(chosen.posterUrl) + '" ' : '') + 'autoplay muted playsinline loop controls></video>';
+  var player = document.getElementById('dashHeroVideoEl');
+  if (player && player.play) player.play().catch(function() {});
+}
+
+window.loadDashHeroVideo = async function() {
+  var slot = document.getElementById('dashHeroVideo');
+  if (!slot) return;
+  paintDashHeroVideo(DASH_DEFAULT_VIDEO);
+  try {
+    var res = await (window.apiFetch || fetch)('/api/platform/dashboard-video');
+    if (!res || !res.ok) return;
+    var data = await res.json();
+    if (data.active && data.active.videoUrl) paintDashHeroVideo(data.active);
+  } catch (err) {}
+};
+
 window.__dashChartType = 'donut';
 window.__dashSelectedPeriod = 'year';
 window.__dashTrendData = null;
@@ -180,6 +224,7 @@ Screens['admin-dashboard'] = function() {
     if (typeof window.loadLiveAdminDashboard === 'function' && typeof window.renderDashChart === 'function') {
       window.renderDashChart(null, 'donut');
       window.loadLiveAdminDashboard();
+      if (typeof window.loadDashHeroVideo === 'function') window.loadDashHeroVideo();
     } else if (attempts < 20) {
       setTimeout(function() { tryLoadDash(attempts + 1); }, 100);
     }
@@ -192,35 +237,21 @@ Screens['admin-dashboard'] = function() {
     title: 'Dashboard',
     portal: 'admin',
     actions: `
-      <button class="btn btn-secondary btn-sm" onclick="showToast('Active billing cycle: ' + (window.__activeBillingMonth || 'Current Month'), 'info')">📅 <span id="dashBillingCycleBtn">Live Cycle</span></button>
-      <button class="btn btn-secondary btn-sm" onclick="openBulkUpdateBillsModal()">🔄 Bulk Update</button>
-      <button class="btn btn-primary btn-sm" onclick="openGenerateBillsModal()">⚡ Generate Bills</button>
+      <button class="btn btn-secondary btn-sm" onclick="showToast('Active billing cycle: ' + (window.__activeBillingMonth || 'Current Month'), 'info')"><span id="dashBillingCycleBtn">Live Cycle</span></button>
+      <button class="btn btn-secondary btn-sm" onclick="openBulkUpdateBillsModal()">Bulk Update</button>
+      <button class="btn btn-primary btn-sm" onclick="openGenerateBillsModal()">Generate Bills</button>
     `,
     content: `
-      <!-- 1. Bento Top Dark Section: Payments & Dues Command Center (Resident Bento Architecture) -->
-      <div class="res-bento-dark-bar">
-        <div class="res-bento-dark-header">
-          <div>
-            <div class="res-bento-dark-title">
-              <span>Payments &amp; Society Ledger</span>
-            </div>
-            <div class="res-bento-dark-meta">
-              <span class="bento-unit-pill">RWA Executive Desk · Financial Overview</span>
-              <span style="font-size:12px;color:#94A3B8;font-weight:600;">🛡️ Verified RWA Administration</span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div class="bento-time-dropdown" onclick="showToast('Active billing cycle: ' + (window.__activeBillingMonth || 'Current Month'), 'info')">
-              <span>📅 <span id="dashBillingCycleBtn">Live Cycle</span></span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="Router.go('admin-payments')" style="color:#D8F833;border:1px solid rgba(216,248,51,0.3);border-radius:99px;font-size:11.5px;padding:4px 12px;font-weight:700;">
-              View Ledger ↗
-            </button>
+      <div class="dash-hero-split">
+        <div class="dash-video-card">
+          <div id="dashHeroVideo" class="dash-video-stage">
+            <div class="dash-video-empty">Loading the society video...</div>
           </div>
         </div>
 
-        <!-- 4 Bento Metric Cards inside Dark Bar -->
+      <!-- 1. Bento Top Dark Section: Payments & Dues Command Center -->
+      <div class="res-bento-dark-bar">
+        <!-- 4 Bento Metric Cards -->
         <div class="res-bento-dark-grid">
           <!-- Card 1: Neon Lime Total Collections & Instant Record Payment -->
           <div class="res-bento-neon-card" onclick="Router.go('admin-payments')">
@@ -244,70 +275,57 @@ Screens['admin-dashboard'] = function() {
           <!-- Card 2: Pending Dues -->
           <div class="res-bento-glass-card" onclick="Router.go('admin-invoices')">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Pending Dues</span>
+              <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Pending Dues</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
             <div>
-              <div id="dashPendingDuesVal" style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">₹0</div>
-              <div id="dashPendingDuesSubtext" style="font-size:11px;color:#94A3B8;margin-top:4px;">All accounts settled</div>
+              <div id="dashPendingDuesVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">₹0</div>
+              <div id="dashPendingDuesSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">All accounts settled</div>
             </div>
-            <div style="font-size:10.5px;color:#FCA5A5;font-weight:600;">Official society overdue ledger</div>
+            <div style="font-size:10.5px;color:#B91C1C;font-weight:600;">Official society overdue ledger</div>
           </div>
 
           <!-- Card 3: Active Occupancy -->
           <div class="res-bento-glass-card" onclick="Router.go('admin-units')">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Active Occupancy</span>
+              <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Active Occupancy</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
             <div>
-              <div id="dashActiveMembersVal" style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">0 / 0</div>
-              <div id="dashUnitsOccupancySubtext" style="font-size:11px;color:#94A3B8;margin-top:4px;">0 of 0 Units Occupied</div>
+              <div id="dashActiveMembersVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0 / 0</div>
+              <div id="dashUnitsOccupancySubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 of 0 Units Occupied</div>
             </div>
-            <div id="dashOccupancyRateBadge" style="font-size:10.5px;color:#86EFAC;font-weight:600;">0% Occupied</div>
+            <div id="dashOccupancyRateBadge" style="font-size:10.5px;color:#15803D;font-weight:600;">0% Occupied</div>
           </div>
 
           <!-- Card 4: Complaint Resolution -->
           <div class="res-bento-glass-card" onclick="Router.go('admin-complaints')">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Complaint Resolution</span>
+              <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Complaint Resolution</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
             <div>
-              <div id="dashOpenComplaintsVal" style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">0%</div>
-              <div id="dashUrgentComplaintsSubtext" style="font-size:11px;color:#94A3B8;margin-top:4px;">0 open · 0 resolved</div>
+              <div id="dashOpenComplaintsVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0%</div>
+              <div id="dashUrgentComplaintsSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 open · 0 resolved</div>
             </div>
-            <div style="font-size:10.5px;color:#93C5FD;font-weight:600;">24/7 SLA Facility Monitoring</div>
+            <div style="font-size:10.5px;color:#1D4ED8;font-weight:600;">24/7 SLA Facility Monitoring</div>
           </div>
         </div>
       </div>
+      </div>
 
       <!-- 2. Greeting & Quick Action Bar (Resident Portal Style) -->
-      <div class="res-action-bar-card">
-        <div style="flex:1;min-width:260px;">
-          <div id="dashGreeting" style="font-size:22px;font-weight:800;color:#0F172A;letter-spacing:-0.02em;">
-            Society Overview 👋
-          </div>
-          <div id="dashDateSubtitle" style="font-size:12.5px;color:#64748B;margin-top:3px;max-width:580px;line-height:1.45;">
-            ${formattedDate} · Smart Society Management Ecosystem
-          </div>
+      <div class="dash-toolbar">
+        <div>
+          <div id="dashGreeting" class="dash-toolbar-title">Society overview</div>
+          <div id="dashDateSubtitle" class="dash-toolbar-sub">${formattedDate}</div>
         </div>
-        <div class="res-quick-actions-scroll">
-          <button class="res-action-pill-btn primary" onclick="openGenerateBillsModal()">
-            ⚡ Generate Bills
-          </button>
-          <button class="res-action-pill-btn" onclick="openRecordPaymentModal()">
-            💵 Record Payment
-          </button>
-          <button class="res-action-pill-btn" onclick="openPostNoticeModal()">
-            📢 Post Notice
-          </button>
-          <button class="res-action-pill-btn" onclick="openAddMemberModal()">
-            👤 Add Member
-          </button>
-          <button class="res-action-pill-btn" onclick="openBulkUpdateBillsModal()">
-            🔄 Bulk Update
-          </button>
+        <div class="dash-toolbar-actions">
+          <button class="dash-tool-btn dash-tool-btn-solid" onclick="openGenerateBillsModal()">Generate bills</button>
+          <button class="dash-tool-btn" onclick="openRecordPaymentModal()">Record payment</button>
+          <button class="dash-tool-btn" onclick="openPostNoticeModal()">Post notice</button>
+          <button class="dash-tool-btn" onclick="openAddMemberModal()">Add member</button>
+          <button class="dash-tool-btn" onclick="openBulkUpdateBillsModal()">Bulk update</button>
         </div>
       </div>
 
@@ -321,14 +339,14 @@ Screens['admin-dashboard'] = function() {
           <div class="dash-chart-card" style="box-sizing: border-box !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; overflow: hidden !important; margin-bottom: 20px;">
             <div class="chart-header-row">
               <div class="chart-title-box">
-                <div class="chart-card-title">Customer Habits &amp; Financial Flow</div>
-                <div class="chart-card-subtitle">Track collections, billings, member payment habits &amp; fund allocations</div>
+                <div class="chart-card-title">Collections</div>
+                <div class="chart-card-subtitle">Billed demand and money received</div>
               </div>
               <div class="chart-controls-box">
                 <div class="chart-type-toggle">
-                  <button class="chart-type-btn" id="btnChartBar" onclick="window.switchDashChartType('bar')">📊 Bar</button>
-                  <button class="chart-type-btn" id="btnChartLine" onclick="window.switchDashChartType('line')">📈 Line</button>
-                  <button class="chart-type-btn active" id="btnChartDonut" onclick="window.switchDashChartType('donut')">🍩 Donut</button>
+                  <button class="chart-type-btn" id="btnChartBar" onclick="window.switchDashChartType('bar')">Bar</button>
+                  <button class="chart-type-btn" id="btnChartLine" onclick="window.switchDashChartType('line')">Line</button>
+                  <button class="chart-type-btn active" id="btnChartDonut" onclick="window.switchDashChartType('donut')">Donut</button>
                 </div>
                 <select class="dash-select-pill" id="dashChartPeriod" onchange="window.switchDashPeriod(this.value)">
                   <option value="year" selected>This year</option>
@@ -360,24 +378,16 @@ Screens['admin-dashboard'] = function() {
           <!-- Complex Spotlight Card (Resident Bento Architecture) -->
           <div class="res-complex-card" style="margin-bottom: 0;">
             <div class="res-complex-img-wrap">
-              <img src="/images/complex.jpg" onerror="this.src='https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80'" alt="Residential Complex" class="res-complex-img" />
-              <div class="res-complex-badges-overlay">
-                <span class="res-complex-pill">🏢 Society Campus · Multi-Block Estate</span>
-                <span class="res-complex-pill" style="background:rgba(5,150,105,0.9);">🛡️ 24/7 Security Monitored</span>
-              </div>
+              <img src="/images/complex.jpg" onerror="this.src='https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80'" alt="Residential complex" class="res-complex-img" />
             </div>
 
             <div class="res-complex-content">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
                 <div>
-                  <div style="font-size:18px;font-weight:800;color:#0F172A;letter-spacing:-0.01em;">
-                    Modern Residential Estate Infrastructure
-                  </div>
-                  <div style="font-size:12px;color:#64748B;margin-top:2px;">
-                    Smart Society Management &amp; AMC Operations Ecosystem
-                  </div>
+                  <div style="font-size:16px;font-weight:650;color:#18181B;letter-spacing:-0.02em;">Campus</div>
+                  <div style="font-size:12px;color:#71717A;margin-top:2px;">Units, occupancy, and maintenance spend</div>
                 </div>
-                <button class="bento-circle-arrow-dark" onclick="Router.go('admin-compliance')" style="background:#F1F5F9;color:#0F172A;border:1px solid #E2E8F0;" title="View Complex Compliance">↗</button>
+                <button class="dash-tool-btn" onclick="Router.go('admin-compliance')">Compliance</button>
               </div>
 
               <!-- Quick Stats Row (100% Real Live Data) -->
@@ -401,7 +411,7 @@ Screens['admin-dashboard'] = function() {
               </div>
 
               <!-- Campus Maintenance Utilization Bars (from /api/expenses or allocations) -->
-              <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:16px;padding:14px 16px;">
+              <div style="background:#FAFAFA;border:1px solid #E4E4E7;border-radius:2px;padding:12px 14px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                   <span style="font-size:12px;font-weight:700;color:#0F172A;">Campus Maintenance &amp; Fund Utilization</span>
                   <span class="badge badge-green" style="font-size:10px;font-weight:700;">FY 2026-27</span>
@@ -419,32 +429,15 @@ Screens['admin-dashboard'] = function() {
         <div class="dash-col-right">
 
           <!-- Card 1: Society Location & Interactive Google Map -->
-          <div class="dash-society-map-card" style="background:#FFFFFF;border:1.5px solid #F1F5F9;border-radius:20px;padding:20px 22px;box-shadow:0 10px 25px -5px rgba(15,23,42,0.05), 0 1px 3px rgba(15,23,42,0.06);margin-bottom:20px;position:relative;overflow:hidden;transition:all 0.25s ease;">
-            <!-- Top vibrant accent bar -->
-            <div style="position:absolute;top:0;left:0;right:0;height:3.5px;background:linear-gradient(90deg, #3B82F6 0%, #06B6D4 50%, #10B981 100%);"></div>
-
-            <div class="chart-header-row" style="margin-bottom:15px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-              <div style="display:flex;align-items:center;gap:11px;">
-                <div style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#EFF6FF 0%,#DBEAFE 100%);border:1px solid #BFDBFE;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(37,99,235,0.14);flex-shrink:0;">
-                  📍
-                </div>
-                <div>
-                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
-                    <span style="font-size:15px;font-weight:800;color:#0F172A;letter-spacing:-0.01em;">Society Campus Location</span>
-                    <span id="dashMapStatusBadge" style="background:linear-gradient(135deg,#ECFDF5 0%,#D1FAE5 100%);color:#059669;border:1px solid #A7F3D0;font-size:9.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;padding:2px 8px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;box-shadow:0 1px 2px rgba(16,185,129,0.1);">
-                      <span style="width:6px;height:6px;border-radius:50%;background:#10B981;box-shadow:0 0 6px #10B981;"></span>
-                      VERIFIED PIN
-                    </span>
-                  </div>
-                  <div style="font-size:12px;color:#64748B;margin-top:2px;font-weight:500;">Interactive GPS navigation &amp; campus entrance</div>
-                </div>
+          <div class="dash-society-map-card">
+            <div class="dash-panel-head">
+              <div>
+                <div class="dash-panel-title">Location</div>
+                <div class="dash-panel-sub">Campus entrance and map pin</div>
               </div>
-              <div style="display:flex;align-items:center;gap:6px;" id="dashMapHeaderActions">
-                <button class="btn btn-ghost btn-xs" id="btnUpdateSocietyMap" onclick="window.openSocietyLocationModal()" title="Update Society Location on Maps" style="font-size:11.5px;font-weight:700;color:#334155;padding:5px 11px;border:1px solid #E2E8F0;border-radius:9px;background:#F8FAFC;display:inline-flex;align-items:center;gap:5px;transition:all 0.15s ease;cursor:pointer;">
-                  <span>⚙️</span> Edit Pin
-                </button>
-              </div>
+              <button class="dash-tool-btn" id="btnUpdateSocietyMap" onclick="window.openSocietyLocationModal()">Edit pin</button>
             </div>
+            <span id="dashMapStatusBadge" hidden>Pinned</span>
 
             <!-- Dynamic Society Google Map Container -->
             <div id="dashSocietyMapContainer">
@@ -455,7 +448,7 @@ Screens['admin-dashboard'] = function() {
           </div>
 
           <!-- Card 2: Admin Inbox & Society Broadcasts -->
-          <div class="dash-inbox-card" style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:18px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,23,42,0.04);transition:all 0.2s ease;">
+          <div class="dash-inbox-card">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
               <div>
                 <div style="font-size:15px;font-weight:700;color:#0F172A;display:flex;align-items:center;gap:6px;">
@@ -1188,78 +1181,19 @@ window.renderSocietyMap = function(org, loc) {
     statusBadge.style.borderColor = isConfig ? '#A7F3D0' : '#BFDBFE';
   }
 
+  const cityLine = [activeLoc.city || activeOrg.city, landmarkPart].filter(Boolean).join(' · ');
   container.innerHTML = `
-    <!-- Google Map Embed Viewport with Frosted Glass Chips -->
-    <div style="position:relative;width:100%;height:210px;border-radius:16px;overflow:hidden;border:1.5px solid #E2E8F0;box-shadow:0 4px 16px -2px rgba(15,23,42,0.08);background:#0F172A;">
-      <iframe id="dashSocietyMapIframe" src="${embedUrl}"
-              width="100%" height="210" style="border:0;display:block;filter:contrast(1.02);"
-              allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
-      
-      <!-- Top-Left Frosted Glass Badge -->
-      <div style="position:absolute;top:10px;left:10px;background:rgba(15,23,42,0.80);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#F8FAFC;border:1px solid rgba(255,255,255,0.18);font-size:10px;font-weight:700;padding:4px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(0,0,0,0.25);pointer-events:none;z-index:2;">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#38BDF8;box-shadow:0 0 8px #38BDF8;"></span>
-        <span>🛰️ Live Satellite / Map</span>
-      </div>
-
-      <!-- Top-Right Frosted Glass 'Open in Maps' Button -->
-      <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer"
-         title="Open in Google Maps in a new tab"
-         style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#0F172A;font-size:11px;font-weight:700;padding:5px 12px;border-radius:99px;border:1px solid rgba(226,232,240,0.9);text-decoration:none;display:inline-flex;align-items:center;gap:5px;box-shadow:0 4px 14px rgba(15,23,42,0.12);transition:all 0.15s ease;z-index:2;"
-         onmouseover="this.style.transform='translateY(-1px) scale(1.02)';"
-         onmouseout="this.style.transform='translateY(0) scale(1)';">
-        <span>🧭 Open in Maps ↗</span>
-      </a>
-
-      <!-- Bottom-Left Gate Pin Glass Chip -->
-      <div style="position:absolute;bottom:10px;left:10px;background:rgba(15,23,42,0.82);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:#E2E8F0;font-size:10px;font-weight:700;padding:4px 10px;border-radius:8px;border:1px solid rgba(56,189,248,0.3);display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;z-index:2;">
-        <span style="color:#38BDF8;">📍</span>
-        <span>Main Campus Gate</span>
-      </div>
+    <div class="dash-map-frame">
+      <iframe id="dashSocietyMapIframe" src="${embedUrl}" title="Society map" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
     </div>
-
-    <!-- Elevated Campus Info Plate -->
-    <div style="margin-top:14px;background:linear-gradient(135deg,#F8FAFC 0%,#F1F5F9 100%);border:1.5px solid #E2E8F0;border-radius:15px;padding:14px 16px;display:flex;flex-direction:column;gap:9px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <div style="display:flex;align-items:center;gap:6px;min-width:0;">
-          <span style="font-size:14px;font-weight:800;color:#0F172A;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ${activeOrg.name || 'Society Campus'}
-          </span>
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:#059669;color:#FFFFFF;font-size:10px;font-weight:800;flex-shrink:0;" title="Verified Society Coordinates">✓</span>
-        </div>
-        <span style="font-size:10px;font-weight:800;color:#0284C7;background:#E0F2FE;border:1px solid #BAE6FD;padding:3px 9px;border-radius:6px;text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0;">
-          🏢 RWA Campus
-        </span>
-      </div>
-
-      <div style="display:flex;align-items:flex-start;gap:8px;font-size:12px;color:#475569;line-height:1.45;">
-        <span style="font-size:13px;color:#64748B;flex-shrink:0;margin-top:1px;">📌</span>
-        <span style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
-          ${displayAddress}
-        </span>
-      </div>
-
-      <!-- Verified Campus & Landmark Chips -->
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        ${pinTypePill}
-        ${areaPill}
-        ${landmarkPill}
-      </div>
+    <div class="dash-map-meta">
+      <div class="dash-map-name">${activeOrg.name || 'Society'}</div>
+      <div class="dash-map-address">${displayAddress}</div>
+      ${cityLine ? `<div class="dash-map-city">${cityLine}</div>` : ''}
     </div>
-
-    <!-- Aesthetic Action Buttons Grid -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
-      <a href="${directionsUrl}" target="_blank" rel="noopener noreferrer"
-         style="background:linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);color:#FFFFFF;text-decoration:none;border-radius:12px;height:40px;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 4px 14px rgba(37,99,235,0.3);transition:all 0.2s ease;"
-         onmouseover="this.style.boxShadow='0 6px 18px rgba(37,99,235,0.4)';this.style.transform='translateY(-1px)';"
-         onmouseout="this.style.boxShadow='0 4px 14px rgba(37,99,235,0.3)';this.style.transform='translateY(0)';">
-        <span>🧭 Directions ↗</span>
-      </a>
-      <button type="button" onclick="window.openSocietyLocationModal()"
-              style="background:#FFFFFF;color:#0F172A;border:1.5px solid #CBD5E1;border-radius:12px;height:40px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;box-shadow:0 1px 3px rgba(15,23,42,0.04);transition:all 0.2s ease;"
-              onmouseover="this.style.background='#F8FAFC';this.style.borderColor='#94A3B8';this.style.transform='translateY(-1px)';"
-              onmouseout="this.style.background='#FFFFFF';this.style.borderColor='#CBD5E1';this.style.transform='translateY(0)';">
-        <span>📍 Edit Map Pin</span>
-      </button>
+    <div class="dash-map-actions">
+      <a class="dash-tool-btn dash-tool-btn-solid" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Directions</a>
+      <button type="button" class="dash-tool-btn" onclick="window.openSocietyLocationModal()">Edit pin</button>
     </div>
   `;
 };
@@ -1531,7 +1465,7 @@ window.loadLiveAdminDashboard = async function() {
         const greetingEl = document.getElementById('dashGreeting');
         
         if (greetingEl) {
-          greetingEl.textContent = `${timeOfDay}, ${meData.user.name || 'Admin'} 👋`;
+          greetingEl.textContent = `${timeOfDay}, ${meData.user.name || 'Admin'}`;
         }
         const sideOrg = document.getElementById('sidebarOrgName');
         if (sideOrg && meData.user.organization) {

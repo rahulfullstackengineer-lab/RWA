@@ -95,7 +95,7 @@ window.sendMeetingNotice = async function(idOrTitle) {
   const data = await window.fetchMeetingsData();
   const m = (data.meetings || []).find(x => x.id === idOrTitle || x.title === idOrTitle) || (data.meetings || [])[0];
   if (!m) {
-    showToast(`📢 Formal notice dispatched for "${idOrTitle}" to all 342 members!`, 'success');
+    showToast('Meeting notice was not sent. Open the meeting and try again.', 'error');
     return;
   }
 
@@ -119,11 +119,7 @@ window.sendMeetingNotice = async function(idOrTitle) {
     }
   } catch (err) {}
 
-  m.noticeSent = true;
-  m.noticeDate = new Date().toISOString().split('T')[0];
-  window.saveMeetingsLocal(data);
-  showToast(`📢 Formal notice dispatched for "${m.title}" to all 342 members!`, 'success');
-  if (typeof Router !== 'undefined') Router.go(Router.current());
+  showToast('Meeting notice was not sent. Try again.', 'error');
 };
 
 window.openAddAgendaItemModal = function(meetingId) {
@@ -1390,11 +1386,11 @@ Screens['admin-meeting-detail'] = function() {
   const attendees = meeting.attendees || [];
   const resolutions = meeting.resolutions || [];
   const actionItems = meeting.actionItems || [];
-  const quorumRequired = meeting.quorumRequired || (meeting.type === 'AGM' ? 114 : 5);
-  const totalEligible = meeting.totalEligible || (meeting.type === 'AGM' ? 342 : 7);
+  const quorumRequired = meeting.quorumRequired || 0;
+  const totalEligible = meeting.totalEligible || 0;
   const attendeesCount = attendees.length;
-  const quorumMet = attendeesCount >= quorumRequired;
-  const quorumPercent = Math.min(100, Math.round((attendeesCount / quorumRequired) * 100));
+  const quorumMet = quorumRequired > 0 && attendeesCount >= quorumRequired;
+  const quorumPercent = quorumRequired > 0 ? Math.min(100, Math.round((attendeesCount / quorumRequired) * 100)) : 0;
 
   const detailTab = window.__detailActiveTab || 'agenda';
 

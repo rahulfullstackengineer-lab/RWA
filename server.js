@@ -25,6 +25,8 @@ app.prepare().then(() => {
 
   const io = new Server(server, {
     path: '/api/socket/io',
+    // Leave Next.js hot-reload upgrades alone. Destroying them leaves the dev page blank.
+    destroyUpgrade: false,
     cors: {
       origin: process.env.CORS_ORIGIN || '*',
       methods: ['GET', 'POST'],

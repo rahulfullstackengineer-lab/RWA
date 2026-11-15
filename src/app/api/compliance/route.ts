@@ -225,7 +225,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ items: [], allItems: [], stats: { total: 0, dueCount: 0, upcomingCount: 0, completedCount: 0, overdueCount: 0 } })
+    const orgId = user.organizationId
     const data = getStoredComplianceData(orgId)
 
     const url = new URL(request.url)

@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    const orgId = request.headers.get('x-active-org-id') || searchParams.get('orgId') || user.organizationId!
+    const orgId = user.organizationId
     const month = searchParams.get('month') || new Date().toISOString().slice(0, 7) // 'YYYY-MM'
 
     // Fetch recurring templates (items marked as recurring where templateId is null or original master)
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const orgId = body.orgId || request.headers.get('x-active-org-id') || user.organizationId!
+    const orgId = user.organizationId
     const month = body.month || new Date().toISOString().slice(0, 7) // 'YYYY-MM'
     const selectedTemplateIds: string[] | undefined = body.templateIds
 

@@ -9,7 +9,10 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    const orgId = user.organizationId
+    if (!orgId) {
+      return NextResponse.json({ complaints: [] })
+    }
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || undefined
     const category = searchParams.get('category') || undefined
@@ -19,19 +22,13 @@ export async function GET(request: Request) {
     if (status && status !== 'ALL') whereClause.status = status
     if (category && category !== 'ALL') whereClause.category = category
 
-    if (unitIdParam && unitIdParam !== 'ALL') {
+    if (user.role === 'RESIDENT') {
       whereClause.OR = [
-        { unitId: unitIdParam },
         { raisedById: user.id },
-        { unitId: null },
+        ...(user.unitId ? [{ unitId: user.unitId }] : []),
       ]
-    } else if (user.role === 'RESIDENT' && !unitIdParam) {
-      const orConditions: any[] = [
-        { raisedById: user.id },
-        { unitId: null },
-      ]
-      if (user.unitId) orConditions.push({ unitId: user.unitId })
-      whereClause.OR = orConditions
+    } else if (unitIdParam && unitIdParam !== 'ALL') {
+      whereClause.unitId = unitIdParam
     }
 
     const complaints = await prisma.complaint.findMany({

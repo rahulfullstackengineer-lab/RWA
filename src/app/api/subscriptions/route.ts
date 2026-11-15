@@ -17,16 +17,10 @@ export async function GET(request: Request) {
     }
 
     // Determine target organization
-    let orgId: string | null | undefined = user.organizationId
-    if (!orgId) {
-      const activeOrg = await prisma.organization.findFirst({
-        where: { name: { contains: 'Test 2' } },
-      }) || await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = activeOrg?.id
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No active organization found' }, { status: 404 })
+      return NextResponse.json({ success: true, subscription: null, availablePlans: [], invoices: [] })
     }
 
     const sub = await getOrganizationSubscription(orgId)
@@ -112,13 +106,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
 
-    let orgId: string | null | undefined = user.organizationId
-    if (!orgId) {
-      const activeOrg = await prisma.organization.findFirst({
-        where: { name: { contains: 'Test 2' } },
-      }) || await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = activeOrg?.id
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No organization' }, { status: 404 })

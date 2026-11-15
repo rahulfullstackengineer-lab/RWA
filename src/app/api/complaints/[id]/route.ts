@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -22,8 +22,15 @@ export async function PATCH(request: Request, context: RouteParams) {
       include: { raisedBy: true },
     })
 
-    if (!existing) {
+    if (!existing || existing.organizationId !== user.organizationId) {
       return NextResponse.json({ error: 'Complaint not found' }, { status: 404 })
+    }
+    const canManage = ['RWA_ADMIN', 'TREASURER', 'COMMITTEE_MEMBER', 'STAFF'].includes(user.role)
+    if (!canManage && existing.raisedById !== user.id) {
+      return NextResponse.json({ error: 'You can only update a complaint you raised' }, { status: 403 })
+    }
+    if (!canManage && (status || assignedTo)) {
+      return NextResponse.json({ error: 'Only the society office can change complaint status' }, { status: 403 })
     }
 
     const updated = await prisma.complaint.update({
@@ -98,12 +105,16 @@ export async function POST(request: Request, context: RouteParams) {
       return NextResponse.json({ error: 'Comment content is required' }, { status: 400 })
     }
 
-    const complaint = await prisma.complaint.findUnique({
-      where: { id },
+    const complaint = await prisma.complaint.findFirst({
+      where: { id, organizationId: user.organizationId || '__none__' },
     })
 
     if (!complaint) {
       return NextResponse.json({ error: 'Complaint not found' }, { status: 404 })
+    }
+    const canComment = ['RWA_ADMIN', 'TREASURER', 'COMMITTEE_MEMBER', 'STAFF'].includes(user.role) || complaint.raisedById === user.id
+    if (!canComment) {
+      return NextResponse.json({ error: 'You can only comment on a complaint you raised' }, { status: 403 })
     }
 
     const comment = await prisma.complaintComment.create({
@@ -115,14 +126,46 @@ export async function POST(request: Request, context: RouteParams) {
       },
     })
 
-    // Target socket recipient
-    const targetUserId = user.id === complaint.raisedById ? undefined : complaint.raisedById
-
-    emitLiveSocketEvent('new-complaint-comment', {
-      complaintId: id,
-      comment,
-      ticketNumber: complaint.ticketNumber,
-    }, targetUserId ? { userId: targetUserId } : { orgId: complaint.organizationId })
+    const commentTitle = `Reply on ticket ${complaint.ticketNumber}`
+    const commentMessage = `${user.name}: ${content.trim().substring(0, 140)}`
+    if (user.id === complaint.raisedById) {
+      await notifyUsers({
+        orgId: complaint.organizationId,
+        roles: ['admin', 'staff'],
+        excludeUserId: user.id,
+        title: commentTitle,
+        message: commentMessage,
+        type: 'COMPLAINT',
+        event: 'new-complaint-comment',
+        referenceType: 'COMPLAINT',
+        referenceId: complaint.id,
+        data: { complaintId: id, comment, ticketNumber: complaint.ticketNumber },
+      })
+    } else {
+      await notifyUsers({
+        orgId: complaint.organizationId,
+        userIds: [complaint.raisedById],
+        title: commentTitle,
+        message: commentMessage,
+        type: 'COMPLAINT',
+        event: 'new-complaint-comment',
+        referenceType: 'COMPLAINT',
+        referenceId: complaint.id,
+        data: { complaintId: id, comment, ticketNumber: complaint.ticketNumber },
+      })
+      await notifyUsers({
+        orgId: complaint.organizationId,
+        roles: ['admin', 'staff'],
+        excludeUserId: user.id,
+        title: commentTitle,
+        message: commentMessage,
+        type: 'COMPLAINT',
+        event: 'new-complaint-comment',
+        referenceType: 'COMPLAINT',
+        referenceId: complaint.id,
+        data: { complaintId: id, comment, ticketNumber: complaint.ticketNumber },
+      })
+    }
 
     return NextResponse.json({ success: true, comment })
   } catch (err: unknown) {

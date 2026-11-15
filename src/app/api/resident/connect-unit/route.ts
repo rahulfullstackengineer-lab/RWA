@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { normalizePhone } from '@/lib/phone'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
@@ -39,6 +40,25 @@ export async function POST(request: Request) {
 
     if (!unit) {
       return NextResponse.json({ error: 'Selected flat was not found in this society' }, { status: 404 })
+    }
+
+    if (user.organizationId && user.organizationId !== unit.organizationId) {
+      return NextResponse.json({ error: 'This account already belongs to another society' }, { status: 403 })
+    }
+    if (user.role && user.role !== 'RESIDENT' && user.organizationId) {
+      return NextResponse.json({ error: 'Society office accounts are assigned by the admin' }, { status: 403 })
+    }
+
+    const phone = normalizePhone(user.phone)
+    const listedOnFlat = phone && (
+      normalizePhone(unit.ownerPhone) === phone || normalizePhone(unit.tenantPhone) === phone
+    )
+    const flatIsOpen = !unit.ownerPhone && !unit.tenantPhone && (unit.occupancyStatus === 'VACANT' || !unit.occupancyStatus)
+    if (!listedOnFlat && !flatIsOpen) {
+      return NextResponse.json(
+        { error: 'This flat is already assigned. Ask the society admin to add your mobile number to it.' },
+        { status: 403 }
+      )
     }
 
     const org = unit.organization
@@ -85,12 +105,8 @@ export async function POST(request: Request) {
     // 3. Find all society admins to notify
     const adminCandidates = await prisma.user.findMany({
       where: {
-        OR: [
-          { organizationId: org.id, role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'] } },
-          { organizationId: org.id, role: { not: 'RESIDENT' } },
-          { role: { in: ['RWA_ADMIN', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'] } },
-          { phone: '8219587657' },
-        ],
+        organizationId: org.id,
+        role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER'] },
       },
       select: { id: true, name: true, phone: true, role: true },
     })
@@ -178,8 +194,7 @@ export async function POST(request: Request) {
         orgName: org.name,
         timestamp: new Date().toISOString(),
       }
-      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId: org.id })
-      emitLiveSocketEvent('resident-onboarded', socketPayload)
+      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId: org.id, roles: ['admin'] })
     } catch (sockErr) {
       console.warn('Socket event error:', sockErr)
     }

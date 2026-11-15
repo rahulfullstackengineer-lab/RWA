@@ -97,9 +97,10 @@ export async function notifyUsers(options: {
   referenceId?: string
 }) {
   const roleList = options.roles && options.roles.length > 0 ? options.roles : undefined
-  let userIds = options.userIds || []
+  const explicitIds = (options.userIds || []).filter((id) => id && id !== options.excludeUserId)
+  let userIds = explicitIds
 
-  if (!options.userIds) {
+  if (!options.userIds || roleList) {
     const users = await prisma.user.findMany({
       where: {
         organizationId: options.orgId,
@@ -108,7 +109,7 @@ export async function notifyUsers(options: {
       },
       select: { id: true },
     })
-    userIds = users.map((user) => user.id)
+    userIds = Array.from(new Set([...users.map((user) => user.id), ...explicitIds]))
   }
 
   if (userIds.length > 0) {
@@ -125,18 +126,19 @@ export async function notifyUsers(options: {
     })
   }
 
-  if (options.userIds && options.userIds.length === 1 && !roleList) {
-    emitLiveSocketEvent(options.event, {
-      title: options.title,
-      message: options.message,
-      ...(options.data || {}),
-    }, { userId: options.userIds[0] })
-    return
-  }
-
-  emitLiveSocketEvent(options.event, {
+  const payload = {
     title: options.title,
     message: options.message,
     ...(options.data || {}),
-  }, { orgId: options.orgId, roles: roleList })
+  }
+
+  if (roleList) {
+    emitLiveSocketEvent(options.event, payload, { orgId: options.orgId, roles: roleList })
+  } else if (!options.userIds) {
+    emitLiveSocketEvent(options.event, payload, { orgId: options.orgId })
+  }
+
+  for (const userId of explicitIds) {
+    emitLiveSocketEvent(options.event, payload, { userId })
+  }
 }

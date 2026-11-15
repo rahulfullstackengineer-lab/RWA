@@ -11,19 +11,10 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url)
-    let orgId = user.organizationId
-    if (!orgId) {
-      const urlOrgId = url.searchParams.get('orgId') || request.headers.get('x-active-org-id')
-      if (urlOrgId) {
-        orgId = urlOrgId
-      } else {
-        const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-        orgId = firstOrg?.id || null
-      }
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization associated with user' }, { status: 400 })
+      return NextResponse.json({ success: true, total: 0, logs: [], filterOptions: { actions: [], actors: [], months: [] } })
     }
 
     const search = url.searchParams.get('search')?.toLowerCase().trim() || ''

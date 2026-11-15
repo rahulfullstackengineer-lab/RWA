@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { requireAdmin, hashPassword } from '@/lib/auth'
+import { notifyUsers } from '@/lib/socket-server'
 import { findUserByPhone, normalizePhone } from '@/lib/phone'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
@@ -122,15 +122,17 @@ function calculateStaffMetrics(staff: StaffRecord[], currentMonth: string = 'Oct
 
 export async function GET(request: Request) {
   try {
-    const { user, error } = await requireAuth(request)
-    if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    const { user, error } = await requireAdmin(request)
+    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ staff: [], payments: [], metrics: {} })
+    const orgId = user.organizationId
     const data = getStoredStaffData(orgId)
     const metrics = calculateStaffMetrics(data.staff, 'Oct 2026')
+    const staff = data.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => rest)
 
     return NextResponse.json({
-      staff: data.staff,
+      staff,
       payments: data.payments,
       metrics,
     })
@@ -194,7 +196,20 @@ export async function POST(request: Request) {
       data.payments.unshift(paymentRecord)
       saveStoredStaffData(orgId, data)
 
-      emitLiveSocketEvent('staff-salary-paid', { payment: paymentRecord, staff: staffMember }, { orgId })
+      const paidStaff = await findUserByPhone(staffMember.phone)
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        userIds: paidStaff ? [paidStaff.id] : [],
+        excludeUserId: user.id,
+        title: `Salary paid: ${staffMember.name}`,
+        message: `₹${payAmount.toLocaleString('en-IN')} for ${month} via ${paymentMethod}`,
+        type: 'STAFF_SALARY',
+        event: 'staff-salary-paid',
+        referenceType: 'STAFF',
+        referenceId: staffMember.id,
+        data: { payment: paymentRecord, staff: staffMember },
+      })
 
       await logAudit({
         organizationId: orgId,
@@ -222,7 +237,7 @@ export async function POST(request: Request) {
       salaryType = 'MONTHLY',
       joiningDate = '2026-10-01',
       shift = 'DAY',
-      pin = '1234',
+      pin = '',
       upiId = '',
       accountNumber = '',
       ifscCode = '',
@@ -235,7 +250,7 @@ export async function POST(request: Request) {
     }
 
     const newStaffId = `STF-${Math.floor(100 + Math.random() * 900)}`
-    const staffPin = (pin || '1234').toString().trim()
+    const staffPin = String(pin || '').trim()
     const cleanPhone = normalizePhone(phone)
     const tenDigit = cleanPhone || ''
     if (!cleanPhone) {
@@ -261,7 +276,7 @@ export async function POST(request: Request) {
       status: 'ACTIVE',
       shift: shift || 'DAY',
       pin: staffPin,
-      lastPaidMonth: 'Sep 2026',
+      lastPaidMonth: '',
       upiId: upiId.trim(),
       accountNumber: accountNumber.trim(),
       ifscCode: ifscCode.trim().toUpperCase(),
@@ -313,7 +328,7 @@ export async function POST(request: Request) {
       }
 
       // Upsert User with STAFF role and bcrypt PIN
-      const defaultHash = await hashPassword(staffPin)
+      const passwordHash = staffPin ? await hashPassword(staffPin) : null
       const existingUser = await findUserByPhone(cleanPhone)
 
       if (existingUser) {
@@ -323,7 +338,7 @@ export async function POST(request: Request) {
             name: name.trim(),
             role: 'STAFF',
             status: 'ACTIVE',
-            passwordHash: defaultHash,
+            ...(passwordHash ? { passwordHash } : {}),
             organizationId: orgId,
           },
         })
@@ -334,7 +349,7 @@ export async function POST(request: Request) {
             name: name.trim(),
             role: 'STAFF',
             status: 'ACTIVE',
-            passwordHash: defaultHash,
+            passwordHash,
             organizationId: orgId,
           },
         })
@@ -343,7 +358,20 @@ export async function POST(request: Request) {
       console.error('Error syncing staff to Prisma:', syncErr)
     }
 
-    emitLiveSocketEvent('staff-added', { staff: newStaff }, { orgId })
+    const addedStaff = await findUserByPhone(newStaff.phone)
+    await notifyUsers({
+      orgId,
+      roles: ['admin'],
+      userIds: addedStaff ? [addedStaff.id] : [],
+      excludeUserId: user.id,
+      title: `Staff added: ${newStaff.name}`,
+      message: `${newStaff.name} joined as ${newStaff.role}.`,
+      type: 'STAFF',
+      event: 'staff-added',
+      referenceType: 'STAFF',
+      referenceId: newStaff.id,
+      data: { staff: newStaff },
+    })
 
     await logAudit({
       organizationId: orgId,
@@ -351,7 +379,7 @@ export async function POST(request: Request) {
       action: 'STAFF_CREATED',
       entityType: 'Staff',
       entityId: newStaff.id,
-      details: `New staff member "${newStaff.name}" (${newStaff.role}, ₹${newStaff.salary}/mo, PIN: ${staffPin}) onboarded by ${user.name}`,
+        details: `New staff member "${newStaff.name}" (${newStaff.role}, ₹${newStaff.salary}/mo) onboarded by ${user.name}`,
       severity: 'INFO',
       newValues: newStaff,
       ipAddress: request.headers.get('x-forwarded-for') || null,

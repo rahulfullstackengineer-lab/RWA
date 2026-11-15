@@ -46,11 +46,8 @@ export async function GET(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || 'default_org'
-    }
+    const orgId = user.organizationId
+    if (!orgId) return NextResponse.json({ success: true, contracts: [], totalCount: 0, metrics: {} })
 
     if (!DEFAULT_CONTRACTS[orgId]) {
       DEFAULT_CONTRACTS[orgId] = getInitialContracts(orgId)
@@ -108,7 +105,7 @@ export async function POST(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     const body = await request.json()
-    const orgId = body.orgId || request.headers.get('x-active-org-id') || user.organizationId || 'default_org'
+    const orgId = user.organizationId
 
     if (!DEFAULT_CONTRACTS[orgId]) {
       DEFAULT_CONTRACTS[orgId] = getInitialContracts(orgId)
@@ -165,7 +162,7 @@ export async function PATCH(request: Request) {
 
     const body = await request.json()
     const { id, paymentStatus, lastPaidAmount, bankReference, notes } = body
-    const orgId = body.orgId || request.headers.get('x-active-org-id') || user.organizationId || 'default_org'
+    const orgId = user.organizationId
 
     if (!DEFAULT_CONTRACTS[orgId]) {
       DEFAULT_CONTRACTS[orgId] = getInitialContracts(orgId)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(request: Request) {
@@ -14,14 +14,10 @@ export async function GET(request: Request) {
     const status = searchParams.get('status') || undefined
     const unitId = searchParams.get('unitId') || undefined
 
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ success: true, payments: [] })
     }
 
     // Role-based scoping: Resident only sees payments for their flat
@@ -89,6 +85,9 @@ export async function POST(request: Request) {
   try {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    if (!['RWA_ADMIN', 'TREASURER'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only the treasurer or society admin can record a payment' }, { status: 403 })
+    }
 
     const body = await request.json()
     const {
@@ -107,11 +106,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Amount is required' }, { status: 400 })
     }
 
-    let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
       return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
@@ -122,8 +117,8 @@ export async function POST(request: Request) {
     // Resolve target unit
     let resolvedUnit = null
     if (unitId) {
-      resolvedUnit = await prisma.unit.findUnique({
-        where: { id: unitId },
+      resolvedUnit = await prisma.unit.findFirst({
+        where: { id: unitId, organizationId: orgId },
         include: { block: true },
       })
     } else if (unitNumber) {
@@ -201,15 +196,48 @@ export async function POST(request: Request) {
       })
     }
 
-    // Emit live socket event
-    emitLiveSocketEvent('new-payment-received', {
-      paymentId: payment.id,
-      amount: payment.amount,
-      method: payment.method,
-      unitNumber: resolvedUnit?.unitNumber || 'Common',
-      recordedByName: user.name,
-      referenceNo: payment.referenceNo,
-    }, { orgId })
+    await notifyUsers({
+      orgId,
+      roles: ['admin'],
+      excludeUserId: user.id,
+      title: `Payment received: Flat ${resolvedUnit?.unitNumber || 'Common'}`,
+      message: `₹${Number(payment.amount).toLocaleString('en-IN')} via ${payment.method}`,
+      type: 'PAYMENT',
+      event: 'new-payment-received',
+      referenceType: 'PAYMENT',
+      referenceId: payment.id,
+      data: {
+        paymentId: payment.id,
+        amount: payment.amount,
+        method: payment.method,
+        unitNumber: resolvedUnit?.unitNumber || 'Common',
+        recordedByName: user.name,
+        referenceNo: payment.referenceNo,
+      },
+    })
+    if (resolvedUnit) {
+      const flatUsers = await prisma.user.findMany({
+        where: { organizationId: orgId, unitId: resolvedUnit.id },
+        select: { id: true },
+      })
+      if (flatUsers.length > 0) {
+        await notifyUsers({
+          orgId,
+          userIds: flatUsers.map((person) => person.id),
+          title: 'Payment recorded on your flat',
+          message: `₹${Number(payment.amount).toLocaleString('en-IN')} was recorded via ${payment.method}.`,
+          type: 'PAYMENT',
+          event: 'payment-confirmed',
+          referenceType: 'PAYMENT',
+          referenceId: payment.id,
+          data: {
+            amount: payment.amount,
+            unitNumber: resolvedUnit.unitNumber,
+            method: payment.method,
+          },
+        })
+      }
+    }
 
     // Log Immutable Audit Trail Event
     await logAudit({

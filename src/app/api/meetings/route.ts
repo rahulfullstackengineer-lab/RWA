@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -88,7 +88,8 @@ export async function GET(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const orgId = user.organizationId!
+    if (!user.organizationId) return NextResponse.json({ meetings: [], upcoming: [], past: [], actionItems: [], counts: { upcoming: 0, past: 0, actionItems: 0 } })
+    const orgId = user.organizationId
     const meetings = getStoredMeetings(orgId)
 
     const upcoming = meetings.filter((m) => m.status === 'SCHEDULED' || m.status === 'IN_PROGRESS')
@@ -193,13 +194,24 @@ export async function POST(request: Request) {
     meetings.unshift(newMeeting)
     saveMeetings(orgId, meetings)
 
-    emitLiveSocketEvent('new-meeting-scheduled', {
-      id: newMeeting.id,
-      title: newMeeting.title,
-      type: newMeeting.type,
-      scheduledAt: newMeeting.scheduledAt,
-      venue: newMeeting.venue,
-    }, { orgId })
+    await notifyUsers({
+      orgId,
+      roles: ['admin', 'resident', 'staff'],
+      excludeUserId: user.id,
+      title: `Meeting scheduled: ${newMeeting.title}`,
+      message: `${newMeeting.type} on ${newMeeting.dateFormatted} at ${newMeeting.venue}`,
+      type: 'MEETING',
+      event: 'new-meeting-scheduled',
+      referenceType: 'MEETING',
+      referenceId: newMeeting.id,
+      data: {
+        id: newMeeting.id,
+        title: newMeeting.title,
+        type: newMeeting.type,
+        scheduledAt: newMeeting.scheduledAt,
+        venue: newMeeting.venue,
+      },
+    })
 
     await logAudit({
       organizationId: orgId,
@@ -262,31 +274,23 @@ export async function PATCH(request: Request) {
           },
         })
 
-        emitLiveSocketEvent('new-notice', {
-          id: notice.id,
-          title: notice.title,
-          type: notice.type,
-          publishedBy: notice.publishedBy,
-        }, { orgId })
-
-        // Send notifications to residents
-        const residents = await prisma.user.findMany({
-          where: { organizationId: orgId, status: 'ACTIVE' },
-          select: { id: true },
+        await notifyUsers({
+          orgId,
+          roles: ['admin', 'resident', 'staff'],
+          excludeUserId: user.id,
+          title: `📅 ${meeting.title} Notice`,
+          message: `Meeting scheduled for ${meeting.dateFormatted} at ${meeting.venue}. View the agenda in notices.`,
+          type: 'MEETING',
+          event: 'new-notice',
+          referenceType: 'NOTICE',
+          referenceId: notice.id,
+          data: {
+            id: notice.id,
+            title: notice.title,
+            type: notice.type,
+            publishedBy: notice.publishedBy,
+          },
         })
-        if (residents.length > 0) {
-          await prisma.notification.createMany({
-            data: residents.map((r) => ({
-              organizationId: orgId,
-              userId: r.id,
-              title: `📅 ${meeting.title} Notice`,
-              message: `Meeting scheduled for ${meeting.dateFormatted} at ${meeting.venue}. View agenda in notices.`,
-              type: 'MEETING',
-              referenceType: 'MEETING',
-              referenceId: meeting.id,
-            })),
-          })
-        }
       } catch (errNotice) {
         console.error('Error auto-creating meeting notice:', errNotice)
       }

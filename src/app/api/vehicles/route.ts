@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 
 export async function GET(request: Request) {
   try {
@@ -15,14 +15,10 @@ export async function GET(request: Request) {
     const typeFilter = searchParams.get('type') || ''
     const slotFilter = searchParams.get('slotStatus') || '' // 'allocated', 'unallocated'
 
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ success: true, vehicles: [], stats: { total: 0, cars: 0, bikes: 0, evs: 0, slotsAllocated: 0, unallocated: 0 } })
     }
 
     const unitId = searchParams.get('unitId')?.trim() || undefined
@@ -121,11 +117,7 @@ export async function POST(request: Request) {
 
     // If unitId is not provided, look up by unitNumber
     if (!targetUnitId && unitNumber) {
-      let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
-      if (!orgId) {
-        const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-        orgId = firstOrg?.id || null
-      }
+    const orgId = user.organizationId
 
       if (orgId) {
         const unit = await prisma.unit.findFirst({
@@ -217,11 +209,26 @@ export async function POST(request: Request) {
       },
     })
 
-    emitLiveSocketEvent('vehicle_registered', {
-      vehicleId: vehicle.id,
-      registrationNo: vehicle.registrationNo,
-      parkingSlot: vehicle.parkingSlot,
-      flat: vehicle.unit.unitNumber,
+    const flatPeople = await prisma.user.findMany({
+      where: { unitId: vehicle.unitId },
+      select: { id: true },
+    })
+    await notifyUsers({
+      orgId: vehicle.unit.organizationId,
+      roles: ['admin'],
+      userIds: flatPeople.map((person) => person.id),
+      title: `Vehicle registered: ${vehicle.registrationNo}`,
+      message: `Flat ${vehicle.unit.unitNumber}${vehicle.parkingSlot ? `, slot ${vehicle.parkingSlot}` : ''}`,
+      type: 'VEHICLE',
+      event: 'vehicle_registered',
+      referenceType: 'VEHICLE',
+      referenceId: vehicle.id,
+      data: {
+        vehicleId: vehicle.id,
+        registrationNo: vehicle.registrationNo,
+        parkingSlot: vehicle.parkingSlot,
+        flat: vehicle.unit.unitNumber,
+      },
     })
 
     return NextResponse.json({
@@ -304,11 +311,16 @@ export async function PUT(request: Request) {
       },
     })
 
-    emitLiveSocketEvent('vehicle_updated', {
-      vehicleId: updated.id,
-      registrationNo: updated.registrationNo,
-      parkingSlot: updated.parkingSlot,
-      flat: updated.unit.unitNumber,
+    await notifyUsers({
+      orgId: updated.unit.organizationId,
+      roles: ['admin'],
+      userIds: (await prisma.user.findMany({ where: { unitId: updated.unitId }, select: { id: true } })).map((person) => person.id),
+      title: `Vehicle updated: ${updated.registrationNo}`,
+      message: `Flat ${updated.unit.unitNumber}${updated.parkingSlot ? `, slot ${updated.parkingSlot}` : ''}`,
+      type: 'VEHICLE',
+      event: 'vehicle_updated',
+      referenceType: 'VEHICLE',
+      referenceId: updated.id,
     })
 
     return NextResponse.json({
@@ -349,11 +361,19 @@ export async function DELETE(request: Request) {
       where: { id },
     })
 
-    emitLiveSocketEvent('vehicle_deleted', {
-      vehicleId: id,
-      registrationNo: vehicle.registrationNo,
-      flat: vehicle.unit?.unitNumber,
-    })
+    if (vehicle.unit?.organizationId) {
+      await notifyUsers({
+        orgId: vehicle.unit.organizationId,
+        roles: ['admin'],
+        userIds: vehicle.unitId ? (await prisma.user.findMany({ where: { unitId: vehicle.unitId }, select: { id: true } })).map((person) => person.id) : [],
+        title: `Vehicle removed: ${vehicle.registrationNo}`,
+        message: `Removed from flat ${vehicle.unit.unitNumber}.`,
+        type: 'VEHICLE',
+        event: 'vehicle_deleted',
+        referenceType: 'VEHICLE',
+        referenceId: id,
+      })
+    }
 
     return NextResponse.json({
       success: true,

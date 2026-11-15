@@ -10,14 +10,10 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    let orgId = searchParams.get('orgId') || request.headers.get('x-active-org-id') || user.organizationId
-    if (!orgId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      orgId = firstOrg?.id || null
-    }
+    const orgId = user.organizationId
 
     if (!orgId) {
-      return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
+      return NextResponse.json({ success: true, period: 'FY2026-27', society: null, summary: {}, incomeStatement: { categories: [], expenditures: [], totalIncome: 0, totalExpenditure: 0, netSurplus: 0 }, balanceSheet: { assets: [], liabilities: [] }, monthlyTrend: [] })
     }
 
     const period = searchParams.get('period') || 'FY2026-27'

@@ -1,12 +1,34 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
+import { notifyUsers } from '@/lib/socket-server'
 
-function getIO() {
-  if (typeof global !== 'undefined' && (global as any).__io) {
-    return (global as any).__io
-  }
-  return null
+async function notifyAboutPass(
+  orgId: string,
+  flatNumber: string,
+  title: string,
+  message: string,
+  data: Record<string, unknown>,
+  referenceId?: string
+) {
+  const residents = flatNumber
+    ? await prisma.user.findMany({
+        where: { organizationId: orgId, unit: { unitNumber: flatNumber } },
+        select: { id: true },
+      })
+    : []
+  await notifyUsers({
+    orgId,
+    roles: ['admin', 'staff'],
+    userIds: residents.map((person) => person.id),
+    title,
+    message,
+    type: 'ENTRY_PASS',
+    event: 'passes:updated',
+    referenceType: 'EntryPass',
+    referenceId,
+    data,
+  })
 }
 
 const SAMPLE_PASS_CODES = [
@@ -17,25 +39,22 @@ const SAMPLE_PASS_CODES = [
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const unit = searchParams.get('unit')?.trim()
+    let unit = searchParams.get('unit')?.trim()
     const status = searchParams.get('status')?.trim()
     const visitorType = searchParams.get('visitorType')?.trim()
     const search = searchParams.get('search')?.trim()
     const gate = searchParams.get('gate')?.trim()
 
-    let organizationId = searchParams.get('orgId') || null
-    if (!organizationId) {
-      const { user } = await requireAuth(request).catch(() => ({ user: null }))
-      organizationId = user?.organizationId || null
+    const { user, error } = await requireAuth(request)
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
-
-    if (!organizationId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      organizationId = firstOrg?.id || null
-    }
-
+    const organizationId = user.organizationId
     if (!organizationId) {
       return NextResponse.json({ success: true, passes: [], stats: {} })
+    }
+    if (user.role === 'RESIDENT' && user.unit?.unitNumber) {
+      unit = user.unit.unitNumber
     }
 
     await prisma.entryPass.deleteMany({
@@ -130,26 +149,24 @@ export async function POST(request: Request) {
       notes,
     } = body
 
-    if (!visitorName?.trim() || !residentUnit?.trim()) {
+    const { user, error } = await requireAuth(request)
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    }
+    const organizationId = user.organizationId
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Join a society before issuing a visitor pass' }, { status: 400 })
+    }
+
+    let flatNumber = residentUnit?.trim() || ''
+    if (user.role === 'RESIDENT') {
+      flatNumber = user.unit?.unitNumber || ''
+    }
+    if (!visitorName?.trim() || !flatNumber) {
       return NextResponse.json(
         { error: 'Visitor name and Flat number are required' },
         { status: 400 }
       )
-    }
-
-    let organizationId = body.organizationId || null
-    if (!organizationId) {
-      const { user } = await requireAuth(request).catch(() => ({ user: null }))
-      organizationId = user?.organizationId || null
-    }
-
-    if (!organizationId) {
-      const firstOrg = await prisma.organization.findFirst({ orderBy: { createdAt: 'desc' } })
-      organizationId = firstOrg?.id || null
-    }
-
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 400 })
     }
 
     // Generate unique Pass Code and OTP PIN
@@ -173,7 +190,7 @@ export async function POST(request: Request) {
         purpose: purpose?.trim() || null,
         residentName: residentName?.trim() || 'Resident',
         residentPhone: residentPhone?.trim() || null,
-        residentUnit: residentUnit.trim(),
+        residentUnit: flatNumber,
         unitId: unitId || null,
         gateNumber: gateNumber || 'Gate 1 - Main Gate',
         validFrom: now,
@@ -183,44 +200,14 @@ export async function POST(request: Request) {
       },
     })
 
-    // Broadcast notifications to resident & admin
-    try {
-      const societyUsers = await prisma.user.findMany({
-        where: {
-          organizationId,
-          OR: [
-            { unit: { unitNumber: residentUnit.trim() } },
-            { role: { in: ['RWA_ADMIN', 'SECURITY', 'STAFF'] } },
-          ],
-        },
-        select: { id: true, role: true },
-      })
-
-      if (societyUsers.length > 0) {
-        await prisma.notification.createMany({
-          data: societyUsers.map(u => ({
-            organizationId,
-            userId: u.id,
-            title: `🎫 Entry Pass Generated: ${newPass.passCode}`,
-            message: `Visiting Pass for ${newPass.visitorName} (${newPass.visitorType}) to Flat ${newPass.residentUnit}. Gate Code: ${newPass.otpPin}`,
-            type: 'ENTRY_PASS',
-            referenceType: 'EntryPass',
-            referenceId: newPass.id,
-          })),
-        })
-      }
-    } catch (notifErr) {
-      console.warn('Could not broadcast entry pass creation notification:', notifErr)
-    }
-
-    // Emit live WebSocket event
-    const io = getIO()
-    if (io) {
-      io.emit('passes:updated', {
-        action: 'CREATED',
-        pass: newPass,
-      })
-    }
+    await notifyAboutPass(
+      organizationId,
+      newPass.residentUnit,
+      `Visitor pass: ${newPass.visitorName}`,
+      `${newPass.visitorName} is expected at flat ${newPass.residentUnit}. Gate code ${newPass.otpPin}.`,
+      { action: 'CREATED', pass: newPass },
+      newPass.id
+    )
 
     return NextResponse.json({
       success: true,
@@ -238,6 +225,11 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const { user, error } = await requireAuth(request)
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { id, action, guardName, notes } = body
 
@@ -245,8 +237,8 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Entry Pass ID is required' }, { status: 400 })
     }
 
-    const pass = await prisma.entryPass.findUnique({
-      where: { id },
+    const pass = await prisma.entryPass.findFirst({
+      where: { id, organizationId: user.organizationId || '__none__' },
     })
 
     if (!pass) {
@@ -256,6 +248,14 @@ export async function PATCH(request: Request) {
     let updateData: any = {}
     let notificationTitle = ''
     let notificationMsg = ''
+
+    const gateRoles = ['STAFF', 'RWA_ADMIN', 'TREASURER', 'COMMITTEE_MEMBER']
+    if ((action === 'check_in' || action === 'check_out') && !gateRoles.includes(user.role)) {
+      return NextResponse.json({ error: 'Only security or the society admin can check visitors in or out' }, { status: 403 })
+    }
+    if ((action === 'cancel' || action === 'revoke') && user.role === 'RESIDENT' && user.unit?.unitNumber !== pass.residentUnit) {
+      return NextResponse.json({ error: 'You can only cancel a pass for your own flat' }, { status: 403 })
+    }
 
     if (action === 'check_in') {
       const now = new Date()
@@ -298,43 +298,14 @@ export async function PATCH(request: Request) {
       data: updateData,
     })
 
-    // Notify resident if check-in or check-out occurred
-    if (notificationTitle && pass.organizationId) {
-      try {
-        const residentUsers = await prisma.user.findMany({
-          where: {
-            organizationId: pass.organizationId,
-            unit: { unitNumber: pass.residentUnit },
-          },
-          select: { id: true },
-        })
-
-        if (residentUsers.length > 0) {
-          await prisma.notification.createMany({
-            data: residentUsers.map(u => ({
-              organizationId: pass.organizationId,
-              userId: u.id,
-              title: notificationTitle,
-              message: notificationMsg,
-              type: 'VISITOR_ALERT',
-              referenceType: 'EntryPass',
-              referenceId: pass.id,
-            })),
-          })
-        }
-      } catch (e) {
-        console.warn('Could not send resident visitor alert:', e)
-      }
-    }
-
-    // Emit live WebSocket update
-    const io = getIO()
-    if (io) {
-      io.emit('passes:updated', {
-        action: action?.toUpperCase() || 'UPDATED',
-        pass: updatedPass,
-      })
-    }
+    await notifyAboutPass(
+      updatedPass.organizationId,
+      updatedPass.residentUnit,
+      notificationTitle || `Visitor pass ${updatedPass.status}: ${updatedPass.visitorName}`,
+      notificationMsg || `Flat ${updatedPass.residentUnit}: ${updatedPass.visitorName} is now ${updatedPass.status}.`,
+      { action: action?.toUpperCase() || 'UPDATED', pass: updatedPass },
+      updatedPass.id
+    )
 
     return NextResponse.json({
       success: true,
@@ -352,6 +323,11 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const { user, error } = await requireAuth(request)
+    if (error || !user || !['RWA_ADMIN', 'TREASURER'].includes(user.role)) {
+      return NextResponse.json({ error: 'Only the society admin can delete a pass' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
@@ -359,17 +335,25 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Entry Pass ID is required' }, { status: 400 })
     }
 
+    const existing = await prisma.entryPass.findFirst({
+      where: { id, organizationId: user.organizationId || '__none__' },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Entry Pass not found' }, { status: 404 })
+    }
+
     const deleted = await prisma.entryPass.delete({
-      where: { id },
+      where: { id: existing.id },
     })
 
-    const io = getIO()
-    if (io) {
-      io.emit('passes:updated', {
-        action: 'DELETED',
-        passId: id,
-      })
-    }
+    await notifyAboutPass(
+      existing.organizationId,
+      existing.residentUnit,
+      `Visitor pass cancelled: ${existing.visitorName}`,
+      `The pass for flat ${existing.residentUnit} was removed.`,
+      { action: 'DELETED', passId: id, pass: existing },
+      existing.id
+    )
 
     return NextResponse.json({
       success: true,
