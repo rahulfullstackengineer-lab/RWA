@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyPassword, hashPassword, createSession } from '@/lib/auth'
+import { findUserByPhone, normalizePhone } from '@/lib/phone'
 import fs from 'fs'
 import path from 'path'
 
@@ -43,23 +44,21 @@ export async function POST(request: Request) {
       )
     }
 
-    const cleanPhone = phone.trim().replace(/\s+/g, '')
-    const tenDigit = cleanPhone.slice(-10)
+    const cleanPhone = normalizePhone(phone)
+    const tenDigit = cleanPhone || ''
+    if (!cleanPhone) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
+    }
 
     // ACTION 1: Check phone status (determines if user exists, has PIN, or is first-time)
     if (action === 'check_phone') {
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { phone: cleanPhone },
-            { phone: tenDigit },
-          ],
-        },
-        include: {
-          organization: true,
-          unit: true,
-        },
-      })
+      const matched = await findUserByPhone(cleanPhone)
+      const existingUser = matched
+        ? await prisma.user.findUnique({
+            where: { id: matched.id },
+            include: { organization: true, unit: true },
+          })
+        : null
 
       if (existingUser) {
         return NextResponse.json({
@@ -121,11 +120,7 @@ export async function POST(request: Request) {
         if (stored) {
           const defaultHash = await hashPassword(stored.staff.pin || '1234')
 
-          let u = await prisma.user.findFirst({
-            where: {
-              OR: [{ phone: cleanPhone }, { phone: tenDigit }],
-            },
-          })
+          let u = await findUserByPhone(cleanPhone)
           if (!u) {
             u = await prisma.user.create({
               data: {
@@ -198,15 +193,13 @@ export async function POST(request: Request) {
       const newHash = await hashPassword(secret)
 
       // Find user
-      let user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { phone: cleanPhone },
-            { phone: tenDigit },
-          ],
-        },
-        include: { organization: true, unit: true },
-      })
+      const matched = await findUserByPhone(cleanPhone)
+      let user = matched
+        ? await prisma.user.findUnique({
+            where: { id: matched.id },
+            include: { organization: true, unit: true },
+          })
+        : null
 
       if (!user) {
         // Check unit
@@ -317,22 +310,20 @@ export async function POST(request: Request) {
     }
 
     // Find user by phone
-    let user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: tenDigit },
-        ],
-      },
-      include: {
-        organization: true,
-        unit: {
+    const matchedLogin = await findUserByPhone(cleanPhone)
+    let user = matchedLogin
+      ? await prisma.user.findUnique({
+          where: { id: matchedLogin.id },
           include: {
-            block: true,
+            organization: true,
+            unit: {
+              include: {
+                block: true,
+              },
+            },
           },
-        },
-      },
-    })
+        })
+      : null
 
     // If user not in User table, check if exists in Unit table
     if (!user) {

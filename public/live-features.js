@@ -10,36 +10,47 @@
   // 1. Live WebSockets via Socket.io
   // ------------------------------------------------------------
   let socket = null
-  function getActiveOrgId() {
+  function getStoredUser() {
     try {
-      return localStorage.getItem('rwa_active_org_id') ||
-             (window.currentSociety && window.currentSociety.id) ||
-             (window.rwa_user && window.rwa_user.organizationId) ||
-             'greenfield-rwa';
+      return JSON.parse(localStorage.getItem('rwa_user') || '{}');
     } catch {
-      return 'greenfield-rwa';
+      return {};
     }
   }
 
-  function getCurrentUserId() {
-    try {
-      const u = JSON.parse(localStorage.getItem('rwa_user') || '{}');
-      return u.id || (window.rwa_user && window.rwa_user.id) || 'resident-1';
-    } catch {
-      return 'resident-1';
+  function audienceRole(role) {
+    if (role === 'STAFF') return 'staff';
+    if (['RWA_ADMIN', 'ADMIN', 'TREASURER', 'SECRETARY', 'PRESIDENT', 'COMMITTEE_MEMBER', 'MANAGER'].indexOf(role) !== -1) {
+      return 'admin';
     }
+    return 'resident';
+  }
+
+  function getActiveOrgId() {
+    const user = getStoredUser();
+    return localStorage.getItem('rwa_active_org_id') ||
+      user.organizationId ||
+      (window.currentSociety && window.currentSociety.id) ||
+      (window.rwa_user && window.rwa_user.organizationId) ||
+      '';
+  }
+
+  function getCurrentUserId() {
+    const user = getStoredUser();
+    return user.id || (window.rwa_user && window.rwa_user.id) || '';
   }
 
   function syncSocketRooms() {
     if (!socket || !socket.connected) return;
+    const user = getStoredUser();
     const orgId = getActiveOrgId();
     const userId = getCurrentUserId();
     if (orgId) {
-      console.log('📡 Socket joining org room:', `org:${orgId}`);
-      socket.emit('join-org', orgId);
+      const role = audienceRole(user.role);
+      console.log('📡 Socket joining rooms:', `org:${orgId}`, role, userId || 'no-user');
+      socket.emit('join-org', { orgId: orgId, role: role });
     }
     if (userId) {
-      console.log('📡 Socket joining user room:', `user:${userId}`);
       socket.emit('join-user', userId);
     }
   }
@@ -86,7 +97,24 @@
   setTimeout(checkUnreadNotificationsBadge, 500);
   setInterval(checkUnreadNotificationsBadge, 25000);
 
-  if (typeof io !== 'undefined') {
+  const socketEventsWithOwnToast = {
+    'new-notice': true,
+    'new-complaint-ticket': true,
+    'payment-confirmed': true,
+    'new-payment-received': true,
+    'complaint-status-updated': true,
+    'new-expense-recorded': true,
+    'new-meeting-scheduled': true,
+    'new-amenity-booking': true,
+    'google-calendar-synced': true,
+    'resident-onboarded': true,
+    'bills-generated': true,
+    'new-bill-generated': true,
+    'bills-updated-bulk': true,
+  };
+
+  function connectLiveSocket() {
+    if (typeof io === 'undefined' || socket) return false;
     try {
       socket = io({
         path: '/api/socket/io',
@@ -98,6 +126,20 @@
         console.log('🟢 Socket connected:', socket.id)
         syncSocketRooms()
         checkUnreadNotificationsBadge()
+      })
+
+      socket.on('live-notification', (data) => {
+        const mine = audienceRole(getStoredUser().role);
+        const audience = data && data.audience;
+        if (Array.isArray(audience) && audience.length && audience.indexOf(mine) === -1 && !data.userId) {
+          return;
+        }
+        updateNotificationBellBadge(true);
+        checkUnreadNotificationsBadge();
+        if (data && data.event && socketEventsWithOwnToast[data.event]) return;
+        if (data && data.title && typeof showToast === 'function') {
+          showToast(data.title, 'info');
+        }
       })
 
       socket.on('new-notice', (data) => {
@@ -279,8 +321,28 @@
       })
     } catch (err) {
       console.warn('Socket initialization error:', err)
+      socket = null
+      return false
     }
+    return true
   }
+
+  if (!connectLiveSocket()) {
+    const socketRetry = setInterval(function() {
+      if (connectLiveSocket()) clearInterval(socketRetry)
+    }, 400)
+    setTimeout(function() { clearInterval(socketRetry) }, 8000)
+  }
+
+  try {
+    const originalSetItem = localStorage.setItem.bind(localStorage)
+    localStorage.setItem = function(key, value) {
+      originalSetItem(key, value)
+      if (key === 'rwa_user' || key === 'rwa_active_org_id') {
+        syncSocketRooms()
+      }
+    }
+  } catch (e) {}
 
   // ------------------------------------------------------------
   // 2. Live Sidebar Badge Counts (dynamic from DB)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 
 export async function GET(request: Request) {
@@ -88,17 +88,27 @@ export async function POST(request: Request) {
       },
     })
 
-    // Emit live socket event
-    emitLiveSocketEvent('new-complaint-ticket', {
-      id: complaint.id,
-      ticketNumber: complaint.ticketNumber,
-      title: complaint.title,
-      category: complaint.category,
-      priority: complaint.priority,
-      unitNumber: complaint.unit?.unitNumber || 'Common Area',
-      raisedByName: user.name,
-      createdAt: complaint.createdAt,
-    }, { orgId })
+    await notifyUsers({
+      orgId,
+      roles: ['admin', 'staff'],
+      excludeUserId: user.id,
+      title: `🎫 New Ticket ${complaint.ticketNumber}`,
+      message: `${complaint.unit?.unitNumber || 'Common area'}: ${complaint.title}`,
+      type: 'COMPLAINT',
+      event: 'new-complaint-ticket',
+      referenceType: 'COMPLAINT',
+      referenceId: complaint.id,
+      data: {
+        id: complaint.id,
+        ticketNumber: complaint.ticketNumber,
+        title: complaint.title,
+        category: complaint.category,
+        priority: complaint.priority,
+        unitNumber: complaint.unit?.unitNumber || 'Common Area',
+        raisedByName: user.name,
+        createdAt: complaint.createdAt,
+      },
+    })
 
     await logAudit({
       organizationId: orgId,
@@ -142,7 +152,17 @@ export async function DELETE(request: Request) {
 
     await prisma.complaint.delete({ where: { id } })
 
-    emitLiveSocketEvent('complaint-deleted', { id }, { orgId })
+    await notifyUsers({
+      orgId,
+      roles: ['admin'],
+      title: `Ticket ${complaint.ticketNumber} removed`,
+      message: complaint.title,
+      type: 'COMPLAINT',
+      event: 'complaint-deleted',
+      referenceType: 'COMPLAINT',
+      referenceId: id,
+      data: { id },
+    })
 
     await logAudit({
       organizationId: orgId,

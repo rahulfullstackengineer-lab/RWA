@@ -398,14 +398,14 @@ window.loadLiveMembersScreen = async function() {
     }
 
     const data = await res.json();
-    const members = data.members || [];
+    const members = (data.members || []).filter(m => m.role !== 'STAFF');
     window.__cachedMembers = members;
 
     // 1. Calculate Aggregated Metrics
     const totalCount = members.length;
     const activeCount = members.filter(m => (m.status || 'ACTIVE').toUpperCase() === 'ACTIVE').length;
     const pendingCount = members.filter(m => (m.status || '').toUpperCase() === 'PENDING').length;
-    const tenantsCount = members.filter(m => m.role === 'RESIDENT' && m.occupancyType === 'TENANT').length || Math.round(totalCount * 0.25);
+    const tenantsCount = members.filter(m => m.occupancyType === 'TENANT').length;
     const committeeCount = members.filter(m => m.role === 'RWA_ADMIN' || m.role === 'TREASURER').length;
 
     // Update Stat Cards

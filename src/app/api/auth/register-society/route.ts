@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashPassword, createSession } from '@/lib/auth'
+import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
 
 export async function POST(request: Request) {
   try {
@@ -31,25 +32,28 @@ export async function POST(request: Request) {
     const passwordHash = await hashPassword(password)
 
     // Clean and validate admin phone number (10 digits)
-    const rawPhone = String(admin.phone).trim().replace(/\D/g, '')
-    const cleanPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : rawPhone
-    if (!cleanPhone || cleanPhone.length !== 10) {
+    const cleanPhone = normalizePhone(admin.phone)
+    if (!cleanPhone) {
       return NextResponse.json(
         { error: 'Please enter a valid 10-digit mobile number for the admin' },
         { status: 400 }
       )
     }
 
-    // Check admin email uniqueness in User table
-    let validAdminEmail: string | null = admin.email?.trim() || null
-    if (validAdminEmail) {
-      const emailUser = await prisma.user.findUnique({
-        where: { email: validAdminEmail }
-      })
-      if (emailUser && emailUser.phone !== cleanPhone) {
-        console.warn(`Admin email ${validAdminEmail} already taken, proceeding without email for this user`)
-        validAdminEmail = null
-      }
+    const existingPhoneUser = await findUserByPhone(cleanPhone)
+    if (existingPhoneUser) {
+      return NextResponse.json(
+        { error: 'This mobile number already has an account. Sign in with that number instead of creating another.' },
+        { status: 409 }
+      )
+    }
+
+    const validAdminEmail: string | null = admin.email?.trim().toLowerCase() || null
+    if (await emailUsedBySomeoneElse(validAdminEmail)) {
+      return NextResponse.json(
+        { error: 'This email is already registered to another account.' },
+        { status: 409 }
+      )
     }
 
     // 1. Create Brand New Organization in Database

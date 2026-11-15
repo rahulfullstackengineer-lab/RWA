@@ -35,17 +35,26 @@ app.prepare().then(() => {
   // Attach io to global for API route access
   global.__io = io
 
+  function audienceRoom(role) {
+    if (role === 'STAFF' || role === 'staff') return 'staff'
+    const admins = ['RWA_ADMIN', 'ADMIN', 'TREASURER', 'SECRETARY', 'PRESIDENT', 'COMMITTEE_MEMBER', 'MANAGER', 'admin']
+    if (admins.includes(role)) return 'admin'
+    return 'resident'
+  }
+
   io.on('connection', (socket) => {
-    // Join organization broadcast room
-    socket.on('join-org', (orgId) => {
-      if (orgId) {
-        socket.join(`org:${orgId}`)
-      }
+    // Join organization broadcast room and the caller's role room
+    socket.on('join-org', (payload) => {
+      const orgId = typeof payload === 'string' ? payload : payload && payload.orgId
+      const role = typeof payload === 'object' && payload ? payload.role : null
+      if (!orgId || orgId === 'greenfield-rwa') return
+      socket.join(`org:${orgId}`)
+      if (role) socket.join(`org:${orgId}:${audienceRoom(role)}`)
     })
 
     // Join specific user room for targeted notifications
     socket.on('join-user', (userId) => {
-      if (userId) {
+      if (userId && userId !== 'resident-1') {
         socket.join(`user:${userId}`)
       }
     })

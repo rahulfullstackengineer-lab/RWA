@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
     // Auto-sync / backfill any resident onboarding notifications for society admins
-    const isAdmin = user.role !== 'RESIDENT' || ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(user.role)
+    const isAdmin = ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(user.role)
     if (isAdmin) {
       try {
         const orgFilter = user.organizationId ? { organizationId: user.organizationId } : {}
@@ -243,7 +243,7 @@ export async function PATCH(request: Request) {
     const { user, error } = await requireAuth(request)
     if (error || !user) return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
 
-    const isAdmin = user.role !== 'RESIDENT' || ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(user.role)
+    const isAdmin = ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN'].includes(user.role)
     const body = await request.json()
     const { notificationId, noticeId, markAll = false } = body
 

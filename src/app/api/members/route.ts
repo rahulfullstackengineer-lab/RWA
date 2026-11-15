@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
 
 export async function GET(request: Request) {
   try {
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     const members = await prisma.user.findMany({
       where: {
         organizationId: orgId,
-        ...(role ? { role } : {}),
+        role: role ? role : { notIn: ['STAFF'] },
         ...(status ? { status } : {}),
         ...(search
           ? {
@@ -75,7 +76,13 @@ export async function GET(request: Request) {
       // Auto-provision Owner
       if (unit.ownerPhone && !existingPhones.has(unit.ownerPhone)) {
         try {
-          const cleanPhone = unit.ownerPhone.trim().replace(/\s+/g, '')
+          const cleanPhone = normalizePhone(unit.ownerPhone)
+          if (!cleanPhone || existingPhones.has(cleanPhone)) continue
+          const already = await findUserByPhone(cleanPhone)
+          if (already) {
+            existingPhones.add(cleanPhone)
+            continue
+          }
           const ownerUser = await prisma.user.upsert({
             where: { phone: cleanPhone },
             update: {
@@ -109,7 +116,13 @@ export async function GET(request: Request) {
       // Auto-provision Tenant (if distinct phone)
       if (unit.tenantPhone && unit.tenantPhone !== unit.ownerPhone && !existingPhones.has(unit.tenantPhone)) {
         try {
-          const cleanPhone = unit.tenantPhone.trim().replace(/\s+/g, '')
+          const cleanPhone = normalizePhone(unit.tenantPhone)
+          if (!cleanPhone || existingPhones.has(cleanPhone)) continue
+          const already = await findUserByPhone(cleanPhone)
+          if (already) {
+            existingPhones.add(cleanPhone)
+            continue
+          }
           const tenantUser = await prisma.user.upsert({
             where: { phone: cleanPhone },
             update: {
@@ -162,7 +175,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 })
     }
 
-    const cleanPhone = phone.trim().replace(/\s+/g, '')
+    const cleanPhone = normalizePhone(phone)
+    if (!cleanPhone) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
+    }
 
     let orgId = body.organizationId || request.headers.get('x-active-org-id') || user.organizationId
     if (!orgId) {
@@ -184,9 +200,13 @@ export async function POST(request: Request) {
     }
 
     // Check if phone exists
-    const existing = await prisma.user.findFirst({
-      where: { phone: cleanPhone },
-    })
+    const existing = await findUserByPhone(cleanPhone)
+    if (await emailUsedBySomeoneElse(email, existing?.id)) {
+      return NextResponse.json(
+        { error: 'This email is already registered to another account. One phone number can have only one account.' },
+        { status: 409 }
+      )
+    }
 
     const rawPin = (pin || password || '').trim()
     const passwordHash = rawPin ? await bcrypt.hash(rawPin, 10) : null

@@ -32,7 +32,7 @@ export default function Home() {
       '/screens/resident-portal.js',
       '/screens/resident-onboard.js',
       '/screens/platform-admin.js',
-      '/socket.io.min.js',
+      '/api/socket/io/socket.io.js',
       '/live-features.js',
       '/app.js',
     ]

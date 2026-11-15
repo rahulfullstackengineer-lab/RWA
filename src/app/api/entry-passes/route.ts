@@ -9,101 +9,9 @@ function getIO() {
   return null
 }
 
-const SEED_PASSES = [
-  {
-    passCode: 'PASS-84920',
-    otpPin: '4821',
-    visitorName: 'Amitava Sen',
-    visitorPhone: '9818123456',
-    visitorType: 'GUEST',
-    vehicleNumber: 'CH 01 BG 4421',
-    purpose: 'Family dinner & weekend meet',
-    residentName: 'Dr. Vikram Malhotra',
-    residentPhone: '9812345678',
-    residentUnit: 'A-402',
-    gateNumber: 'Gate 1 - Main Gate',
-    status: 'CHECKED_IN',
-    checkedInBy: 'Ram Singh (Gate 1)',
-    notes: 'Parked in Guest Bay G-04',
-  },
-  {
-    passCode: 'PASS-61294',
-    otpPin: '7392',
-    visitorName: 'Raju Kumar (Zomato)',
-    visitorPhone: '9829384756',
-    visitorType: 'DELIVERY',
-    vehicleNumber: 'PB 65 AB 7712',
-    purpose: 'Food delivery #ZOM-88219',
-    residentName: 'Ananya Sharma',
-    residentPhone: '9823456789',
-    residentUnit: 'B-201',
-    gateNumber: 'Gate 1 - Main Gate',
-    status: 'APPROVED',
-    notes: 'Direct intercom verified with flat',
-  },
-  {
-    passCode: 'PASS-99381',
-    otpPin: '2490',
-    visitorName: 'Sukhwinder Singh (Uber)',
-    visitorPhone: '9872109834',
-    visitorType: 'CAB',
-    vehicleNumber: 'HR 26 DQ 8832',
-    purpose: 'Airport drop cab pickup',
-    residentName: 'Rajesh Kumar',
-    residentPhone: '9834567890',
-    residentUnit: 'A-104',
-    gateNumber: 'Gate 1 - Main Gate',
-    status: 'CHECKED_IN',
-    checkedInBy: 'Ram Singh (Gate 1)',
-    notes: '5 min waiting allowed at porch',
-  },
-  {
-    passCode: 'PASS-55201',
-    otpPin: '6115',
-    visitorName: 'Manoj (Urban Company)',
-    visitorPhone: '9811223344',
-    visitorType: 'SERVICE',
-    vehicleNumber: 'PB 01 XY 3302',
-    purpose: 'RO Water Purifier Service & Filter Change',
-    residentName: 'Sunil Verma',
-    residentPhone: '9845678901',
-    residentUnit: 'B-305',
-    gateNumber: 'Gate 2 - Service Gate',
-    status: 'APPROVED',
-    notes: 'Service toolkit verified by security',
-  },
-  {
-    passCode: 'PASS-41890',
-    otpPin: '8204',
-    visitorName: 'Pooja Singhania',
-    visitorPhone: '9876501234',
-    visitorType: 'GUEST',
-    vehicleNumber: 'DL 3C AU 9901',
-    purpose: 'Family celebration visit',
-    residentName: 'Meenakshi Sundaram',
-    residentPhone: '9856789012',
-    residentUnit: 'A-301',
-    gateNumber: 'Gate 1 - Main Gate',
-    status: 'CHECKED_OUT',
-    checkedInBy: 'Ram Singh (Gate 1)',
-    checkedOutBy: 'Suraj Sharma (Gate 1)',
-    notes: 'Exited campus at Gate 1',
-  },
-  {
-    passCode: 'PASS-73019',
-    otpPin: '3187',
-    visitorName: 'Mukesh (Amazon Logistics)',
-    visitorPhone: '9833445566',
-    visitorType: 'DELIVERY',
-    vehicleNumber: 'PB 02 C 1290',
-    purpose: 'Amazon parcel delivery #AMZ-993',
-    residentName: 'Rohit Bansal',
-    residentPhone: '9867890123',
-    residentUnit: 'A-202',
-    gateNumber: 'Gate 2 - Service Gate',
-    status: 'APPROVED',
-    notes: 'Heavy appliance delivery',
-  },
+const SAMPLE_PASS_CODES = [
+  'PASS-84920', 'PASS-61294', 'PASS-99381', 'PASS-55201', 'PASS-41890', 'PASS-73019',
+  'PASS-22001', 'PASS-22002', 'PASS-22003', 'PASS-22004', 'PASS-22005', 'PASS-22006',
 ]
 
 export async function GET(request: Request) {
@@ -130,42 +38,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, passes: [], stats: {} })
     }
 
-    // Auto-seed if empty
-    const existingCount = await prisma.entryPass.count({
-      where: { organizationId },
+    await prisma.entryPass.deleteMany({
+      where: {
+        organizationId,
+        passCode: { in: SAMPLE_PASS_CODES },
+      },
     })
-
-    if (existingCount === 0) {
-      const now = new Date()
-      const validUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000)
-
-      for (const item of SEED_PASSES) {
-        await prisma.entryPass.create({
-          data: {
-            organizationId,
-            passCode: item.passCode,
-            otpPin: item.otpPin,
-            visitorName: item.visitorName,
-            visitorPhone: item.visitorPhone,
-            visitorType: item.visitorType,
-            vehicleNumber: item.vehicleNumber,
-            purpose: item.purpose,
-            residentName: item.residentName,
-            residentPhone: item.residentPhone,
-            residentUnit: item.residentUnit,
-            gateNumber: item.gateNumber,
-            validFrom: new Date(now.getTime() - 2 * 60 * 60 * 1000),
-            validUntil: validUntil,
-            status: item.status,
-            checkedInAt: item.status === 'CHECKED_IN' || item.status === 'CHECKED_OUT' ? new Date(now.getTime() - 90 * 60 * 1000) : null,
-            checkedInBy: item.checkedInBy || null,
-            checkedOutAt: item.status === 'CHECKED_OUT' ? new Date(now.getTime() - 15 * 60 * 1000) : null,
-            checkedOutBy: item.checkedOutBy || null,
-            notes: item.notes,
-          },
-        })
-      }
-    }
 
     // Build filter
     const whereClause: any = { organizationId }

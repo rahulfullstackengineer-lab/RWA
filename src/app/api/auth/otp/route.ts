@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createOTP, verifyOTP, createSession } from '@/lib/auth'
+import { findUserByPhone, normalizePhone } from '@/lib/phone'
 
 // Send OTP
 export async function POST(request: Request) {
@@ -12,12 +13,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
     }
 
-    const cleanPhone = phone.trim().replace(/\s+/g, '')
+    const cleanPhone = normalizePhone(phone)
+    if (!cleanPhone) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
+    }
 
-    // Check user exists
-    let user = await prisma.user.findFirst({
-      where: { phone: cleanPhone },
-    })
+    // One phone number can belong to only one account
+    let user = await findUserByPhone(cleanPhone)
 
     // If user does not exist in User table yet, check if phone number exists in Unit registry (as Owner or Tenant)
     if (!user) {

@@ -163,7 +163,6 @@ window.renderStaffDutyTable = function() {
           ${!query ? `
             <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
               <button class="btn btn-primary btn-sm" onclick="window.openAddStaffDutyModal()">+ Assign Staff Post</button>
-              <button class="btn btn-secondary btn-sm" onclick="window.syncDefaultStaffDuties()">🔄 Reset Standard Society Posts</button>
             </div>
           ` : ''}
         </td>
@@ -861,9 +860,6 @@ Screens['admin-duty'] = function() {
         <button class="btn btn-secondary btn-sm" onclick="window.broadcastDutyRosterAlert()" title="Send alert notification to all residents">
           <span>📢 Notify Residents</span>
         </button>
-        <button class="btn btn-secondary btn-sm" onclick="window.syncDefaultStaffDuties()" title="Reset to standard campus posts">
-          <span>🔄 Sync Roster</span>
-        </button>
         <button class="btn btn-primary btn-sm" onclick="window.openAddStaffDutyModal()" style="background:linear-gradient(135deg,#2563EB 0%,#1D4ED8 100%);">
           <span>+ Assign Staff Post</span>
         </button>
@@ -1033,9 +1029,6 @@ Screens['admin-duty'] = function() {
             <span>ℹ️</span>
             <span>All duty posts, gate rotations, and contact numbers are synchronized in real-time to the <strong>Resident Portal</strong>.</span>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="window.syncDefaultStaffDuties()">
-            🔄 Reset Standard Roster
-          </button>
         </div>
       </div>
     `,

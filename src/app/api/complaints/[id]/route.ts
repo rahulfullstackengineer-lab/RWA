@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { emitLiveSocketEvent, notifyUsers } from '@/lib/socket-server'
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -41,22 +41,41 @@ export async function PATCH(request: Request, context: RouteParams) {
       },
     })
 
-    // Emit live socket event to the resident who raised the complaint
-    emitLiveSocketEvent('complaint-status-updated', {
-      complaintId: updated.id,
-      ticketNumber: updated.ticketNumber,
-      title: updated.title,
-      newStatus: updated.status,
-      assignedTo: updated.assignedTo,
-      resolutionNote: updated.resolutionNote,
-    }, { userId: existing.raisedById })
+    await notifyUsers({
+      orgId: existing.organizationId,
+      userIds: [existing.raisedById],
+      title: `Ticket ${updated.ticketNumber} updated`,
+      message: `Status changed to ${updated.status}`,
+      type: 'COMPLAINT',
+      event: 'complaint-status-updated',
+      referenceType: 'COMPLAINT',
+      referenceId: updated.id,
+      data: {
+        complaintId: updated.id,
+        ticketNumber: updated.ticketNumber,
+        title: updated.title,
+        newStatus: updated.status,
+        assignedTo: updated.assignedTo,
+        resolutionNote: updated.resolutionNote,
+      },
+    })
 
-    // Also notify org room
-    emitLiveSocketEvent('complaint-updated', {
-      complaintId: updated.id,
-      ticketNumber: updated.ticketNumber,
-      status: updated.status,
-    }, { orgId: existing.organizationId })
+    await notifyUsers({
+      orgId: existing.organizationId,
+      roles: ['admin', 'staff'],
+      excludeUserId: user.id,
+      title: `Ticket ${updated.ticketNumber} is ${updated.status}`,
+      message: updated.title,
+      type: 'COMPLAINT',
+      event: 'complaint-updated',
+      referenceType: 'COMPLAINT',
+      referenceId: updated.id,
+      data: {
+        complaintId: updated.id,
+        ticketNumber: updated.ticketNumber,
+        status: updated.status,
+      },
+    })
 
     return NextResponse.json({ success: true, complaint: updated })
   } catch (err: unknown) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { findUserByPhone, normalizePhone } from '@/lib/phone'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -51,108 +52,14 @@ interface OrgStaffStore {
   payments: StaffSalaryPayment[]
 }
 
-function getDefaultStaff(): StaffRecord[] {
-  return [
-    {
-      id: 'STF-001',
-      name: 'Ramesh Kumar',
-      role: 'Security Guard (Day)',
-      department: 'Security',
-      phone: '+91 94001 12345',
-      salary: 12000,
-      salaryType: 'MONTHLY',
-      joiningDate: '2020-01-10',
-      status: 'ACTIVE',
-      shift: 'DAY',
-      lastPaidMonth: 'Sep 2026',
-      upiId: 'ramesh.guard@upi',
-      aadhaarNumber: 'XXXX-XXXX-4589',
-      createdAt: '2020-01-10T00:00:00.000Z',
-    },
-    {
-      id: 'STF-002',
-      name: 'Suresh Singh',
-      role: 'Security Guard (Night)',
-      department: 'Security',
-      phone: '+91 94002 23456',
-      salary: 12000,
-      salaryType: 'MONTHLY',
-      joiningDate: '2021-03-01',
-      status: 'ACTIVE',
-      shift: 'NIGHT',
-      lastPaidMonth: 'Sep 2026',
-      upiId: 'suresh.singh@upi',
-      aadhaarNumber: 'XXXX-XXXX-8921',
-      createdAt: '2021-03-01T00:00:00.000Z',
-    },
-    {
-      id: 'STF-003',
-      name: 'Meena Bai',
-      role: 'Sweeper / Housekeeping',
-      department: 'Housekeeping',
-      phone: '+91 94003 34567',
-      salary: 8500,
-      salaryType: 'MONTHLY',
-      joiningDate: '2019-06-15',
-      status: 'ACTIVE',
-      shift: 'GENERAL',
-      lastPaidMonth: 'Sep 2026',
-      upiId: 'meenabai@okhdfcbank',
-      aadhaarNumber: 'XXXX-XXXX-3412',
-      createdAt: '2019-06-15T00:00:00.000Z',
-    },
-    {
-      id: 'STF-004',
-      name: 'Rajiv Mali',
-      role: 'Gardener & Groundskeeper',
-      department: 'Gardening',
-      phone: '+91 94004 45678',
-      salary: 7000,
-      salaryType: 'MONTHLY',
-      joiningDate: '2022-02-10',
-      status: 'ACTIVE',
-      shift: 'DAY',
-      lastPaidMonth: 'Sep 2026',
-      upiId: 'rajiv.mali@upi',
-      aadhaarNumber: 'XXXX-XXXX-1934',
-      createdAt: '2022-02-10T00:00:00.000Z',
-    },
-    {
-      id: 'STF-005',
-      name: 'Prem Lal',
-      role: 'Watchman / Gate Supervisor',
-      department: 'Security',
-      phone: '+91 94005 56789',
-      salary: 10000,
-      salaryType: 'MONTHLY',
-      joiningDate: '2018-08-01',
-      status: 'ACTIVE',
-      shift: 'ROTATIONAL',
-      lastPaidMonth: 'Oct 2026',
-      lastPaidDate: '2026-10-05T10:30:00.000Z',
-      upiId: 'premlal@ybl',
-      aadhaarNumber: 'XXXX-XXXX-9022',
-      createdAt: '2018-08-01T00:00:00.000Z',
-    },
-  ]
-}
+const SAMPLE_STAFF_IDS = new Set(['STF-001', 'STF-002', 'STF-003', 'STF-004', 'STF-005'])
+const SAMPLE_STAFF_NAMES = new Set(['Ramesh Kumar', 'Suresh Singh', 'Meena Bai', 'Rajiv Mali', 'Prem Lal'])
 
-function getDefaultPayments(): StaffSalaryPayment[] {
-  return [
-    {
-      id: 'PAY-STF-001',
-      staffId: 'STF-005',
-      staffName: 'Prem Lal',
-      role: 'Watchman / Gate Supervisor',
-      month: 'Oct 2026',
-      amount: 10000,
-      paymentMethod: 'UPI',
-      transactionRef: 'UPI-RWA-10052026',
-      paidAt: '2026-10-05T10:30:00.000Z',
-      paidBy: 'Administrator',
-      notes: 'October 2026 regular monthly salary disbursement',
-    },
-  ]
+function stripSampleStaff(data: OrgStaffStore): OrgStaffStore {
+  const staff = data.staff.filter((s) => !SAMPLE_STAFF_IDS.has(s.id) && !SAMPLE_STAFF_NAMES.has(s.name))
+  const keptIds = new Set(staff.map((s) => s.id))
+  const payments = data.payments.filter((p) => keptIds.has(p.staffId) && p.id !== 'PAY-STF-001')
+  return { staff, payments }
 }
 
 function getStoredStaffData(orgId: string): OrgStaffStore {
@@ -161,24 +68,21 @@ function getStoredStaffData(orgId: string): OrgStaffStore {
       const allData = JSON.parse(fs.readFileSync(STAFF_DATA_PATH, 'utf-8'))
       if (allData && allData[orgId]) {
         const orgEntry = allData[orgId]
-        return {
+        const stored = stripSampleStaff({
           staff: Array.isArray(orgEntry.staff) ? orgEntry.staff : [],
           payments: Array.isArray(orgEntry.payments) ? orgEntry.payments : [],
+        })
+        if (stored.staff.length !== (orgEntry.staff || []).length || stored.payments.length !== (orgEntry.payments || []).length) {
+          saveStoredStaffData(orgId, stored)
         }
+        return stored
       }
     }
   } catch (e) {
     console.error('Error reading staff store:', e)
   }
 
-  const initialStaff = getDefaultStaff().map(s => ({ ...s, pin: '1234' }))
-  const initialPayments = getDefaultPayments()
-  const initialData: OrgStaffStore = {
-    staff: initialStaff,
-    payments: initialPayments,
-  }
-  saveStoredStaffData(orgId, initialData)
-  return initialData
+  return { staff: [], payments: [] }
 }
 
 function saveStoredStaffData(orgId: string, data: OrgStaffStore) {
@@ -332,8 +236,18 @@ export async function POST(request: Request) {
 
     const newStaffId = `STF-${Math.floor(100 + Math.random() * 900)}`
     const staffPin = (pin || '1234').toString().trim()
-    const cleanPhone = phone.trim().replace(/\D/g, '')
-    const tenDigit = cleanPhone.slice(-10)
+    const cleanPhone = normalizePhone(phone)
+    const tenDigit = cleanPhone || ''
+    if (!cleanPhone) {
+      return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
+    }
+    const existingAccount = await findUserByPhone(cleanPhone)
+    if (existingAccount && existingAccount.role !== 'STAFF') {
+      return NextResponse.json(
+        { error: 'This mobile number already has an account. One phone number can have only one account.' },
+        { status: 409 }
+      )
+    }
 
     const newStaff: StaffRecord = {
       id: newStaffId,
@@ -400,11 +314,7 @@ export async function POST(request: Request) {
 
       // Upsert User with STAFF role and bcrypt PIN
       const defaultHash = await hashPassword(staffPin)
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          OR: [{ phone: phone.trim() }, { phone: cleanPhone }, { phone: tenDigit }],
-        },
-      })
+      const existingUser = await findUserByPhone(cleanPhone)
 
       if (existingUser) {
         await prisma.user.update({
