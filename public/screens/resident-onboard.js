@@ -194,6 +194,11 @@ Screens['resident-login'] = function() {
           <div class="cutora-footer-line">
             First time joining your society? <a class="link-emerald" onclick="Router.go('resident-onboard')">Find your flat here →</a>
           </div>
+          <div class="auth-bottom-cover">
+            <div class="auth-bottom-item"><strong>Your flat</strong><span>Bills, notices, and complaints for your unit.</span></div>
+            <div class="auth-bottom-item"><strong>Private PIN</strong><span>Your mobile number and PIN stay on this device.</span></div>
+            <div class="auth-bottom-item"><strong>First visit</strong><span>Connect the flat your society admin assigned.</span></div>
+          </div>
         </div>
       </div>
 

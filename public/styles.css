@@ -7573,6 +7573,61 @@ body.mobile-frame-view .cutora-otp-digit {
 .cutora-auth-modern:not(.resident-mode):not(.staff-mode) .cutora-login-btn {
   background: #18181B !important;
 }
+.auth-bottom-cover {
+  display: none;
+}
+@media (max-width: 1024px) {
+  .cutora-auth-modern.cutora-auth-screen {
+    min-height: 100dvh;
+  }
+  .cutora-auth-modern .cutora-form-wrap {
+    flex: 1 1 auto;
+    align-self: stretch;
+    min-height: 100%;
+  }
+  .cutora-auth-modern .auth-bottom-cover {
+    display: grid;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 22px;
+  }
+}
+body.mobile-frame-view .cutora-auth-modern .cutora-card-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0;
+}
+body.mobile-frame-view .cutora-auth-modern .cutora-form-wrap {
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100%;
+}
+body.mobile-frame-view .cutora-auth-modern .auth-bottom-cover {
+  display: grid !important;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+.auth-bottom-item {
+  background: #FAFAFA;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  padding: 10px 12px;
+}
+.auth-bottom-item strong {
+  display: block;
+  color: #18181B;
+  font-size: 12px;
+  font-weight: 650;
+}
+.auth-bottom-item span {
+  display: block;
+  margin-top: 2px;
+  color: #71717A;
+  font-size: 12px;
+  line-height: 1.35;
+}
 
 .topbar .btn,
 .topbar .icon-btn,

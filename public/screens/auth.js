@@ -190,6 +190,11 @@ Screens['auth-login'] = function() {
           <div class="cutora-footer-line">
             Don’t have an account? <a class="link-amber" onclick="Router.go('onboarding-1')">Onboard your society here →</a>
           </div>
+          <div class="auth-bottom-cover">
+            <div class="auth-bottom-item"><strong>Society admin</strong><span>Bills, residents, notices, and the gate stay in one place.</span></div>
+            <div class="auth-bottom-item"><strong>Private PIN</strong><span>Your mobile number and PIN stay on this device.</span></div>
+            <div class="auth-bottom-item"><strong>New society</strong><span>Use the link above to launch your RWA.</span></div>
+          </div>
         </div>
       </div>
 
@@ -820,7 +825,7 @@ window.handlePinLogin = async function() {
       }
       showToast(`Welcome back, ${data.user.name}! Signed in successfully.`, 'success');
 
-      if (data.user.role === 'PLATFORM_ADMIN' || data.user.phone === '8219587657') {
+      if (data.user.role === 'PLATFORM_ADMIN' || data.user.role === 'PLATFORM_SUPER_ADMIN') {
         Router.go('platform-dashboard');
       } else if (data.user.role === 'STAFF' || data.user.role === 'SECURITY' || data.isStaff) {
         Router.go('staff-dashboard');
@@ -976,7 +981,7 @@ window.handleVerifyOtpClick = async function() {
         localStorage.setItem('rwa_active_org_name', data.user.organizationName);
       }
       showToast(`Namaste, ${data.user.name}! Signed in successfully.`, 'success');
-      if (data.user.role === 'PLATFORM_ADMIN' || data.user.phone === '8219587657') {
+      if (data.user.role === 'PLATFORM_ADMIN' || data.user.role === 'PLATFORM_SUPER_ADMIN') {
         Router.go('platform-dashboard');
       } else if (data.user.role === 'RESIDENT') {
         if (data.isConnected || (data.user.organizationId && data.user.unitId)) {

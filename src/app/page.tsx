@@ -75,7 +75,16 @@ export default function Home() {
           s.startsWith('resident-onboard') ||
           s.startsWith('staff-login')
 
-        if (hash && win.Screens[hash] && !['landing', 'product', 'solutions', 'pricing', 'company'].includes(hash)) {
+        const platformAdmin = user && (user.role === 'PLATFORM_ADMIN' || user.role === 'PLATFORM_SUPER_ADMIN')
+        if (hash && hash.startsWith('platform-') && !platformAdmin) {
+          targetScreen = !user
+            ? 'auth-login'
+            : user.role === 'RESIDENT'
+              ? 'resident-dashboard'
+              : user.role === 'STAFF'
+                ? 'staff-dashboard'
+                : 'admin-dashboard'
+        } else if (hash && win.Screens[hash] && !['landing', 'product', 'solutions', 'pricing', 'company'].includes(hash)) {
           targetScreen = hash
         } else {
           // Root "/" path: directly open auth-login screen

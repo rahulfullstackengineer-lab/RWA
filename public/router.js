@@ -20,8 +20,7 @@ var Router = (() => {
     try {
       const userStr = typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_user') : null;
       const user = userStr ? JSON.parse(userStr) : null;
-      const phone = user?.phone || (typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_login_phone') : '') || '';
-      return (user && user.role === 'PLATFORM_ADMIN') || phone === '8219587657';
+      return !!(user && (user.role === 'PLATFORM_ADMIN' || user.role === 'PLATFORM_SUPER_ADMIN'));
     } catch (e) {
       return false;
     }
@@ -717,7 +716,7 @@ window.toggleUserAccountMenu = function(event, portal) {
                    rawRole === 'COMMITTEE_MEMBER' ? 'Committee Member' :
                    rawRole === 'RESIDENT' ? 'Resident Member' :
                    rawRole.replace(/_/g, ' ');
-  const orgName = ((user.organization && user.organization.name) || localStorage.getItem('rwa_active_org_name') || 'Greenwood Heights RWA').replace(/\s+/g, ' ');
+  const orgName = ((user.organization && user.organization.name) || (user.organizationId && localStorage.getItem('rwa_active_org_name')) || 'No society linked').replace(/\s+/g, ' ');
   const isAdmin = user.role !== 'RESIDENT';
   const userInitial = userName.split(/\s+/).filter(Boolean).map(n=>n[0]).join('').slice(0,2).toUpperCase() || 'AD';
   const avatarColor = portal === 'resident' ? 'green' : portal === 'platform' ? 'purple' : 'blue';
@@ -896,7 +895,7 @@ window.openUserProfileModal = function(portal) {
                    rawRole === 'COMMITTEE_MEMBER' ? 'Committee Member' :
                    rawRole === 'RESIDENT' ? 'Resident Member' :
                    rawRole.replace(/_/g, ' ');
-  const orgName = ((user.organization && user.organization.name) || localStorage.getItem('rwa_active_org_name') || 'Greenwood Heights RWA').replace(/\s+/g, ' ');
+  const orgName = ((user.organization && user.organization.name) || (user.organizationId && localStorage.getItem('rwa_active_org_name')) || 'No society linked').replace(/\s+/g, ' ');
   const userInitial = userName.split(/\s+/).filter(Boolean).map(n=>n[0]).join('').slice(0,2).toUpperCase() || 'AD';
   const avatarColor = portal === 'resident' ? 'green' : portal === 'platform' ? 'purple' : 'blue';
   const modalTitle = portal === 'platform' ? 'Platform Super Admin Profile' :

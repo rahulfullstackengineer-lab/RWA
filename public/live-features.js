@@ -197,7 +197,11 @@
       // 👤 Real-Time Resident Onboarding Alert for RWA Admin
       socket.on('resident-onboarded', (data) => {
         const typeStr = data.occupancyType === 'TENANT' ? 'Tenant' : 'Flat Owner'
-        showToast(`👤 New Resident Added: ${data.residentName} (+91 ${data.phone}) joined Unit ${data.unitNumber} (${data.blockName || 'Tower'}) as ${typeStr}!`, 'success', true)
+        const text = data.message
+          || (data.residentName
+            ? `${data.residentName} (+91 ${data.phone || ''}) joined Unit ${data.unitNumber || ''} as ${typeStr}.`
+            : 'A new resident was registered.')
+        showToast(text, 'success', true)
         updateNotificationBellBadge(true)
 
         if (typeof window.loadLiveNotifications === 'function' && window.location.hash.includes('admin-notifications')) {

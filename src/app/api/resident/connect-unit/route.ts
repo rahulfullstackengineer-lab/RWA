@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { normalizePhone } from '@/lib/phone'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
   try {
@@ -102,44 +102,30 @@ export async function POST(request: Request) {
       },
     })
 
-    // 3. Find all society admins to notify
-    const adminCandidates = await prisma.user.findMany({
-      where: {
-        organizationId: org.id,
-        role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER'] },
-      },
-      select: { id: true, name: true, phone: true, role: true },
-    })
+    const notifMessage = `${cleanName} (+91 ${user.phone}) registered and connected to Unit ${unit.unitNumber} (${blockName}) as ${roleType === 'OWNER' ? 'Flat Owner' : 'Tenant'}.`
 
-    // Deduplicate admin IDs
-    const uniqueAdminMap = new Map<string, typeof adminCandidates[0]>()
-    for (const a of adminCandidates) {
-      if (a.id !== user.id) { // Don't notify the resident as an admin
-        uniqueAdminMap.set(a.id, a)
-      }
-    }
-    const admins = Array.from(uniqueAdminMap.values())
-
-    const notifTitle = '👤 New Resident Added to Property Structure'
-    const notifMessage = `Resident ${cleanName} (+91 ${user.phone}) has joined and connected to Unit ${unit.unitNumber} (${blockName}) as ${roleType === 'OWNER' ? 'Flat Owner' : 'Tenant'}.`
-
-    // Create notifications for all admins
-    for (const admin of admins) {
-      try {
-        await prisma.notification.create({
-          data: {
-            organizationId: org.id,
-            userId: admin.id,
-            title: notifTitle,
-            message: notifMessage,
-            type: 'RESIDENT_ONBOARDED',
-            referenceType: 'UNIT',
-            referenceId: unit.id,
-          },
-        })
-      } catch (adminNotifErr) {
-        console.warn('Failed to insert admin notification:', admin.id, adminNotifErr)
-      }
+    try {
+      await notifyUsers({
+        orgId: org.id,
+        roles: ['admin'],
+        excludeUserId: user.id,
+        title: 'New resident registered',
+        message: notifMessage,
+        type: 'RESIDENT_ONBOARDED',
+        event: 'resident-onboarded',
+        referenceType: 'UNIT',
+        referenceId: unit.id,
+        data: {
+          residentName: cleanName,
+          phone: user.phone,
+          unitNumber: unit.unitNumber,
+          blockName,
+          occupancyType: roleType,
+          orgName: org.name,
+        },
+      })
+    } catch (adminNotifErr) {
+      console.warn('Failed to notify admins about new resident:', adminNotifErr)
     }
 
     // Also create welcome notification for the newly connected resident
@@ -180,23 +166,6 @@ export async function POST(request: Request) {
       })
     } catch (auditErr) {
       console.warn('Audit log write error:', auditErr)
-    }
-
-    // 5. Emit Real-time Socket Event
-    try {
-      const socketPayload = {
-        residentName: cleanName,
-        phone: user.phone,
-        unitNumber: unit.unitNumber,
-        blockName,
-        occupancyType: roleType,
-        orgId: org.id,
-        orgName: org.name,
-        timestamp: new Date().toISOString(),
-      }
-      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId: org.id, roles: ['admin'] })
-    } catch (sockErr) {
-      console.warn('Socket event error:', sockErr)
     }
 
     return NextResponse.json({

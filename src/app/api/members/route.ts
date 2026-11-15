@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
 
 export async function GET(request: Request) {
@@ -294,53 +294,171 @@ export async function POST(request: Request) {
       })
     }
 
-    // Notify admins about newly added resident
-    try {
-      const admins = await prisma.user.findMany({
-        where: {
-          organizationId: orgId,
-          role: { in: ['RWA_ADMIN', 'ADMIN', 'MANAGER', 'SECRETARY', 'TREASURER', 'PRESIDENT', 'COMMITTEE_MEMBER'] },
-        },
-        select: { id: true },
-      })
-
-      const uniqueAdminIds = Array.from(new Set(admins.map(a => a.id)))
-      const unitNumStr = member.unit?.unitNumber || unitNumber || 'Unassigned Flat'
-      const blockStr = member.unit?.block?.name ? ` (${member.unit.block.name})` : ''
-      const notifTitle = '👤 New Resident Added to Society'
-      const notifMessage = `Resident ${name.trim()} (+91 ${cleanPhone}) was added to Unit ${unitNumStr}${blockStr}.`
-
-      for (const aId of uniqueAdminIds) {
-        await prisma.notification.create({
+    if (requestedRole === 'RESIDENT') {
+      try {
+        const unitNumStr = member.unit?.unitNumber || unitNumber || 'an unassigned flat'
+        const blockName = member.unit?.block?.name || ''
+        const blockStr = blockName ? ` (${blockName})` : ''
+        await notifyUsers({
+          orgId,
+          roles: ['admin'],
+          title: 'New resident registered',
+          message: `${name.trim()} (+91 ${cleanPhone}) was added to ${unitNumStr}${blockStr}.`,
+          type: 'RESIDENT_ONBOARDED',
+          event: 'resident-onboarded',
+          referenceType: member.unitId ? 'UNIT' : 'USER',
+          referenceId: member.unitId || member.id,
           data: {
-            organizationId: orgId,
-            userId: aId,
-            title: notifTitle,
-            message: notifMessage,
-            type: 'RESIDENT_ONBOARDED',
-            referenceType: member.unitId ? 'UNIT' : 'USER',
-            referenceId: member.unitId || member.id,
+            residentName: name.trim(),
+            phone: cleanPhone,
+            unitNumber: unitNumStr,
+            blockName,
+            occupancyType: occupancyType || 'OWNER',
           },
-        }).catch(() => {})
+        })
+      } catch (notifErr) {
+        console.warn('Notification creation error in members POST:', notifErr)
       }
-
-      const socketPayload = {
-        residentName: name.trim(),
-        phone: cleanPhone,
-        unitNumber: unitNumStr,
-        blockName: member.unit?.block?.name || '',
-        occupancyType: occupancyType || 'OWNER',
-        orgId,
-        timestamp: new Date().toISOString(),
-      }
-      emitLiveSocketEvent('resident-onboarded', socketPayload, { orgId, roles: ['admin'] })
-    } catch (notifErr) {
-      console.warn('Notification creation error in members POST:', notifErr)
     }
 
     return NextResponse.json({ success: true, member })
   } catch (err: unknown) {
     console.error('Error creating member:', err)
     return NextResponse.json({ error: 'Failed to create member: ' + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { user, error } = await requireAdmin(request)
+    if (error || !user) {
+      return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const memberId = searchParams.get('id') || ''
+    if (!memberId) {
+      return NextResponse.json({ error: 'Resident id is required' }, { status: 400 })
+    }
+    if (!user.organizationId) {
+      return NextResponse.json({ error: 'No organization attached to this request' }, { status: 400 })
+    }
+    if (memberId === user.id) {
+      return NextResponse.json({ error: 'You cannot remove your own account' }, { status: 400 })
+    }
+
+    const member = await prisma.user.findFirst({
+      where: { id: memberId, organizationId: user.organizationId },
+      include: { unit: { include: { block: true } } },
+    })
+    if (!member) {
+      return NextResponse.json({ error: 'That resident is not in this society' }, { status: 404 })
+    }
+    if (member.role !== 'RESIDENT') {
+      return NextResponse.json({ error: 'Only a resident can be removed from this screen' }, { status: 400 })
+    }
+
+    const unit = member.unit
+    const samePhone = (left?: string | null) => {
+      const a = normalizePhone(left || '')
+      const b = normalizePhone(member.phone)
+      return !!a && !!b && a === b
+    }
+    const sameName = (left?: string | null) =>
+      !!left && left.trim().toLowerCase() === member.name.trim().toLowerCase()
+
+    let unitNumber = unit?.unitNumber || ''
+    let blockName = unit?.block?.name || ''
+
+    if (unit && unit.organizationId === user.organizationId) {
+      let clearOwner = samePhone(unit.ownerPhone) || (!unit.ownerPhone && sameName(unit.ownerName))
+      let clearTenant = samePhone(unit.tenantPhone) || (!unit.tenantPhone && sameName(unit.tenantName))
+      if (!clearOwner && !clearTenant) {
+        const hasOwner = !!(unit.ownerName || unit.ownerPhone)
+        const hasTenant = !!(unit.tenantName || unit.tenantPhone)
+        if (hasOwner && !hasTenant) clearOwner = true
+        else if (hasTenant && !hasOwner) clearTenant = true
+      }
+
+      const ownerRemains = !clearOwner && !!(unit.ownerName || unit.ownerPhone)
+      const tenantRemains = !clearTenant && !!(unit.tenantName || unit.tenantPhone)
+      const stamp = new Date().toISOString().slice(0, 10)
+      const historyLine = `${stamp}: ${member.name} (+91 ${member.phone}) was removed from this flat. Bills, payments, complaints, and audit history were kept.`
+
+      await prisma.unit.update({
+        where: { id: unit.id },
+        data: {
+          ...(clearOwner ? { ownerName: null, ownerPhone: null, ownerEmail: null } : {}),
+          ...(clearTenant ? { tenantName: null, tenantPhone: null } : {}),
+          occupancyStatus: tenantRemains ? 'TENANTED' : ownerRemains ? 'OWNER_OCCUPIED' : 'VACANT',
+          notes: unit.notes ? `${unit.notes}\n${historyLine}` : historyLine,
+        },
+      })
+    }
+
+    await prisma.user.update({
+      where: { id: member.id },
+      data: {
+        organizationId: null,
+        unitId: null,
+        status: 'REMOVED',
+      },
+    })
+    await prisma.session.deleteMany({ where: { userId: member.id } })
+
+    await prisma.auditLog.create({
+      data: {
+        organizationId: user.organizationId,
+        userId: user.id,
+        action: 'RESIDENT_REMOVED',
+        entityType: 'Unit',
+        entityId: unit?.id || member.id,
+        oldValues: JSON.stringify({
+          residentId: member.id,
+          residentName: member.name,
+          phone: member.phone,
+          email: member.email,
+          unitNumber,
+          blockName,
+          unitId: unit?.id || null,
+        }),
+        newValues: JSON.stringify({
+          status: 'REMOVED',
+          kept: ['invoices', 'payments', 'complaints', 'vehicles', 'auditLog'],
+        }),
+      },
+    }).catch((auditErr) => {
+      console.warn('Audit log write error while removing resident:', auditErr)
+    })
+
+    try {
+      const where = unitNumber ? `${unitNumber}${blockName ? ` (${blockName})` : ''}` : 'the society'
+      await notifyUsers({
+        orgId: user.organizationId,
+        roles: ['admin'],
+        title: 'Resident removed',
+        message: `${member.name} (+91 ${member.phone}) was removed from ${where}. Flat bills and history were kept.`,
+        type: 'RESIDENT_REMOVED',
+        event: 'resident-removed',
+        referenceType: unit ? 'UNIT' : 'USER',
+        referenceId: unit?.id || member.id,
+        data: {
+          residentName: member.name,
+          phone: member.phone,
+          unitNumber,
+          blockName,
+        },
+      })
+    } catch (notifErr) {
+      console.warn('Could not notify admins about removed resident:', notifErr)
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `${member.name} was removed from the society. Flat history was kept.`,
+    })
+  } catch (err: unknown) {
+    console.error('Error removing member:', err)
+    return NextResponse.json({ error: 'Failed to remove resident: ' + (err instanceof Error ? err.message : String(err)) }, { status: 500 })
   }
 }

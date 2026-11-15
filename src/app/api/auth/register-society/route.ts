@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashPassword, createSession } from '@/lib/auth'
 import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
+import { notifyUsers } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
   try {
@@ -297,6 +298,22 @@ export async function POST(request: Request) {
           }
         }
         membersImportedCount++
+      }
+    }
+
+    if (membersImportedCount > 0 && adminUser?.id) {
+      try {
+        await notifyUsers({
+          orgId: org.id,
+          roles: ['admin'],
+          title: 'Residents registered',
+          message: `${membersImportedCount} resident${membersImportedCount === 1 ? '' : 's'} ${membersImportedCount === 1 ? 'was' : 'were'} added while setting up ${org.name}.`,
+          type: 'RESIDENT_ONBOARDED',
+          event: 'resident-onboarded',
+          data: { count: membersImportedCount },
+        })
+      } catch (notifErr) {
+        console.warn('Could not notify admin about imported residents:', notifErr)
       }
     }
 

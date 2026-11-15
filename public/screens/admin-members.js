@@ -208,8 +208,9 @@ Screens['admin-resident-detail'] = function() {
     portal: 'admin',
     breadcrumb: '<span onclick="Router.go(\'admin-members\')" style="cursor:pointer;color:var(--blue);">Members</span>',
     actions: `
-      <button class="btn btn-secondary btn-sm" onclick="showToast('Edit coming soon', 'info')">✏️ Edit</button>
-      <button class="btn btn-primary btn-sm" onclick="Router.go('admin-invoices')">📄 View Bills</button>
+      <button class="btn btn-secondary btn-sm" onclick="showToast('Edit coming soon', 'info')">Edit</button>
+      <button class="btn btn-primary btn-sm" onclick="Router.go('admin-invoices')">View Bills</button>
+      ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove resident</button>` : ''}
     `,
     content: `
       <div class="detail-split-layout">
@@ -626,8 +627,8 @@ function renderMembersData(members) {
           <td>${statusPill}</td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:4px;">
-              <button class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail('${m.id}')" title="Inspect">🔍</button>
-              <button class="btn btn-ghost btn-sm btn-icon" onclick="showToast('Direct SMS sent to ${m.name}', 'info')" title="Message">💬</button>
+              <button class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail('${m.id}')" title="Open">View</button>
+              ${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})" title="Remove from society">Remove</button>` : ''}
             </div>
           </td>
         </tr>
@@ -667,18 +668,47 @@ function renderMembersData(members) {
           </div>
 
           <div style="display:flex;gap:8px;margin-top:4px;border-top:1px solid var(--border-light);padding-top:8px;" onclick="event.stopPropagation()">
-            <a href="tel:${m.phone}" class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;text-decoration:none;">
-              📞 Call
-            </a>
             <button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail('${m.id}')">
-              Profile →
+              Profile
             </button>
+            ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove</button>` : ''}
           </div>
         </div>
       `;
     }).join('');
   }
 }
+
+window.removeSocietyResident = async function(memberId, memberName) {
+  const name = memberName || 'this resident';
+  const ok = confirm(
+    'Remove ' + name + ' from the society?\n\n' +
+    'They will lose access to this society. The flat, bills, payments, complaints, vehicles, and audit history stay on record.'
+  );
+  if (!ok) return;
+
+  try {
+    const res = await (window.apiFetch || fetch)('/api/members?id=' + encodeURIComponent(memberId), {
+      method: 'DELETE',
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Could not remove this resident');
+    }
+    showToast(data.message || (name + ' was removed. Flat history was kept.'), 'success');
+    if (window.__selectedMemberDetail && window.__selectedMemberDetail.id === memberId) {
+      window.__selectedMemberDetail = null;
+    }
+    if (typeof Router !== 'undefined' && Router.current === 'admin-resident-detail') {
+      Router.go('admin-members');
+    }
+    if (typeof window.loadLiveMembersScreen === 'function') {
+      window.loadLiveMembersScreen();
+    }
+  } catch (err) {
+    showToast(err.message || 'Could not remove this resident', 'error');
+  }
+};
 
 window.viewMemberDetail = function(memberId) {
   const m = window.__cachedMembers.find(mem => mem.id === memberId);

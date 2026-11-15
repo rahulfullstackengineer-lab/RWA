@@ -218,6 +218,11 @@ Screens['staff-login'] = function() {
           <div style="margin-top:calc(20 * var(--u));padding-top:calc(14 * var(--u));border-top:1px solid #E2E8F0;font-size:calc(12 * var(--u));color:#64748B;">
             Need help? Ask RWA Admin desk
           </div>
+          <div class="auth-bottom-cover">
+            <div class="auth-bottom-item"><strong>Gate duty</strong><span>Visitor passes and the roster for this shift.</span></div>
+            <div class="auth-bottom-item"><strong>Private PIN</strong><span>Your mobile number and PIN stay on this device.</span></div>
+            <div class="auth-bottom-item"><strong>Need access</strong><span>Ask the society admin to add you to the staff list.</span></div>
+          </div>
         </div>
       </div>
 
