@@ -52,6 +52,43 @@ interface OrgStaffStore {
   payments: StaffSalaryPayment[]
 }
 
+function shiftLabel(shift?: string) {
+  if (shift === 'NIGHT') return 'Night Shift'
+  if (shift === 'ROTATIONAL') return 'Rotational'
+  if (shift === 'GENERAL') return 'General Shift'
+  return 'Day Shift'
+}
+
+const INVENTED_DUTY_POSTS = new Set([
+  'Gate 1 Entrance Desk',
+  'Gate 1 - Main Entrance',
+  'Gate 1 - Main Entrance Desk',
+])
+
+function dutyFieldsFromStaff(staff: { name: string; role: string; department: string; phone: string; salary?: number; shift?: string; status?: string }, existing?: { locationPost?: string | null; startTime?: string | null; endTime?: string | null; salaryDate?: string | null; lastPaidDate?: string | null; attendancePresent?: number | null; attendanceTotal?: number | null }) {
+  const inventedPost = !existing?.locationPost
+    || INVENTED_DUTY_POSTS.has(existing.locationPost)
+    || existing.locationPost === `${staff.department} Station`
+  const defaultHours = !existing || (existing.startTime === '06:00 AM' && existing.endTime === '02:00 PM')
+  const defaultPayDate = !existing?.salaryDate || existing.salaryDate === '5th of every month'
+  const defaultAttendance = !existing || (existing.attendancePresent === 26 && existing.attendanceTotal === 28)
+  return {
+    staffName: staff.name.trim(),
+    role: staff.role.trim(),
+    phone: staff.phone,
+    locationPost: inventedPost ? 'Not assigned' : existing!.locationPost!,
+    shiftName: shiftLabel(staff.shift),
+    startTime: defaultHours ? '' : (existing?.startTime || ''),
+    endTime: defaultHours ? '' : (existing?.endTime || ''),
+    salaryAmount: Number(staff.salary) || 0,
+    salaryDate: defaultPayDate ? '' : (existing?.salaryDate || ''),
+    ...(existing?.lastPaidDate ? {} : { paymentStatus: '' }),
+    attendancePresent: defaultAttendance ? 0 : (existing?.attendancePresent || 0),
+    attendanceTotal: defaultAttendance ? 0 : (existing?.attendanceTotal || 0),
+    status: staff.status === 'ACTIVE' ? 'ON_DUTY' : 'OFF_DUTY',
+  }
+}
+
 const SAMPLE_STAFF_IDS = new Set(['STF-001', 'STF-002', 'STF-003', 'STF-004', 'STF-005'])
 const SAMPLE_STAFF_NAMES = new Set(['Ramesh Kumar', 'Suresh Singh', 'Meena Bai', 'Rajiv Mali', 'Prem Lal'])
 
@@ -298,31 +335,18 @@ export async function POST(request: Request) {
         },
       })
 
+      const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE' }, existingDuty || undefined)
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: {
-            staffName: name.trim(),
-            role: role.trim(),
-            category: cat,
-            locationPost: department === 'Security' ? 'Gate 1 Entrance Desk' : `${department} Station`,
-            shiftName: shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-            salaryAmount: Number(salary) || 12000,
-            status: 'ON_DUTY',
-          },
+          data: { ...dutyFields, category: cat },
         })
       } else {
         await prisma.staffDuty.create({
           data: {
             organizationId: orgId,
-            staffName: name.trim(),
-            role: role.trim(),
+            ...dutyFields,
             category: cat,
-            phone: phone.trim(),
-            locationPost: department === 'Security' ? 'Gate 1 Entrance Desk' : `${department} Station`,
-            shiftName: shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-            salaryAmount: Number(salary) || 12000,
-            status: 'ON_DUTY',
           },
         })
       }
@@ -446,36 +470,25 @@ export async function PATCH(request: Request) {
             { phone: oldPhone },
             { phone: cleanTarget },
             { phone: tenDigitTarget },
+            { staffName: staffMember.name },
+            { staffName: oldValues.name },
           ],
         },
       })
 
+      const dutyFields = dutyFieldsFromStaff(staffMember, existingDuty || undefined)
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: {
-            staffName: staffMember.name,
-            role: staffMember.role,
-            category: cat,
-            phone: targetPhone,
-            locationPost: staffMember.department === 'Security' ? 'Gate 1 Entrance Desk' : `${staffMember.department} Station`,
-            shiftName: staffMember.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-            salaryAmount: staffMember.salary || 12000,
-            status: staffMember.status === 'ACTIVE' ? 'ON_DUTY' : 'OFF_DUTY',
-          },
+          data: { ...dutyFields, phone: targetPhone, category: cat },
         })
       } else {
         await prisma.staffDuty.create({
           data: {
             organizationId: orgId,
-            staffName: staffMember.name,
-            role: staffMember.role,
-            category: cat,
+            ...dutyFields,
             phone: targetPhone,
-            locationPost: staffMember.department === 'Security' ? 'Gate 1 Entrance Desk' : `${staffMember.department} Station`,
-            shiftName: staffMember.shift === 'NIGHT' ? 'Night Shift' : 'Morning Shift',
-            salaryAmount: staffMember.salary || 12000,
-            status: staffMember.status === 'ACTIVE' ? 'ON_DUTY' : 'OFF_DUTY',
+            category: cat,
           },
         })
       }

@@ -33,6 +33,23 @@ var Router = (() => {
     }
 
     // Security Guard: Platform Super-Admin is strictly restricted to 8219587657
+    if (screen && screen.startsWith('admin-')) {
+      let role = ''
+      try {
+        const stored = localStorage.getItem('rwa_user')
+        role = stored ? (JSON.parse(stored).role || '') : ''
+      } catch (e) {}
+      if (role === 'STAFF') {
+        const staffScreens = {
+          'admin-entry-passes': 'staff-passes',
+          'admin-duty': 'staff-roster',
+          'admin-emergency': 'staff-intercom',
+          'admin-settings': 'staff-settings',
+        }
+        screen = staffScreens[screen] || 'staff-dashboard'
+      }
+    }
+
     if (screen && screen.startsWith('platform-')) {
       if (!isPlatformSuperAdmin()) {
         if (typeof showToast === 'function') {
@@ -41,7 +58,7 @@ var Router = (() => {
         const userStr = typeof localStorage !== 'undefined' ? localStorage.getItem('rwa_user') : null;
         let u = null;
         try { u = userStr ? JSON.parse(userStr) : null; } catch (e) {}
-        screen = u?.role === 'RESIDENT' ? 'resident-dashboard' : (u ? 'admin-dashboard' : 'auth-login');
+        screen = u?.role === 'RESIDENT' ? 'resident-dashboard' : (u?.role === 'STAFF' ? 'staff-dashboard' : (u ? 'admin-dashboard' : 'auth-login'));
       }
     }
 
@@ -329,14 +346,14 @@ var Shell = (() => {
         label: 'Gate Security',
         items: [
           { id: 'staff-dashboard', icon: 'shield', label: 'Gate Scanner & Passes', badge: 'LIVE', badgeColor: 'green' },
-          { id: 'admin-entry-passes', icon: 'orders', label: 'All Society Passes' },
+          { id: 'staff-passes', icon: 'orders', label: 'All Society Passes' },
         ]
       },
       {
         label: 'Staff Employment',
         items: [
-          { id: 'admin-duty', icon: 'calendar', label: 'Campus Duty Roster' },
-          { id: 'admin-emergency', icon: 'phone', label: 'Emergency Intercom' },
+          { id: 'staff-roster', icon: 'calendar', label: 'Campus Duty Roster' },
+          { id: 'staff-intercom', icon: 'phone', label: 'Emergency Intercom' },
         ]
       }
     ];
@@ -368,8 +385,8 @@ var Shell = (() => {
     } else if (portal === 'staff') {
       tabs = [
         { id: 'staff-dashboard',     icon: 'shield', label: 'Gate' },
-        { id: 'admin-entry-passes',  icon: 'orders', label: 'Passes' },
-        { id: 'admin-duty',          icon: 'calendar', label: 'Roster' },
+        { id: 'staff-passes',        icon: 'orders', label: 'Passes' },
+        { id: 'staff-roster',        icon: 'calendar', label: 'Roster' },
         { id: 'menu',                icon: 'menu', label: 'Menu', isMenu: true },
       ];
     } else if (portal === 'platform') {
@@ -523,6 +540,23 @@ var Shell = (() => {
     }
 
     const strokeDashOffset = (106.8 - (106.8 * (gaugePercent / 100))).toFixed(1);
+    document.body.dataset.portal = portal;
+    const capacityCardHtml = portal === 'staff' ? '' : `
+          <div class="sidebar-capacity-card" id="sidebarCapacityCard" style="${isCardDismissed ? 'display:none;' : ''}">
+            <button class="capacity-close-btn" onclick="window.dismissCapacityCard(event)" title="Dismiss card">✕</button>
+            <div class="capacity-gauge-wrap">
+              <svg width="44" height="44" viewBox="0 0 44 44" id="sidebarCapacityGaugeSvg">
+                <circle cx="22" cy="22" r="17" fill="none" stroke="${gaugeBgStroke}" stroke-width="3.6" />
+                <circle id="sidebarCapacityGaugeCircle" cx="22" cy="22" r="17" fill="none" stroke="${gaugeFgStroke}" stroke-width="3.6" stroke-dasharray="106.8" stroke-dashoffset="${strokeDashOffset}" stroke-linecap="round" transform="rotate(-90 22 22)" />
+                <text id="sidebarCapacityGaugeText" x="22" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="${gaugeTextColor}">${gaugeText}</text>
+              </svg>
+            </div>
+            <div class="capacity-title" id="sidebarCapacityTitle">${cardTitle}</div>
+            <div class="capacity-desc" id="sidebarCapacityDesc">${cardDesc}</div>
+            <button class="capacity-btn" id="sidebarCapacityBtn" onclick="${cardBtnAction}" style="${cardBtnStyle}">
+              ${cardBtnText}
+            </button>
+          </div>`;
 
     return `
       <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
@@ -566,27 +600,12 @@ var Shell = (() => {
         <div id="appSidebarNav" class="sidebar-nav-scroll" onscroll="window._sidebarNavScroll = this.scrollTop" onclick="if(window.innerWidth<=840||document.body.classList.contains('mobile-frame-view'))toggleSidebar(false)">
           ${navFn(screen)}
 
-          <!-- 6. Capacity Promotion Card -->
-          <div class="sidebar-capacity-card" id="sidebarCapacityCard" style="${isCardDismissed ? 'display:none;' : ''}">
-            <button class="capacity-close-btn" onclick="window.dismissCapacityCard(event)" title="Dismiss card">✕</button>
-            <div class="capacity-gauge-wrap">
-              <svg width="44" height="44" viewBox="0 0 44 44" id="sidebarCapacityGaugeSvg">
-                <circle cx="22" cy="22" r="17" fill="none" stroke="${gaugeBgStroke}" stroke-width="3.6" />
-                <circle id="sidebarCapacityGaugeCircle" cx="22" cy="22" r="17" fill="none" stroke="${gaugeFgStroke}" stroke-width="3.6" stroke-dasharray="106.8" stroke-dashoffset="${strokeDashOffset}" stroke-linecap="round" transform="rotate(-90 22 22)" />
-                <text id="sidebarCapacityGaugeText" x="22" y="26" text-anchor="middle" font-size="10" font-weight="800" fill="${gaugeTextColor}">${gaugeText}</text>
-              </svg>
-            </div>
-            <div class="capacity-title" id="sidebarCapacityTitle">${cardTitle}</div>
-            <div class="capacity-desc" id="sidebarCapacityDesc">${cardDesc}</div>
-            <button class="capacity-btn" id="sidebarCapacityBtn" onclick="${cardBtnAction}" style="${cardBtnStyle}">
-              ${cardBtnText}
-            </button>
-          </div>
+          ${capacityCardHtml}
 
           <!-- 7. Bottom Utilities (Settings & Help) -->
           <div class="nav-section-wrap sidebar-utilities-wrap">
-            <div class="nav-item ${screen === (portal === 'resident' ? 'resident-profile' : portal === 'platform' ? 'platform-profile' : 'admin-settings') ? 'active' : ''}" 
-                 onclick="Router.go('${portal === 'resident' ? 'resident-profile' : portal === 'platform' ? 'platform-profile' : 'admin-settings'}')">
+            <div class="nav-item ${screen === (portal === 'resident' ? 'resident-profile' : portal === 'platform' ? 'platform-profile' : portal === 'staff' ? 'staff-settings' : 'admin-settings') ? 'active' : ''}"
+                 onclick="Router.go('${portal === 'resident' ? 'resident-profile' : portal === 'platform' ? 'platform-profile' : portal === 'staff' ? 'staff-settings' : 'admin-settings'}')">
               <span class="nav-icon">${getSidebarIcon('settings')}</span>
               <span>Settings</span>
             </div>
@@ -1268,6 +1287,10 @@ window.dismissCapacityCard = function(e) {
 };
 
 window.updateSidebarCapacityCard = function(portalType, data) {
+  if (document.body.dataset.portal === 'staff') return;
+  let signedInRole = '';
+  try { signedInRole = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
+  if (signedInRole === 'STAFF') return;
   const card = document.getElementById('sidebarCapacityCard');
   if (!card) return;
   card.style.display = 'block';
@@ -1387,12 +1410,12 @@ window.openHelpModal = function() {
           <span style="color:#64748B;font-size:13px;">›</span>
         </div>
 
-        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="if(typeof showToast==='function')showToast('Society Desk: +91 98000 12345 · desk@society.in', 'info')">
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="document.getElementById('rwaHelpModal').remove(); Router.go(document.body.dataset.portal==='staff'?'staff-intercom':'admin-emergency')">
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-size:18px;">📞</span>
             <div>
               <div style="font-size:13px;font-weight:600;color:#0F172A;">Society Management Office</div>
-              <div style="font-size:11px;color:#64748B;">Mon-Sat 9:00 AM - 6:00 PM · +91 98000 12345</div>
+              <div style="font-size:11px;color:#64748B;">Open the contacts saved for this society</div>
             </div>
           </div>
           <span style="color:#64748B;font-size:13px;">›</span>
@@ -1402,7 +1425,7 @@ window.openHelpModal = function() {
           <span style="font-size:18px;">🚨</span>
           <div>
             <div style="font-size:13px;font-weight:700;color:#DC2626;">Emergency Gate & Security</div>
-            <div style="font-size:11px;color:#991B1B;">Main Gate Intercom: 101 | Patrol Mobile: +91 99999 11111</div>
+            <div style="font-size:11px;color:#991B1B;">Police 112 · Ambulance 108 · Fire 101</div>
           </div>
         </div>
       </div>

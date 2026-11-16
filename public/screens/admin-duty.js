@@ -352,8 +352,8 @@ window.openAddStaffDutyModal = function() {
         </div>
         <div>
           <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">💵 Monthly Salary (₹)</label>
-          <input type="number" id="dutyInputSalary" class="form-input" value="22500" placeholder="e.g. 22500" style="width:100%;font-size:13px;background:#fff;" />
-          <div style="font-size:11px;color:#15803D;margin-top:2px;">Paid: 5th of every month</div>
+          <input type="number" id="dutyInputSalary" class="form-input" placeholder="Monthly salary, if known" style="width:100%;font-size:13px;background:#fff;" />
+          <div style="font-size:11px;color:#15803D;margin-top:2px;">Leave blank until the salary is decided</div>
         </div>
       </div>
 
@@ -398,7 +398,7 @@ window.openAddStaffDutyModal = function() {
       const phone = document.getElementById('dutyInputPhone')?.value;
       const altPhone = document.getElementById('dutyInputAltPhone')?.value;
       const pin = document.getElementById('dutyInputPin')?.value || '1234';
-      const salaryAmount = document.getElementById('dutyInputSalary')?.value || 22500;
+      const salaryAmount = document.getElementById('dutyInputSalary')?.value || 0;
       const status = document.getElementById('dutyInputStatus')?.value;
       const notifyResidents = document.getElementById('dutyNotifyResidents')?.checked;
       const isEmergencyContact = document.getElementById('dutyInputEmergency')?.checked;

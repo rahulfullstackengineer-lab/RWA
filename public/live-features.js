@@ -358,7 +358,7 @@
           }
         } else if (data.action === 'CREATED' && data.pass) {
           if (typeof showToast === 'function') {
-            showToast(`🎫 New Visiting Pass: ${data.pass.visitorName} (Flat ${data.pass.residentUnit})`, 'info')
+            showToast(`New visiting pass: ${data.pass.visitorName} (Flat ${data.pass.residentUnit})`, 'success')
           }
         }
         if (typeof updateNotificationBellBadge === 'function') updateNotificationBellBadge(true)
@@ -2291,32 +2291,9 @@
 
       const overpaid = data.overpaid || []
       if (overpaid.length) {
-        const lines = overpaid.slice(0, 8).map(function(row) {
-          return 'Flat ' + row.unitNumber + ': paid ₹' + Number(row.paidAmount).toLocaleString('en-IN') + ', revised bill ₹' + Number(row.revisedTotal).toLocaleString('en-IN') + ', extra ₹' + Number(row.excess).toLocaleString('en-IN')
-        }).join('\n')
-        const more = overpaid.length > 8 ? '\n…and ' + (overpaid.length - 8) + ' more flats' : ''
-        const sendNotice = confirm(
-          'These flats already paid more than the revised bill.\nThis app does not refund that money.\n\n' +
-          lines + more +
-          '\n\nSend them a notice to visit the RWA office and collect the extra amount?'
-        )
-        if (sendNotice) {
-          const noticeRes = await (window.apiFetch || fetch)('/api/billing/invoices/bulk-update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'NOTIFY_OFFICE_REFUND',
-              billingMonth,
-              invoiceIds: overpaid.map(function(row) { return row.invoiceId }),
-            }),
-          })
-          const noticeData = await noticeRes.json().catch(function() { return {} })
-          if (!noticeRes.ok || !noticeData.success) {
-            showToast(noticeData.error || 'The office notice could not be sent', 'error')
-          } else {
-            showToast(noticeData.message || 'Office collection notice sent', 'success')
-          }
-        }
+        setTimeout(function() {
+          window.openOfficeRefundNoticeModal(overpaid, billingMonth)
+        }, 40)
       }
 
       if (typeof window.loadLiveAdminDashboard === 'function') {
@@ -2326,6 +2303,46 @@
         window.loadLiveInvoicesScreen()
       }
     }, '520px')
+  }
+
+  window.openOfficeRefundNoticeModal = function(overpaid, billingMonth) {
+    const money = function(value) {
+      return '₹' + Number(value || 0).toLocaleString('en-IN')
+    }
+    const rows = (overpaid || []).map(function(row) {
+      const unit = String(row.unitNumber || 'Flat').replace(/[&<>"']/g, '')
+      return ''
+        + '<div style="padding:10px 0;border-top:1px solid #E4E4E7;">'
+        + '<div style="font-weight:700;color:#18181B;">Flat ' + unit + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;font-size:12px;">'
+        + '<div><div style="color:#71717A;">Paid</div><div style="font-weight:700;">' + money(row.paidAmount) + '</div></div>'
+        + '<div><div style="color:#71717A;">Revised bill</div><div style="font-weight:700;">' + money(row.revisedTotal) + '</div></div>'
+        + '<div><div style="color:#71717A;">Collect at office</div><div style="font-weight:700;">' + money(row.excess) + '</div></div>'
+        + '</div></div>'
+    }).join('')
+
+    const html = ''
+      + '<div style="font-size:13px;line-height:1.5;color:#3F3F46;">'
+      + 'These flats already paid more than the revised bill. This app does not refund that money. Send them a notice to visit the RWA office and collect the extra. After they collect the cash, open the bill and choose Mark refund collected.'
+      + '</div>'
+      + '<div style="margin-top:12px;max-height:280px;overflow:auto;">' + rows + '</div>'
+
+    showModal('Collect the extra at the office', html, 'Send office notice', async function() {
+      const noticeRes = await (window.apiFetch || fetch)('/api/billing/invoices/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'NOTIFY_OFFICE_REFUND',
+          billingMonth: billingMonth,
+          invoiceIds: (overpaid || []).map(function(row) { return row.invoiceId }),
+        }),
+      })
+      const noticeData = await noticeRes.json().catch(function() { return {} })
+      if (!noticeRes.ok || !noticeData.success) {
+        throw new Error(noticeData.error || 'The office notice could not be sent')
+      }
+      showToast(noticeData.message || 'Office collection notice sent', 'success')
+    }, '560px')
   }
 
   // Alias trigger methods to open modal
@@ -2637,6 +2654,52 @@
   window.__staffPassFilter   = 'ALL'
   window.__staffCurrentGuard = null
 
+  window.scrubStaffPortalData = function(data) {
+    if (!data) return data
+    const s = data.staff || {}
+    const d = data.duty || {}
+    const sal = data.salary || {}
+    const dummyPosts = ['Gate 1 Entrance Desk', 'Gate 1 - Main Entrance', 'Gate 1 - Main Entrance Desk', 'Gate 1 Desk', 'Not assigned']
+    const dummyBlocks = ['Campus Wide', 'Main Gate', 'Main Gate Perimeter']
+    const sampleNames = ['Ram Singh', 'Dharmendra Kumar', 'Bijender Yadav', 'Manoj Tiwari', 'Suraj Sharma', 'Ramesh Paswan', 'Sunita Devi', 'Rekha Rani', 'Mahesh Electrician', 'Shankar Plumber', 'Radhey Shyam', 'Dr. Vikram Malhotra']
+    const hoursLookDefault = function(start, end) {
+      return !start || !end || (start === '06:00 AM' && end === '02:00 PM') || (start === '08:00 AM' && end === '08:00 PM')
+    }
+    if (dummyPosts.indexOf(s.locationPost) !== -1) s.locationPost = ''
+    if (dummyPosts.indexOf(d.currentPost) !== -1) d.currentPost = ''
+    if (dummyBlocks.indexOf(s.blockName) !== -1) s.blockName = ''
+    if (dummyBlocks.indexOf(d.currentBlock) !== -1) d.currentBlock = ''
+    if (hoursLookDefault(s.startTime, s.endTime)) {
+      s.startTime = ''
+      s.endTime = ''
+    }
+    if (!d.timing || d.timing.indexOf('06:00') !== -1 || d.timing.indexOf('08:00 AM – 08:00 PM') !== -1 || d.timing.indexOf('08:00 AM - 08:00 PM') !== -1) {
+      if (!s.startTime || !s.endTime) d.timing = ''
+    }
+    const shiftLooksDefault = !s.shiftName || s.shiftName === 'Morning Shift' || s.shiftName === 'General Duty' || s.shiftName === 'Active Shift'
+    if (shiftLooksDefault && !s.startTime) s.shiftName = ''
+    if (!d.currentShift || d.currentShift === 'Morning Shift' || d.currentShift === 'General Duty' || d.currentShift === 'Active Shift') {
+      d.currentShift = s.shiftName || ''
+    }
+    if (!sal.salaryDate || sal.salaryDate === '5th of every month' || sal.salaryDate === '—') sal.salaryDate = ''
+    if (!sal.nextSalaryCredit || sal.nextSalaryCredit === '—') sal.nextSalaryCredit = ''
+    if (Number(sal.attendancePresent) === 26 && Number(sal.attendanceTotal) === 28) {
+      sal.attendancePresent = 0
+      sal.attendanceTotal = 0
+      sal.attendancePercent = 0
+    }
+    if (!sal.lastPaidDate || sal.lastPaidDate === '—' || sal.lastPaidDate === '-') {
+      sal.lastPaidDate = ''
+      sal.paymentStatus = ''
+    }
+    if (d.supervisor && sampleNames.indexOf(d.supervisor.name) !== -1) d.supervisor = null
+    if (d.reliefGuard && sampleNames.indexOf(d.reliefGuard.name) !== -1) d.reliefGuard = null
+    data.staff = s
+    data.duty = d
+    data.salary = sal
+    return data
+  }
+
   // ---- Main loader: fetches /api/staff/portal ----------------
   window.loadLiveStaffPortal = async function() {
     try {
@@ -2647,6 +2710,7 @@
 
       const data = await res.json()
       if (!data.success) return
+      window.scrubStaffPortalData(data)
 
       window.__staffPortalData   = data
       window.__staffPassesAll    = (data.passes && data.passes.list) ? data.passes.list : []
@@ -2657,7 +2721,7 @@
       const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || '—' }
       setTxt('staffHeroName',  s.name  || 'Guard')
       setTxt('staffHeroRole',  s.role  || 'Security Guard')
-      setTxt('staffHeroPost',  s.locationPost || 'Gate 1')
+      setTxt('staffHeroPost',  s.locationPost || 'Not assigned')
       setTxt('staffHeroPhone', s.phone || '—')
 
       const d = data.duty || {}
@@ -2673,62 +2737,82 @@
       if (tabCount) tabCount.textContent = passCount
 
       // --- Populate Duty tab ----
-      setTxt('dutyCardPost',  d.currentPost  || s.locationPost || 'Gate 1')
-      setTxt('dutyCardBlock', d.currentBlock || 'Main Gate Perimeter')
-      setTxt('dutyCardTiming', d.timing || (s.startTime + ' – ' + s.endTime) || '—')
-      setTxt('dutyCardShiftName', (d.currentShift || s.shiftName || 'Morning Shift') + ' (8 Hours Duration)')
+      setTxt('dutyCardPost',  d.currentPost || s.locationPost || 'Not assigned')
+      setTxt('dutyCardBlock', d.currentBlock || 'Not set')
+      setTxt('dutyCardTiming', d.timing || (s.startTime && s.endTime ? s.startTime + ' – ' + s.endTime : 'Not set'))
+      setTxt('dutyCardShiftName', d.currentShift || s.shiftName || 'Not set')
+      setTxt('dutyCardHoursNote', d.timing || 'Not saved')
 
-      if (d.supervisor) {
-        setTxt('dutyCardSupervisorName', d.supervisor.name || 'Supervisor')
-        const supCall = document.getElementById('dutyCardSupervisorCall')
-        if (supCall && d.supervisor.phone) supCall.href = 'tel:' + d.supervisor.phone
+      const supCall = document.getElementById('dutyCardSupervisorCall')
+      const supRole = document.getElementById('dutyCardSupervisorRole')
+      if (d.supervisor && d.supervisor.name) {
+        setTxt('dutyCardSupervisorName', d.supervisor.name)
+        if (supRole) supRole.textContent = d.supervisor.role || 'Supervisor'
+        if (supCall && d.supervisor.phone) {
+          supCall.href = 'tel:' + d.supervisor.phone
+          supCall.style.display = 'inline-flex'
+        }
+      } else {
+        setTxt('dutyCardSupervisorName', 'Not assigned')
+        if (supRole) supRole.textContent = 'No supervisor on this shift'
+        if (supCall) supCall.style.display = 'none'
       }
-      if (d.reliefGuard) {
-        setTxt('dutyCardReliefName', d.reliefGuard.name || 'Relief Guard')
-        const relSub = document.getElementById('dutyCardReliefName')
-        const relRole = document.querySelector('[id="dutyCardReliefName"] + div')
-        if (relRole) relRole.textContent = d.reliefGuard.role || 'Evening Guard'
-        const relCall = document.getElementById('dutyCardReliefCall')
-        if (relCall && d.reliefGuard.phone) relCall.href = 'tel:' + d.reliefGuard.phone
+      const relCall = document.getElementById('dutyCardReliefCall')
+      const relRole = document.getElementById('dutyCardReliefRole')
+      if (d.reliefGuard && d.reliefGuard.name) {
+        setTxt('dutyCardReliefName', d.reliefGuard.name)
+        if (relRole) relRole.textContent = (d.reliefGuard.role || 'Relief guard') + (d.reliefGuard.shift ? ' · ' + d.reliefGuard.shift : '')
+        if (relCall && d.reliefGuard.phone) {
+          relCall.href = 'tel:' + d.reliefGuard.phone
+          relCall.style.display = 'inline-flex'
+        }
+      } else {
+        setTxt('dutyCardReliefName', 'Not assigned')
+        if (relRole) relRole.textContent = 'No relief guard on record'
+        if (relCall) relCall.style.display = 'none'
       }
 
-      // Weekly roster - show real shift for today, placeholders for rest
       window._renderWeeklyRoster(s)
 
       // --- Populate Salary tab ----
       const sal = data.salary || {}
       const fmt = (v) => '₹' + Number(v || 0).toLocaleString('en-IN')
-      setTxt('salaryCardMonthly',    fmt(sal.monthlySalary))
-      setTxt('salaryCardDate',       sal.salaryDate || '5th of every month')
-      setTxt('salaryCardNextDate',   sal.nextSalaryCredit || '—')
-      setTxt('salaryCardAttendance', (sal.attendancePresent || '—') + ' / ' + (sal.attendanceTotal || '—') + ' Days')
+      setTxt('salaryCardMonthly',    Number(sal.monthlySalary) > 0 ? fmt(sal.monthlySalary) : 'Not set')
+      setTxt('salaryCardDate',       sal.salaryDate && sal.salaryDate !== '—' ? sal.salaryDate : 'Not set')
+      setTxt('salaryCardNextDate',   sal.nextSalaryCredit && sal.nextSalaryCredit !== '—' ? sal.nextSalaryCredit : 'Not set')
+      const attendKnown = Number(sal.attendanceTotal) > 0
+      setTxt('salaryCardAttendance', attendKnown ? (sal.attendancePresent + ' / ' + sal.attendanceTotal + ' Days') : 'Not recorded')
 
-      const attendPct = sal.attendancePercent || 0
       const attendSub = document.querySelector('#salaryCardAttendance + div')
-      if (attendSub) attendSub.textContent = attendPct + '% punctuality rate'
+      if (attendSub) attendSub.textContent = attendKnown ? (sal.attendancePercent + '% of days on record') : 'Attendance has not been saved'
 
       // Payment status badge
       const statusBadge = document.getElementById('salaryCardStatusBadge')
       if (statusBadge) {
-        const isPaid = (sal.paymentStatus || '').toUpperCase() === 'PAID'
-        statusBadge.textContent = isPaid ? 'PAID (Cleared)' : 'PENDING'
-        statusBadge.style.background = isPaid ? '#DCFCE7' : '#FEF3C7'
-        statusBadge.style.color      = isPaid ? '#166534' : '#92400E'
-        statusBadge.style.borderColor = isPaid ? '#BBF7D0' : '#FCD34D'
+        const payState = (sal.paymentStatus || '').toUpperCase()
+        const isPaid = payState === 'PAID'
+        const isKnown = payState && payState !== '—' && payState !== '-'
+        statusBadge.textContent = isPaid ? 'Paid' : (isKnown ? payState : 'Not set')
+        statusBadge.style.background = isPaid ? '#DCFCE7' : (isKnown ? '#FEE2E2' : '#F4F4F5')
+        statusBadge.style.color = isPaid ? '#166534' : (isKnown ? '#991B1B' : '#18181B')
+        statusBadge.style.borderColor = isPaid ? '#BBF7D0' : (isKnown ? '#FECACA' : '#E4E4E7')
       }
-      setTxt('salaryCardLastPaid', sal.lastPaidDate || '—')
+      setTxt('salaryCardLastPaid', sal.lastPaidDate || 'Not recorded')
 
       // Bank info
       const bankEl = document.getElementById('salaryCardBank')
-      if (bankEl) bankEl.textContent = '🏦 ' + (sal.bankAccount || 'Bank Account on record')
+      if (bankEl) bankEl.textContent = sal.bankAccount ? ('Payout account: ' + sal.bankAccount) : 'No bank or UPI saved'
 
-      // Salary slip breakdown
-      const br = (sal.breakdown) || {}
-      setTxt('slipBasic',     fmt(br.basicSalary    || Math.round((sal.monthlySalary || 22500) * 0.75)))
-      setTxt('slipAllowance', fmt(br.shiftAllowance || Math.round((sal.monthlySalary || 22500) * 0.15)))
-      setTxt('slipBonus',     fmt(br.specialDutyBonus || (sal.monthlySalary || 22500) - Math.round((sal.monthlySalary||22500)*0.75) - Math.round((sal.monthlySalary||22500)*0.15)))
-      setTxt('slipGross',     fmt(sal.monthlySalary || 22500))
-      setTxt('slipNet',       fmt(br.netSalary      || (sal.monthlySalary || 22500) - (br.pfEsiDeduction || 1250)))
+      const hasPay = Number(sal.monthlySalary) > 0
+      setTxt('slipBasic', hasPay ? fmt(sal.monthlySalary) : 'Not set')
+      setTxt('slipAllowance', 'Not added')
+      setTxt('slipBonus', 'Not added')
+      setTxt('slipPf', 'Not added')
+      setTxt('slipEsi', 'Not added')
+      setTxt('slipDeduction', '₹0')
+      setTxt('slipGross', hasPay ? fmt(sal.monthlySalary) : 'Not set')
+      setTxt('slipNet', hasPay ? fmt(sal.monthlySalary) : 'Not set')
+      window.loadStaffIntercom()
 
       // --- Render passes table ----
       window.renderStaffPassesTable(window.__staffPassesAll)
@@ -2761,28 +2845,64 @@
     }
   }
 
+  window.loadStaffIntercom = async function() {
+    const box = document.getElementById('staffIntercomList')
+    if (!box) return
+    const dummyNames = ['dr. vikram malhotra', 'vikram malhotra', 'main security gate 1 desk', 'north gate security post', 'society duty electrician', 'society duty plumber', 'campus elevator helpline']
+    const dummyPhones = new Set(['9876543200', '9812345678', '1234567890', '1234567891', '9876543210', '9876543211', '9876543212', '18001021234'])
+    let contacts = []
+    try {
+      const res = await (window.apiFetch || fetch)('/api/emergency/contacts')
+      if (res && res.ok) {
+        const data = await res.json()
+        contacts = (data.contacts || []).filter(function(c) {
+          const phone = String(c.phone || '').replace(/\D/g, '')
+          const name = String(c.name || '').trim().toLowerCase()
+          if (dummyNames.indexOf(name) !== -1) return false
+          if (dummyPhones.has(phone)) return false
+          if (!phone) return false
+          return true
+        })
+      }
+    } catch (e) {}
+    const esc = function(value) { return String(value || '').replace(/[&<>"]/g, function(ch) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] }) }
+    const cards = contacts.map(function(c) {
+      const phone = String(c.phone || '').replace(/[^\d+]/g, '')
+      return '<div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;">'
+        + '<div><div style="font-weight:800;font-size:14px;">' + esc(c.name) + '</div><div style="font-size:12px;color:#71717A;">' + esc(c.role || 'Society contact') + '</div></div>'
+        + '<a href="tel:' + phone + '" class="btn btn-sm btn-primary" style="font-weight:700;">Call</a></div>'
+    })
+    if (!contacts.length) {
+      cards.push('<div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:18px;font-size:13px;color:#3F3F46;">No intercom or emergency contact has been saved for this society.</div>')
+    }
+    box.innerHTML = cards.join('')
+  }
+
   // ---- Weekly roster renderer --------------------------------
   window._renderWeeklyRoster = function(staff) {
     const container = document.getElementById('staffWeeklyRoster')
     if (!container) return
-
-    const today = new Date()
-    const days = ['SUN','MON','TUE','WED','THU','FRI','SAT']
-    const todayIdx = today.getDay()
-    const post  = staff && staff.locationPost ? staff.locationPost.replace('Gate ', 'G').split(' ')[0] : 'Gate 1'
-    const start = staff && staff.startTime ? staff.startTime : '06:00'
-    const end   = staff && staff.endTime   ? staff.endTime   : '14:00'
-    const timing = start.replace(' AM','').replace(' PM','') + ' - ' + end.replace(' AM','').replace(' PM','')
-
-    container.innerHTML = days.map((day, i) => {
-      const isToday = i === todayIdx
-      const isOff   = i === 6 // Saturday default off
-      return '<div style="background:' + (isOff ? '#FEF2F2' : (isToday ? '#F0FDF4' : '#F8FAFC')) + ';border:1px solid ' + (isOff ? '#FECACA' : (isToday ? '#BBF7D0' : '#E2E8F0')) + ';border-radius:10px;padding:10px;text-align:center;">' +
-        '<div style="font-size:11px;font-weight:800;color:' + (isOff ? '#991B1B' : (isToday ? '#166534' : '#64748B')) + ';">' + (isToday ? 'TODAY (' + day + ')' : day) + (isOff ? ' (OFF)' : '') + '</div>' +
-        '<div style="font-size:13px;font-weight:800;color:' + (isOff ? '#991B1B' : '#0F172A') + ';margin-top:4px;">' + (isOff ? 'Weekly Off' : (i % 3 === 2 ? 'Gate 2' : 'Gate 1')) + '</div>' +
-        '<div style="font-size:11px;color:' + (isOff ? '#991B1B' : (isToday ? '#15803D' : '#64748B')) + ';">' + (isOff ? 'Rest Day' : timing) + '</div>' +
-      '</div>'
-    }).join('')
+    const post = staff && staff.locationPost ? staff.locationPost : ''
+    const start = staff && staff.startTime ? staff.startTime : ''
+    const end = staff && staff.endTime ? staff.endTime : ''
+    const shift = staff && staff.shiftName ? staff.shiftName : ''
+    if (!post && !start && !shift) {
+      container.textContent = 'No shift is assigned to this guard yet.'
+      return
+    }
+    if (!post && !start) {
+      container.innerHTML = '<div style="border:1px solid #E4E4E7;border-radius:2px;padding:12px;">'
+        + '<div style="font-size:16px;font-weight:800;">' + shift + '</div>'
+        + '<div style="font-size:12px;color:#71717A;margin-top:6px;">This is the shift saved on the staff record. No post or clock hours have been added.</div>'
+        + '</div>'
+      return
+    }
+    const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })
+    container.innerHTML = '<div style="border:1px solid #E4E4E7;border-radius:2px;padding:12px;">'
+      + '<div style="font-size:11px;font-weight:800;color:#166534;">TODAY · ' + today + '</div>'
+      + '<div style="font-size:16px;font-weight:800;margin-top:4px;">' + (post || 'Post not set') + '</div>'
+      + '<div style="font-size:13px;color:#3F3F46;margin-top:2px;">' + (shift || 'Shift') + (start && end ? ' · ' + start + ' – ' + end : '') + '</div>'
+      + '</div>'
   }
 
   // ---- Tab switcher ------------------------------------------
@@ -2829,14 +2949,18 @@
   // ---- Table renderer ----------------------------------------
   window.renderStaffPassesTable = function(list) {
     const tbody = document.getElementById('staffPassesTableBody')
-    if (!tbody) return
+    const cards = document.getElementById('staffPassCards')
+    if (!tbody && !cards) return
 
     if (!list || list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary,#94A3B8);">' +
+      const empty = '<div style="text-align:center;padding:28px 12px;color:#71717A;">' +
         '<div style="font-size:28px;margin-bottom:8px;">🎫</div>' +
-        '<div style="font-weight:600;margin-bottom:4px;">No visitor passes found</div>' +
-        '<div style="font-size:12px;">Use "Spot Visitor Entry" to log a walk-in visitor</div>' +
-        '</td></tr>'
+        '<div style="font-weight:700;margin-bottom:4px;">No visitor passes found</div>' +
+        '<div style="font-size:12px;">Use Spot Visitor Entry to log a walk-in visitor</div></div>'
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="6">' + empty + '</td></tr>'
+      }
+      if (cards) cards.innerHTML = empty
       return
     }
 
@@ -2859,7 +2983,7 @@
 
     const typeIcon = (t) => ({ GUEST:'👤', DELIVERY:'📦', CAB:'🚕', SERVICE:'🔧', STAFF:'👷', VENDOR:'🏪' }[t] || '👤')
 
-    tbody.innerHTML = list.slice(0, 50).map(p => {
+    const rows = list.slice(0, 50).map(p => {
       const isApproved   = p.status === 'APPROVED'
       const isCheckedIn  = p.status === 'CHECKED_IN'
       const actionsHtml  = isApproved
@@ -2880,6 +3004,7 @@
         '<td style="padding:12px 16px;">' +
           '<div style="font-weight:600;font-size:13px;color:#0F172A;">' + (p.residentUnit || '—') + '</div>' +
           '<div style="font-size:11px;color:#64748B;">' + (p.residentName || '') + '</div>' +
+          (p.residentPhone ? '<div style="font-size:11px;color:#18181B;font-weight:700;">' + p.residentPhone + '</div>' : '') +
         '</td>' +
         '<td style="padding:12px 16px;">' +
           '<div style="display:flex;align-items:center;gap:6px;">' +
@@ -2894,6 +3019,44 @@
         '<td style="padding:12px 16px;text-align:right;">' + actionsHtml + '</td>' +
       '</tr>'
     }).join('')
+    if (tbody) tbody.innerHTML = rows
+    if (cards) {
+      const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
+      cards.innerHTML = list.slice(0, 50).map(p => {
+        const isApproved = p.status === 'APPROVED'
+        const isCheckedIn = p.status === 'CHECKED_IN'
+        const safeId = String(p.id || '').replace(/'/g, '')
+        const action = isApproved
+          ? '<button type="button" class="btn btn-primary" onclick="window.staffCheckIn(\'' + safeId + '\')">Check in</button>'
+          : (isCheckedIn
+            ? '<button type="button" class="btn btn-secondary" onclick="window.staffCheckOut(\'' + safeId + '\')">Check out</button>'
+            : '')
+        const visitorTel = String(p.visitorPhone || '').replace(/[^\d+]/g, '')
+        const residentTel = String(p.residentPhone || '').replace(/[^\d+]/g, '')
+        const phoneLink = visitorTel
+          ? '<a href="tel:' + visitorTel + '">' + esc(p.visitorPhone) + '</a>'
+          : '—'
+        const residentLink = residentTel
+          ? '<a href="tel:' + residentTel + '">' + esc(p.residentPhone) + '</a>'
+          : '—'
+        return '<article class="staff-pass-card">' +
+          '<div class="staff-pass-card-top">' +
+            '<div><div class="staff-pass-name">' + esc(p.visitorName || 'Visitor') + '</div>' +
+            '<div class="staff-pass-meta">' + esc(p.visitorType || 'GUEST') + (p.vehicleNumber ? ' · ' + esc(p.vehicleNumber) : '') + '</div></div>' +
+            statusBadge(p.status) +
+          '</div>' +
+          '<div class="staff-pass-card-grid">' +
+            '<div><span>Pass</span><strong>' + esc(p.passCode || '—') + '</strong></div>' +
+            '<div><span>PIN</span><strong>' + esc(p.otpPin || '—') + '</strong></div>' +
+            '<div><span>Flat</span><strong>' + esc(p.residentUnit || '—') + '</strong></div>' +
+            '<div><span>Resident</span><strong>' + esc(p.residentName || '—') + '</strong></div>' +
+            '<div><span>Visitor phone</span><strong>' + phoneLink + '</strong></div>' +
+            '<div><span>Resident phone</span><strong>' + residentLink + '</strong></div>' +
+          '</div>' +
+          (action ? '<div class="staff-pass-card-action">' + action + '</div>' : '') +
+        '</article>'
+      }).join('')
+    }
   }
 
   // ---- Check In ----------------------------------------------
@@ -2942,6 +3105,62 @@
     }
   }
 
+  window.staffVisitorPassCard = function(p, headline) {
+    const esc = function(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]
+      })
+    }
+    const call = function(num, label) {
+      const digits = String(num || '').replace(/\D/g, '')
+      if (digits.length < 10) return '<span style="color:#71717A;">No phone on record</span>'
+      const dial = digits.length === 10 ? '91' + digits : digits
+      const shown = digits.length > 10 ? digits : digits
+      return '<a href="tel:+' + dial + '" style="font-weight:800;color:#18181B;text-decoration:none;">' + esc(shown) + '</a>'
+        + '<a class="btn btn-primary btn-sm" href="tel:+' + dial + '" style="margin-left:8px;">' + label + '</a>'
+    }
+    const when = function(value) {
+      if (!value) return '—'
+      const dt = new Date(value)
+      return isNaN(dt.getTime()) ? '—' : dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    }
+    const field = function(label, value) {
+      return '<div><div style="font-size:11px;color:#71717A;font-weight:700;">' + label + '</div><div style="margin-top:2px;font-size:14px;font-weight:700;color:#18181B;">' + value + '</div></div>'
+    }
+    const action = p.status === 'CHECKED_IN' && p.id
+      ? '<button type="button" class="btn btn-primary btn-sm" onclick="window.staffCheckOut(\'' + String(p.id).replace(/'/g, '') + '\')">Check out</button>'
+      : ''
+    return ''
+      + '<div style="padding:14px 16px;">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">'
+      + '<div style="font-size:15px;font-weight:800;">' + esc(headline || 'Visitor pass') + '</div>'
+      + '<div style="font-size:12px;font-weight:700;">' + esc(p.status || '') + '</div>'
+      + '</div>'
+      + '<div class="staff-verify-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">'
+      + '<div style="border:1px solid #E4E4E7;border-radius:2px;padding:12px;">'
+      + '<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Visitor</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+      + field('Name', esc(p.visitorName || '—'))
+      + field('Type', esc(p.visitorType || 'GUEST'))
+      + field('Phone', call(p.visitorPhone, 'Call visitor'))
+      + field('Vehicle', esc(p.vehicleNumber || 'On foot'))
+      + field('Purpose', esc(p.purpose || '—'))
+      + field('Pass', esc((p.passCode || '—') + ' · PIN ' + (p.otpPin || '—')))
+      + field('Gate', esc(p.gateNumber || '—'))
+      + field('Valid until', esc(when(p.validUntil)))
+      + '</div></div>'
+      + '<div style="border:1px solid #18181B;border-radius:2px;padding:12px;">'
+      + '<div style="font-size:12px;font-weight:800;margin-bottom:8px;">Resident who created this pass</div>'
+      + '<div style="display:grid;grid-template-columns:1fr;gap:8px;">'
+      + field('Flat', esc(p.residentUnit || '—'))
+      + field('Name', esc(p.residentName || 'Resident'))
+      + field('Phone', call(p.residentPhone, 'Call resident'))
+      + '<div style="font-size:12px;color:#3F3F46;line-height:1.45;">Call this resident if you need them to confirm the visitor.</div>'
+      + action
+      + '</div></div>'
+      + '</div></div>'
+  }
+
   // ---- Quick Pass Verifier (scanner input) -------------------
   window.handleStaffQuickVerify = async function() {
     const input = document.getElementById('staffScannerInput')
@@ -2979,24 +3198,16 @@
 
       const p = data.pass || {}
 
-      if (data.alreadyCheckedIn) {
-        if (resultBox) {
-          resultBox.style.background = '#FFFBEB'
-          resultBox.style.border = '1px solid #FDE68A'
-          resultBox.style.color = '#92400E'
-          resultBox.innerHTML = '⚠ <strong>' + p.visitorName + '</strong> is already checked in at ' + p.gateNumber + '. To check out: use the table row button.'
-        }
-      } else {
-        if (resultBox) {
-          resultBox.style.background = '#F0FDF4'
-          resultBox.style.border = '1px solid #BBF7D0'
-          resultBox.style.color = '#166534'
-          resultBox.innerHTML =
-            '✅ <strong>Entry Granted!</strong> ' + p.visitorName + ' (' + p.visitorType + ') → Flat <strong>' + p.residentUnit + '</strong>' +
-            (p.vehicleNumber ? ' | Vehicle: ' + p.vehicleNumber : '') +
-            '<div style="font-size:11px;margin-top:4px;color:#374151;">Pass: ' + p.passCode + ' · Resident: ' + (p.residentName || '—') + '</div>'
-        }
-        if (typeof window.showToast === 'function') window.showToast(data.message || '✅ Visitor checked in!', 'success')
+      if (resultBox) {
+        resultBox.style.display = 'block'
+        resultBox.style.background = '#FFFFFF'
+        resultBox.style.border = '1px solid #E4E4E7'
+        resultBox.style.color = '#18181B'
+        resultBox.style.padding = '0'
+        resultBox.innerHTML = window.staffVisitorPassCard(p, data.alreadyCheckedIn ? 'Already inside' : 'Entry granted')
+      }
+      if (!data.alreadyCheckedIn) {
+        if (typeof window.showToast === 'function') window.showToast(data.message || 'Visitor checked in', 'success')
         input.value = ''
         await window.loadLiveStaffPortal()
       }
@@ -3016,13 +3227,13 @@
   window.openSpotEntryModal = function() {
     const html =
       '<div style="display:flex;flex-direction:column;gap:14px;">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Visitor Name *</label>' +
           '<input type="text" id="spotVisitorName" class="form-input" placeholder="e.g. Ramesh Kumar" style="width:100%;font-size:13px;" /></div>' +
         '<div><label style="font-size:12px;font-weight:700;">Phone Number</label>' +
           '<input type="tel" id="spotVisitorPhone" class="form-input" placeholder="10-digit mobile" style="width:100%;font-size:13px;" /></div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Destination Flat *</label>' +
           '<input type="text" id="spotResidentUnit" class="form-input" placeholder="e.g. A-402, B-201" style="width:100%;font-size:13px;" /></div>' +
         '<div><label style="font-size:12px;font-weight:700;">Visitor Type</label>' +
@@ -3328,19 +3539,19 @@
   window.openAdminCreateEntryPassModal = function() {
     const html =
       '<div style="display:flex;flex-direction:column;gap:14px;">' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Visitor Full Name *</label>' +
           '<input type="text" id="admPassVisitorName" class="form-input" placeholder="e.g. Ramesh Kumar" style="width:100%;font-size:13px;" /></div>' +
         '<div><label style="font-size:12px;font-weight:700;">Phone Number</label>' +
           '<input type="tel" id="admPassVisitorPhone" class="form-input" placeholder="10-digit mobile" style="width:100%;font-size:13px;" /></div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Destination Flat *</label>' +
           '<input type="text" id="admPassResidentUnit" class="form-input" placeholder="e.g. A-402" style="width:100%;font-size:13px;" /></div>' +
         '<div><label style="font-size:12px;font-weight:700;">Resident / Host Name</label>' +
           '<input type="text" id="admPassResidentName" class="form-input" placeholder="e.g. Dr. Vikram Malhotra" style="width:100%;font-size:13px;" /></div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Visitor Type</label>' +
           '<select id="admPassVisitorType" class="form-select" style="width:100%;font-size:13px;">' +
             '<option value="GUEST">👤 Guest / Friend</option>' +
@@ -3356,7 +3567,7 @@
             '<option value="Gate 3 - Rear Gate">Gate 3 - Rear Gate</option>' +
           '</select></div>' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+      '<div class="staff-form-pair" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
         '<div><label style="font-size:12px;font-weight:700;">Vehicle Number (Optional)</label>' +
           '<input type="text" id="admPassVehicleNo" class="form-input" placeholder="e.g. HR 26 DQ 8832" style="width:100%;font-size:13px;" /></div>' +
         '<div><label style="font-size:12px;font-weight:700;">Validity Duration</label>' +

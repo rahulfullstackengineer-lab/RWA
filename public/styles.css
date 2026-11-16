@@ -711,18 +711,22 @@ body {
 }
 
 .live-broadcast {
-  position: sticky;
-  top: 0;
-  z-index: 40;
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: -24px -24px 16px;
-  padding: 10px 14px;
-  background: #18181B;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: #1D4ED8;
   color: #FFFFFF;
-  border-bottom: 1px solid #18181B;
+  border-radius: 2px;
+  box-shadow: 0 8px 20px rgba(24, 24, 27, 0.12);
 }
+.live-broadcast-success { background: #166534; }
+.live-broadcast-error { background: #B91C1C; }
+.live-broadcast-warning { background: #C2410C; }
+.live-broadcast-info { background: #1D4ED8; }
 .live-broadcast-tag {
   flex-shrink: 0;
   font-size: 10px;
@@ -2585,7 +2589,7 @@ div:has(> .badge) {
     overflow-x: hidden !important;
   }
   .live-broadcast {
-    margin: -14px -14px 14px;
+    margin: 0 0 14px;
   }
 
   /* Mobile Bottom Navigation */
@@ -3226,7 +3230,7 @@ body.mobile-frame-view .content {
   overflow-x: hidden !important;
 }
 body.mobile-frame-view .live-broadcast {
-  margin: -14px -14px 14px;
+  margin: 0 0 14px;
 }
 body.mobile-frame-view .mobile-bottom-nav {
   display: flex !important;
@@ -8366,6 +8370,209 @@ body.mobile-frame-view .card > .card-header .btn {
   flex: 0 0 auto !important;
   width: auto !important;
 }
+
+/* Staff portal: phone layout. Cards replace the wide visitor table. */
+.staff-pass-cards { display: none; }
+.staff-pass-card {
+  background: #fff;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  padding: 12px;
+}
+.staff-pass-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.staff-pass-name { font-size: 15px; font-weight: 800; color: #18181B; }
+.staff-pass-meta { margin-top: 2px; font-size: 12px; color: #71717A; }
+.staff-pass-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+  margin-top: 10px;
+}
+.staff-pass-card-grid span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #71717A;
+}
+.staff-pass-card-grid strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #18181B;
+  word-break: break-word;
+}
+.staff-pass-card-action { margin-top: 10px; }
+.staff-pass-card-action .btn { width: 100%; }
+
+@media (max-width: 840px) {
+  .staff-hero {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 14px !important;
+    border-radius: 2px !important;
+    gap: 12px !important;
+  }
+  .staff-hero-main {
+    align-items: flex-start !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+  .staff-hero-main > div:first-child {
+    width: 44px !important;
+    height: 44px !important;
+    font-size: 22px !important;
+    border-radius: 8px !important;
+  }
+  .staff-hero h2 { font-size: 18px !important; }
+  .staff-hero-meta { gap: 4px 12px !important; font-size: 12px !important; }
+  .staff-hero-action,
+  .staff-hero-action .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .staff-scanner {
+    padding: 14px !important;
+    border-radius: 2px !important;
+  }
+  .staff-scanner-help { display: none !important; }
+  .staff-scanner-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .staff-scanner-field {
+    min-width: 0 !important;
+    width: 100% !important;
+    flex: none !important;
+  }
+  .staff-scanner-row > .btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .staff-tabs {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+  .staff-tabs .btn {
+    width: 100% !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+    white-space: normal !important;
+    text-align: center !important;
+    line-height: 1.25 !important;
+    padding: 8px 6px !important;
+    font-size: 12px !important;
+  }
+  .staff-pass-head { align-items: stretch !important; }
+  .staff-pass-filters {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    width: 100% !important;
+  }
+  .staff-pass-filters .btn { width: 100% !important; }
+  .staff-pass-table { display: none !important; }
+  .staff-pass-cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  .staff-duty-grid,
+  .staff-slip-grid,
+  .staff-intercom,
+  .staff-verify-cols,
+  .staff-form-pair {
+    grid-template-columns: 1fr !important;
+  }
+  .staff-salary-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .staff-salary-grid > div {
+    min-width: 0 !important;
+    padding: 12px !important;
+  }
+  #salaryCardMonthly,
+  #salaryCardDate,
+  #salaryCardAttendance {
+    font-size: 18px !important;
+    line-height: 1.2 !important;
+  }
+  .staff-slip-head,
+  .staff-slip-net {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .staff-slip-net .btn { width: 100% !important; justify-content: center !important; }
+}
+
+body.mobile-frame-view .staff-hero {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding: 14px !important;
+  border-radius: 2px !important;
+  gap: 12px !important;
+}
+body.mobile-frame-view .staff-hero-main {
+  align-items: flex-start !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+body.mobile-frame-view .staff-hero-main > div:first-child {
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 22px !important;
+}
+body.mobile-frame-view .staff-hero h2 { font-size: 18px !important; }
+body.mobile-frame-view .staff-hero-action,
+body.mobile-frame-view .staff-hero-action .btn { width: 100% !important; justify-content: center !important; }
+body.mobile-frame-view .staff-scanner { padding: 14px !important; }
+body.mobile-frame-view .staff-scanner-help { display: none !important; }
+body.mobile-frame-view .staff-scanner-row { flex-direction: column !important; align-items: stretch !important; }
+body.mobile-frame-view .staff-scanner-field { min-width: 0 !important; width: 100% !important; flex: none !important; }
+body.mobile-frame-view .staff-scanner-row > .btn { width: 100% !important; justify-content: center !important; }
+body.mobile-frame-view .staff-tabs {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  border-bottom: none !important;
+}
+body.mobile-frame-view .staff-tabs .btn {
+  width: 100% !important;
+  min-height: 44px !important;
+  white-space: normal !important;
+  justify-content: center !important;
+  font-size: 12px !important;
+}
+body.mobile-frame-view .staff-pass-filters {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  width: 100% !important;
+}
+body.mobile-frame-view .staff-pass-filters .btn { width: 100% !important; }
+body.mobile-frame-view .staff-pass-table { display: none !important; }
+body.mobile-frame-view .staff-pass-cards {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+body.mobile-frame-view .staff-duty-grid,
+body.mobile-frame-view .staff-slip-grid,
+body.mobile-frame-view .staff-intercom,
+body.mobile-frame-view .staff-verify-cols,
+body.mobile-frame-view .staff-form-pair { grid-template-columns: 1fr !important; }
+body.mobile-frame-view .staff-salary-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+body.mobile-frame-view .staff-slip-head,
+body.mobile-frame-view .staff-slip-net { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+body.mobile-frame-view .staff-slip-net .btn { width: 100% !important; }
 
 
 

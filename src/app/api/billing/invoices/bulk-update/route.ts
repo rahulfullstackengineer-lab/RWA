@@ -201,6 +201,94 @@ export async function POST(request: Request) {
       })
     }
 
+    if (action === 'MARK_REFUND_COLLECTED') {
+      const ids = Array.isArray(invoiceIds) ? invoiceIds.filter(Boolean) : []
+      if (!ids.length) {
+        return NextResponse.json({ error: 'Choose the bill whose extra amount was collected' }, { status: 400 })
+      }
+      const collectionNote = String(body.collectionNote || '').trim()
+      const targets = await prisma.invoice.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
+        include: { unit: true },
+      })
+      const collectedAt = new Date()
+      const collected: { invoiceId: string; unitNumber: string; amount: number }[] = []
+      for (const inv of targets) {
+        let parsed: { revision?: Record<string, unknown> } = {}
+        try { parsed = inv.notes ? JSON.parse(inv.notes) : {} } catch { parsed = {} }
+        const rev = (parsed.revision || readRevision(inv.notes) || {}) as {
+          excess?: number
+          outcome?: string
+          residentMessage?: string
+        }
+        const excess = Number(rev.excess || Math.max(0, (inv.paidAmount || 0) - (inv.totalAmount || 0)))
+        if (rev.outcome === 'REFUND_COLLECTED' || excess <= 0.5) continue
+        const when = collectedAt.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        const collectedLine = `The extra ₹${money(excess)} was collected at the RWA office on ${when}, recorded by ${user.name}.${collectionNote ? ` Note: ${collectionNote}` : ''}`
+        const residentMessage = rev.residentMessage
+          ? `${rev.residentMessage} ${collectedLine}`
+          : `Your ${labelMonth(inv.billingMonth)} bill was revised. ${collectedLine}`
+        parsed.revision = {
+          ...rev,
+          excess,
+          outcome: 'REFUND_COLLECTED',
+          refundCollectedAt: collectedAt.toISOString(),
+          refundCollectedByName: user.name,
+          refundCollectedAmount: excess,
+          collectionNote: collectionNote || null,
+          residentMessage,
+        }
+        await prisma.invoice.update({
+          where: { id: inv.id },
+          data: { notes: JSON.stringify(parsed) },
+        })
+        const people = await prisma.user.findMany({
+          where: { organizationId: orgId, unitId: inv.unitId },
+          select: { id: true },
+        })
+        if (people.length) {
+          await prisma.notification.createMany({
+            data: people.map((person) => ({
+              organizationId: orgId,
+              userId: person.id,
+              title: `₹${money(excess)} collected at the office`,
+              message: residentMessage,
+              type: 'BILL',
+              referenceType: 'INVOICE',
+              referenceId: inv.id,
+            })),
+          })
+        }
+        collected.push({
+          invoiceId: inv.id,
+          unitNumber: inv.unit?.unitNumber || 'Flat',
+          amount: excess,
+        })
+      }
+      if (!collected.length) {
+        return NextResponse.json({ error: 'Those bills have no office refund waiting to be marked collected' }, { status: 400 })
+      }
+      await logAudit({
+        organizationId: orgId,
+        userId: user.id,
+        action: 'OFFICE_REFUND_COLLECTED',
+        entityType: 'Invoice',
+        entityId: collected.map((row) => row.invoiceId).join(','),
+        details: `${user.name} recorded office collection of ${collected.map((row) => `₹${money(row.amount)} for Flat ${row.unitNumber}`).join('; ')}`,
+        severity: 'INFO',
+        newValues: { collected, collectionNote },
+        ipAddress: request.headers.get('x-forwarded-for') || null,
+        userAgent: request.headers.get('user-agent') || null,
+      })
+      return NextResponse.json({
+        success: true,
+        message: collected.length === 1
+          ? `Flat ${collected[0].unitNumber} is marked as having collected ₹${money(collected[0].amount)} at the office`
+          : `${collected.length} office refunds marked as collected`,
+        collected,
+      })
+    }
+
     // Amount changes include bills that are already paid. Due-date changes stay on open bills.
     const changesAmount = action === 'SET_AMOUNT' || action === 'APPLY_ADJUSTMENT'
     const filter: Record<string, unknown> = {

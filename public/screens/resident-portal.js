@@ -700,8 +700,10 @@ window.loadLiveResidentBills = async function() {
                 ₹${Number(displayAmount || 0).toLocaleString('en-IN')}
               </div>
               <div style="font-size:11.5px;font-weight:600;color:${isPaid ? 'var(--green)' : (isOverdue ? 'var(--red)' : 'var(--text-muted)')};margin-top:2px;">
-                ${latestRevision && latestRevision.outcome === 'REFUND_AT_OFFICE'
-                  ? 'Extra amount is collected at the RWA office'
+                ${latestRevision && latestRevision.outcome === 'REFUND_COLLECTED'
+                  ? 'Extra amount was collected at the RWA office'
+                  : latestRevision && latestRevision.outcome === 'REFUND_AT_OFFICE'
+                  ? 'Extra amount is waiting to be collected at the RWA office'
                   : (isPaid ? '✓ Fully paid · Balance ₹0' : (isOverdue ? `⚠️ Overdue since ${dueDateStr}` : `Due by ${dueDateStr}`))}
               </div>
             </div>

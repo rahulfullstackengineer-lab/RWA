@@ -216,7 +216,7 @@ window.saveReportFile = function(filename, content, mime) {
       bar.querySelector('.live-broadcast-open').onclick = function() {
         let role = '';
         try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
-        const screen = role === 'RESIDENT' ? 'resident-notifications' : 'admin-notifications';
+        const screen = role === 'RESIDENT' ? 'resident-notifications' : (role === 'STAFF' ? 'staff-dashboard' : 'admin-notifications');
         if (typeof Router !== 'undefined') Router.go(screen);
       };
     } else if (bar.parentElement !== content) {

@@ -2,8 +2,60 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
+import fs from 'fs'
+import path from 'path'
+
+function readStoredStaffMatch(orgId: string, phone?: string | null, name?: string | null) {
+  try {
+    const file = path.join(process.cwd(), 'staff_store.json')
+    if (!fs.existsSync(file)) return null
+    const all = JSON.parse(fs.readFileSync(file, 'utf-8'))
+    const staff = all?.[orgId]?.staff
+    if (!Array.isArray(staff)) return null
+    const needle = usablePhone(phone)
+    const byPhone = needle
+      ? staff.find((row: { phone?: string }) => usablePhone(row.phone) === needle)
+      : null
+    if (byPhone) return byPhone
+    const wanted = String(name || '').trim().toLowerCase()
+    if (!wanted) return null
+    return staff.find((row: { name?: string }) => String(row.name || '').trim().toLowerCase() === wanted) || null
+  } catch {
+    return null
+  }
+}
 
 export const dynamic = 'force-dynamic'
+
+function usablePhone(value?: string | null) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (digits.length < 10) return ''
+  return digits.slice(-10)
+}
+
+async function attachHostContact<T extends { organizationId: string; residentUnit: string; residentName?: string | null; residentPhone?: string | null }>(passes: T[]) {
+  if (!passes.length) return passes
+  const orgId = passes[0].organizationId
+  const unitNumbers = [...new Set(passes.map((pass) => pass.residentUnit).filter(Boolean))]
+  const [units, people] = await Promise.all([
+    prisma.unit.findMany({
+      where: { organizationId: orgId, unitNumber: { in: unitNumbers } },
+      select: { unitNumber: true, ownerName: true, ownerPhone: true, tenantName: true, tenantPhone: true },
+    }),
+    prisma.user.findMany({
+      where: { organizationId: orgId, unit: { unitNumber: { in: unitNumbers } } },
+      select: { name: true, phone: true, unit: { select: { unitNumber: true } } },
+    }),
+  ])
+  return passes.map((pass) => {
+    const unit = units.find((row) => row.unitNumber === pass.residentUnit)
+    const person = people.find((row) => row.unit?.unitNumber === pass.residentUnit)
+    const phone = usablePhone(pass.residentPhone) || usablePhone(person?.phone) || usablePhone(unit?.tenantPhone) || usablePhone(unit?.ownerPhone)
+    const storedName = pass.residentName && pass.residentName !== 'Resident' ? pass.residentName : ''
+    const name = storedName || person?.name || unit?.tenantName || unit?.ownerName || 'Resident'
+    return { ...pass, residentName: name, residentPhone: phone || pass.residentPhone || '' }
+  })
+}
 
 export async function GET(request: Request) {
   try {
@@ -66,26 +118,26 @@ export async function GET(request: Request) {
       category: "SECURITY",
       phone: staffPhone || "—",
       altPhone: null,
-      locationPost: "Gate 1 - Main Entrance",
-      blockName: "Main Gate",
-      shiftName: "General Duty",
-      startTime: "08:00 AM",
-      endTime: "08:00 PM",
+      locationPost: "",
+      blockName: "",
+      shiftName: "",
+      startTime: "",
+      endTime: "",
       status: "ON_DUTY",
       salaryAmount: 0,
-      salaryDate: "—",
-      paymentStatus: "—",
-      lastPaidDate: "—",
+      salaryDate: "",
+      paymentStatus: "",
+      lastPaidDate: "",
       attendancePresent: 0,
       attendanceTotal: 0,
       notes: null,
     }
 
     // Fetch gate entry passes for this staff member's gate post
-    const allPasses = await prisma.entryPass.findMany({
+    const allPasses = await attachHostContact(await prisma.entryPass.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
-    })
+    }))
 
     // Active passes for verification
     const activePasses = allPasses.filter(p => p.status === "APPROVED" || p.status === "CHECKED_IN")
@@ -106,12 +158,55 @@ export async function GET(request: Request) {
       },
     }) : null
 
-    // Salary slip calculation
-    const basePay = activeStaff.salaryAmount ? Math.round(activeStaff.salaryAmount * 0.75) : 0
-    const allowance = activeStaff.salaryAmount ? Math.round(activeStaff.salaryAmount * 0.15) : 0
-    const dutyBonus = activeStaff.salaryAmount ? activeStaff.salaryAmount - basePay - allowance : 0
-    const pfDeduction = activeStaff.salaryAmount ? 1250 : 0
-    const netTakeHome = activeStaff.salaryAmount ? activeStaff.salaryAmount - pfDeduction : 0
+    const sampleDutyNames = new Set([
+      'Ram Singh', 'Dharmendra Kumar', 'Bijender Yadav', 'Manoj Tiwari', 'Suraj Sharma',
+      'Ramesh Paswan', 'Sunita Devi', 'Rekha Rani', 'Mahesh Electrician', 'Shankar Plumber', 'Radhey Shyam',
+    ])
+    const realSupervisor = supervisor && !sampleDutyNames.has(supervisor.staffName) ? supervisor : null
+    const realRelief = reliefGuard && !sampleDutyNames.has(reliefGuard.staffName) ? reliefGuard : null
+
+    const storedStaff = readStoredStaffMatch(organizationId, activeStaff.phone, activeStaff.staffName)
+    const shiftLabels: Record<string, string> = {
+      DAY: 'Day Shift',
+      NIGHT: 'Night Shift',
+      ROTATIONAL: 'Rotational',
+      GENERAL: 'General Shift',
+    }
+    const inventedPosts = new Set(['Gate 1 Entrance Desk', 'Gate 1 - Main Entrance', 'Gate 1 - Main Entrance Desk', 'Not assigned'])
+    const hoursAreDefault = !activeStaff.startTime || !activeStaff.endTime
+      || (activeStaff.startTime === '06:00 AM' && activeStaff.endTime === '02:00 PM')
+      || (activeStaff.startTime === '08:00 AM' && activeStaff.endTime === '08:00 PM')
+    const shiftIsDefault = !activeStaff.shiftName || activeStaff.shiftName === 'Morning Shift' || activeStaff.shiftName === 'General Duty'
+    const shiftName = storedStaff
+      ? (shiftLabels[storedStaff.shift] || activeStaff.shiftName)
+      : (shiftIsDefault ? '' : activeStaff.shiftName)
+    const startTime = hoursAreDefault ? '' : (activeStaff.startTime || '')
+    const endTime = hoursAreDefault ? '' : (activeStaff.endTime || '')
+    const locationPost = inventedPosts.has(activeStaff.locationPost || '') ? '' : (activeStaff.locationPost || '')
+    const monthlySalary = storedStaff ? Number(storedStaff.salary) || 0 : (activeStaff.salaryAmount || 0)
+    const payDateIsDefault = !activeStaff.salaryDate || activeStaff.salaryDate === '5th of every month' || activeStaff.salaryDate === '—'
+    const attendanceIsDefault = activeStaff.attendancePresent === 26 && activeStaff.attendanceTotal === 28
+    const attendancePresent = attendanceIsDefault ? 0 : (activeStaff.attendancePresent || 0)
+    const attendanceTotal = attendanceIsDefault ? 0 : (activeStaff.attendanceTotal || 0)
+
+    if (staffMember && staffMember.id && staffMember.id !== 'default') {
+      const repair: Record<string, string | number> = {}
+      if ((shiftName || '') !== (staffMember.shiftName || '')) repair.shiftName = shiftName || ''
+      if ((startTime || '') !== (staffMember.startTime || '')) repair.startTime = startTime || ''
+      if ((endTime || '') !== (staffMember.endTime || '')) repair.endTime = endTime || ''
+      const storedPost = locationPost || 'Not assigned'
+      if (storedPost !== (staffMember.locationPost || '')) repair.locationPost = storedPost
+      if (payDateIsDefault && staffMember.salaryDate) repair.salaryDate = ''
+      if (attendanceIsDefault) {
+        repair.attendancePresent = 0
+        repair.attendanceTotal = 0
+      }
+      if (!staffMember.lastPaidDate && staffMember.paymentStatus) repair.paymentStatus = ''
+      if (monthlySalary && staffMember.salaryAmount !== monthlySalary) repair.salaryAmount = monthlySalary
+      if (Object.keys(repair).length) {
+        await prisma.staffDuty.update({ where: { id: staffMember.id }, data: repair })
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -128,48 +223,48 @@ export async function GET(request: Request) {
         category: activeStaff.category,
         phone: activeStaff.phone,
         altPhone: activeStaff.altPhone,
-        locationPost: activeStaff.locationPost,
-        blockName: activeStaff.blockName,
-        shiftName: activeStaff.shiftName,
-        startTime: activeStaff.startTime,
-        endTime: activeStaff.endTime,
+        locationPost,
+        blockName: activeStaff.blockName && activeStaff.blockName !== 'Campus Wide' && activeStaff.blockName !== 'Main Gate' ? activeStaff.blockName : '',
+        shiftName,
+        startTime,
+        endTime,
         status: activeStaff.status,
         notes: activeStaff.notes,
       },
       duty: {
-        currentPost: activeStaff.locationPost,
-        currentBlock: activeStaff.blockName || "Campus Wide",
-        currentShift: activeStaff.shiftName,
-        timing: `${activeStaff.startTime || "08:00 AM"} – ${activeStaff.endTime || "08:00 PM"}`,
+        currentPost: locationPost,
+        currentBlock: activeStaff.blockName && activeStaff.blockName !== 'Campus Wide' && activeStaff.blockName !== 'Main Gate' ? activeStaff.blockName : '',
+        currentShift: shiftName,
+        timing: startTime && endTime ? `${startTime} – ${endTime}` : '',
         status: activeStaff.status,
-        supervisor: supervisor ? {
-          name: supervisor.staffName,
-          role: supervisor.role,
-          phone: supervisor.phone,
+        supervisor: realSupervisor ? {
+          name: realSupervisor.staffName,
+          role: realSupervisor.role,
+          phone: realSupervisor.phone,
         } : null,
-        reliefGuard: reliefGuard ? {
-          name: reliefGuard.staffName,
-          role: reliefGuard.role,
-          phone: reliefGuard.phone,
-          shift: reliefGuard.shiftName || "02:00 PM - 10:00 PM",
+        reliefGuard: realRelief ? {
+          name: realRelief.staffName,
+          role: realRelief.role,
+          phone: realRelief.phone,
+          shift: realRelief.shiftName || '',
         } : null,
       },
       salary: {
-        monthlySalary: activeStaff.salaryAmount || 0,
-        salaryDate: activeStaff.salaryDate || "—",
-        nextSalaryCredit: "—",
-        paymentStatus: activeStaff.paymentStatus || "—",
-        lastPaidDate: activeStaff.lastPaidDate || "—",
-        bankAccount: "Bank Account on record",
-        attendancePresent: activeStaff.attendancePresent || 0,
-        attendanceTotal: activeStaff.attendanceTotal || 0,
-        attendancePercent: activeStaff.attendanceTotal ? Math.round(((activeStaff.attendancePresent || 0) / (activeStaff.attendanceTotal || 1)) * 100) : 0,
+        monthlySalary,
+        salaryDate: payDateIsDefault ? '' : activeStaff.salaryDate,
+        nextSalaryCredit: '',
+        paymentStatus: activeStaff.lastPaidDate ? (activeStaff.paymentStatus || '') : '',
+        lastPaidDate: activeStaff.lastPaidDate || '',
+        bankAccount: storedStaff?.upiId || storedStaff?.accountNumber || '',
+        attendancePresent,
+        attendanceTotal,
+        attendancePercent: attendanceTotal ? Math.round((attendancePresent / attendanceTotal) * 100) : 0,
         breakdown: {
-          basicSalary: basePay,
-          shiftAllowance: allowance,
-          specialDutyBonus: dutyBonus,
-          pfEsiDeduction: pfDeduction,
-          netSalary: netTakeHome,
+          basicSalary: monthlySalary,
+          shiftAllowance: 0,
+          specialDutyBonus: 0,
+          pfEsiDeduction: 0,
+          netSalary: monthlySalary,
         },
       },
       passes: {
@@ -225,11 +320,13 @@ export async function POST(request: Request) {
         }, { status: 404 })
       }
 
+      const [passWithHost] = await attachHostContact([pass])
+
       if (pass.status === 'CHECKED_IN') {
         return NextResponse.json({
           success: true,
           alreadyCheckedIn: true,
-          pass,
+          pass: passWithHost,
           message: `Visitor ${pass.visitorName} is already checked in at ${pass.gateNumber}.`,
         })
       }
@@ -264,9 +361,10 @@ export async function POST(request: Request) {
         data: { action: 'CHECKED_IN', pass: updatedPass },
       })
 
+      const [checkedInView] = await attachHostContact([updatedPass])
       return NextResponse.json({
         success: true,
-        pass: updatedPass,
+        pass: checkedInView,
         message: `✅ Entry Granted: ${pass.visitorName} checked in for Flat ${pass.residentUnit}!`,
       })
     }

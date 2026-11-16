@@ -251,7 +251,21 @@ export async function GET(request: Request) {
       ],
     })
 
-    // An empty list stays empty until the society adds real contacts.
+    const dummyNames = new Set([
+      'dr. vikram malhotra', 'vikram malhotra', 'main security gate 1 desk', 'north gate security post',
+      'society duty electrician', 'society duty plumber', 'campus elevator helpline',
+      'national medical ambulance helpline', 'police control room (pcr)', 'fire & rescue emergency command',
+      'rwa admin desk', 'rwa president',
+    ])
+    const dummyPhones = new Set(['9876543200', '9812345678', '1234567890', '1234567891', '9876543210', '9876543211', '9876543212', '18001021234'])
+    contacts = contacts.filter((c) => {
+      const phone = String(c.phone || '').replace(/\D/g, '')
+      const name = String(c.name || '').trim().toLowerCase()
+      if (dummyNames.has(name)) return false
+      if (phone && dummyPhones.has(phone)) return false
+      if (!phone) return false
+      return true
+    })
 
     const metrics = {
       total: contacts.length,

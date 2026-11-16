@@ -910,6 +910,7 @@ Screens['admin-invoice-detail'] = function() {
     breadcrumb: '<span onclick="Router.go(\'admin-invoices\')" style="cursor:pointer;color:var(--blue);">Invoices</span>',
     actions: `
       <button class="btn btn-secondary btn-sm" onclick="showToast('PDF invoice downloaded', 'success')">⬇ Download PDF</button>
+      ${window.invoiceRefundActionHtml(inv)}
       ${displayStatus !== 'PAID' ? `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>` : ''}
     `,
     content: `
@@ -2777,7 +2778,8 @@ function renderInvoicesData(invoices) {
           </td>
           <td>${statusPill}</td>
           <td onclick="event.stopPropagation()">
-            <div style="display:flex;gap:4px;">
+            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+              ${window.invoiceRefundActionHtml(inv)}
               ${inv.status !== 'PAID' ? `
                 <button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')" title="Pay with Razorpay">💳 Pay</button>
               ` : `
@@ -2826,7 +2828,8 @@ function renderInvoicesData(invoices) {
             </div>
           </div>
 
-          <div style="display:flex;gap:8px;margin-top:4px;" onclick="event.stopPropagation()">
+          <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;" onclick="event.stopPropagation()">
+            ${window.invoiceRefundActionHtml(inv)}
             ${inv.status !== 'PAID' ? `
               <button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="triggerRazorpayPayment('${inv.id}')">
                 💳 Pay Razorpay
@@ -2845,6 +2848,55 @@ function renderInvoicesData(invoices) {
     }).join('');
   }
 }
+
+window.invoiceRevision = function(inv) {
+  if (!inv || !inv.notes) return null;
+  try { return JSON.parse(inv.notes).revision || null; } catch (e) { return null; }
+};
+
+window.invoiceRefundActionHtml = function(inv) {
+  const rev = window.invoiceRevision(inv);
+  if (!rev) return '';
+  if (rev.outcome === 'REFUND_COLLECTED') {
+    const when = rev.refundCollectedAt ? new Date(rev.refundCollectedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    return '<span class="badge badge-green" title="Collected at the office">Refund collected' + (when ? ' · ' + when : '') + '</span>';
+  }
+  if (rev.outcome === 'REFUND_AT_OFFICE') {
+    return '<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();window.openMarkRefundCollectedModal(\'' + inv.id + '\')">Mark refund collected</button>';
+  }
+  return '';
+};
+
+window.openMarkRefundCollectedModal = function(invoiceId) {
+  const list = window.__cachedInvoices || [];
+  const inv = list.find(function(item) { return item.id === invoiceId; }) || (window.__selectedInvoice && window.__selectedInvoice.id === invoiceId ? window.__selectedInvoice : null);
+  const rev = window.invoiceRevision(inv);
+  if (!inv || !rev || rev.outcome !== 'REFUND_AT_OFFICE') {
+    if (typeof showToast === 'function') showToast('This bill has no office refund waiting', 'warning');
+    return;
+  }
+  const unit = inv.unit && inv.unit.unitNumber ? inv.unit.unitNumber : 'Flat';
+  const excess = Number(rev.excess || 0).toLocaleString('en-IN');
+  const html = ''
+    + '<div style="font-size:13px;line-height:1.5;color:#3F3F46;">Flat <strong>' + unit + '</strong> paid more than the revised bill. Record that they collected <strong>₹' + excess + '</strong> in cash at the office. The online payment stays on the bill.</div>'
+    + '<div style="margin-top:12px;"><label class="form-label">Note for the record</label><input id="markRefundNote" class="form-input" placeholder="Who collected it, and any receipt number" style="width:100%;" /></div>';
+  if (typeof showModal !== 'function') return;
+  showModal('Record office refund', html, 'Mark as collected', async function() {
+    const collectionNote = (document.getElementById('markRefundNote') || {}).value || '';
+    const res = await (window.apiFetch || fetch)('/api/billing/invoices/bulk-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'MARK_REFUND_COLLECTED', invoiceIds: [invoiceId], collectionNote: collectionNote }),
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok || !data.success) throw new Error(data.error || 'Could not record the office refund');
+    if (typeof showToast === 'function') showToast(data.message || 'Office refund marked as collected', 'success');
+    if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen();
+    if (window.__selectedInvoice && window.__selectedInvoice.id === invoiceId && typeof window.restoreOpenInvoice === 'function') {
+      window.restoreOpenInvoice(invoiceId);
+    }
+  }, '480px');
+};
 
 window.restoreOpenInvoice = async function(invoiceId) {
   if (window.__restoringInvoice) return;
