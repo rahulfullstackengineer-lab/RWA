@@ -775,15 +775,9 @@ window.exportLedgerCSV = function() {
   });
 
   var csv = [headers.join(',')].concat(rows).join('\n');
-  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-  var url  = URL.createObjectURL(blob);
-  var link = document.createElement('a');
   var orgName = (localStorage.getItem('rwa_active_org_name') || 'Society').replace(/\s+/g,'_');
   var today   = new Date().toISOString().split('T')[0];
-  link.href = url;
-  link.download = orgName + '_Ledger_' + today + '.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  window.saveReportFile(orgName + '_Ledger_' + today + '.csv', csv);
   if (typeof showToast === 'function') showToast('Ledger exported: ' + list.length + ' entries', 'success');
 };
 

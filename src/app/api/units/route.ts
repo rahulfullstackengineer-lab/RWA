@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { spreadOverpaidInvoices } from '@/lib/settle-invoices'
 
 export async function GET(request: Request) {
   try {
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
     const orgId = user.organizationId
 
     if (!orgId) return NextResponse.json({ units: [], blocks: [] })
+
+    await spreadOverpaidInvoices(orgId)
 
     const [units, blocks] = await Promise.all([
       prisma.unit.findMany({

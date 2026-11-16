@@ -1152,13 +1152,7 @@ window.exportUnitsRegistry = function() {
   ];
 
   const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(cell => `"${(cell + '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Society_Units_Registry_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile(`Society_Units_Registry_${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   showToast('Units registry exported successfully!', 'success');
 };
 
@@ -1208,15 +1202,7 @@ window.downloadUnitsImportTemplate = function() {
   ];
 
   const csv = [headers.join(','), ...sampleRows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'RWA_Society_Roster_Import_Template.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.saveReportFile('RWA_Society_Roster_Import_Template.csv', csv);
   showToast('Sample roster template downloaded', 'info');
 };
 

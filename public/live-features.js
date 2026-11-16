@@ -56,6 +56,37 @@
   }
   window.syncSocketRooms = syncSocketRooms;
 
+  window.refreshPagesAfterPayment = function() {
+    var screen = ''
+    try {
+      screen = (typeof Router !== 'undefined' && Router.current) ? Router.current() : ''
+    } catch (e) {}
+    if (!screen) screen = (window.location.hash || '').replace('#', '')
+
+    if (screen === 'admin-unit-detail' && typeof window.restoreOpenUnit === 'function') {
+      var unitId = (window.readScreenRecord && window.readScreenRecord('unit')) || (window.__selectedUnit && window.__selectedUnit.id) || ''
+      window.restoreOpenUnit(unitId)
+    } else if (typeof window.loadLiveUnitsScreen === 'function') {
+      window.loadLiveUnitsScreen()
+    }
+
+    if (screen === 'admin-invoice-detail' && typeof window.restoreOpenInvoice === 'function') {
+      window.restoreOpenInvoice(window.readScreenRecord ? window.readScreenRecord('invoice') : '')
+    } else if (typeof window.loadLiveInvoicesScreen === 'function') {
+      window.loadLiveInvoicesScreen()
+    }
+
+    if (screen === 'admin-payments' && typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
+    if (screen === 'admin-dues' && typeof window.loadLiveDuesScreen === 'function') window.loadLiveDuesScreen()
+    if (screen === 'admin-dashboard' && typeof window.loadLiveAdminDashboard === 'function') window.loadLiveAdminDashboard()
+    if (String(screen).indexOf('resident') === 0) {
+      if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
+      if (typeof window.loadLiveResidentBills === 'function') window.loadLiveResidentBills()
+      if (typeof window.loadLiveResidentPayments === 'function') window.loadLiveResidentPayments()
+      if (typeof window.loadLiveResidentLedger === 'function') window.loadLiveResidentLedger()
+    }
+  }
+
   function updateNotificationBellBadge(showDot = true) {
     const dot = document.getElementById('headerNotifDot');
     if (dot) {
@@ -72,6 +103,11 @@
         const data = await res.json();
         const unreadCount = data.unreadCount || 0;
         updateNotificationBellBadge(unreadCount > 0);
+        const newest = (data.notifications || []).find(function(note) { return !note.isRead; });
+        if (newest && typeof window.pinLiveBroadcast === 'function') {
+          const line = newest.title ? (newest.title + (newest.message ? '. ' + newest.message : '')) : newest.message;
+          window.pinLiveBroadcast({ id: 'note:' + newest.id, text: line, kind: 'info', fromInbox: true, createdAt: newest.createdAt });
+        }
         const badge = document.getElementById('notifDropdownBadge');
         if (badge) {
           badge.textContent = unreadCount > 0 ? `${unreadCount} New` : 'All caught up';
@@ -165,16 +201,13 @@
 
       socket.on('payment-confirmed', (data) => {
         showToast(`🎉 Payment Confirmed: ₹${Number(data.amount).toLocaleString('en-IN')}`, 'success')
+        if (typeof window.refreshPagesAfterPayment === 'function') window.refreshPagesAfterPayment()
       })
 
       socket.on('new-payment-received', (data) => {
         showToast(`💰 Payment Received: Flat ${data.unitNumber} (₹${data.amount})`, 'success')
         updateNotificationBellBadge(true)
-        if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen()
-        if (typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
-        if (typeof window.loadLiveAdminDashboard === 'function' && window.location.hash.includes('admin-dashboard')) {
-          window.loadLiveAdminDashboard()
-        }
+        if (typeof window.refreshPagesAfterPayment === 'function') window.refreshPagesAfterPayment()
       })
 
       socket.on('complaint-status-updated', (data) => {
@@ -469,13 +502,13 @@
 
     overlay.innerHTML = `
       <div style="background:#fff; border-radius:16px; max-width:${maxWidth}; width:100%; max-height:92vh; overflow-y:auto; box-shadow:0 25px 50px -12px rgba(15,23,42,0.25); border:1px solid #E2E8F0; animation: scaleUp 0.18s ease;">
-        <div style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); position:sticky; top:0; z-index:10;">
+        <div class="rwa-modal-chrome" style="padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); position:sticky; top:0; z-index:10;">
           <div style="font-size: 17px; font-weight: 800; color: var(--text-primary);">${title}</div>
           <button type="button" onclick="document.getElementById('rwaGlobalModal').style.display='none'" style="background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-secondary); width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center;">✕</button>
         </div>
         <form id="rwaModalForm" style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;">
           ${formHtml}
-          <div style="display: flex; gap: 10px; margin-top: 8px;">
+          <div class="rwa-modal-chrome" style="display: flex; gap: 10px; margin-top: 8px;">
             ${submitLabel
               ? `<button type="button" onclick="document.getElementById('rwaGlobalModal').style.display='none'" class="btn btn-secondary" style="flex:1;">Cancel</button>
                  <button type="submit" id="rwaModalSubmitBtn" class="btn btn-primary" style="flex:1;">${submitLabel}</button>`
@@ -511,6 +544,18 @@
     }
   }
   window.showModal = showModal
+
+  if (!window.__rwaPrintHooks) {
+    window.__rwaPrintHooks = true
+    window.addEventListener('beforeprint', function() {
+      const modal = document.getElementById('rwaGlobalModal')
+      const open = modal && window.getComputedStyle(modal).display !== 'none'
+      if (open) document.body.classList.add('rwa-print-modal')
+    })
+    window.addEventListener('afterprint', function() {
+      document.body.classList.remove('rwa-print-modal')
+    })
+  }
 
   // ------------------------------------------------------------
   // 3. New Complaint Modal (Admin & Resident)
@@ -1065,39 +1110,27 @@
 
   window.openRecordPaymentModal = async function (preselectedUnitNumber = null, preselectedAmount = null, invoiceId = null) {
     // 1. Fetch real society units from cache or API
-    let units = window.__cachedUnits || []
-    if (!units || units.length === 0) {
-      try {
-        const res = await (window.apiFetch || fetch)('/api/units')
-        if (res && res.ok) {
-          const data = await res.json()
-          units = data.units || []
-          window.__cachedUnits = units
-        }
-      } catch (e) {
-        console.warn('Could not fetch units for payment modal:', e)
+    let units = []
+    try {
+      const res = await (window.apiFetch || fetch)('/api/units')
+      if (res && res.ok) {
+        const data = await res.json()
+        units = data.units || []
+        window.__cachedUnits = units
       }
+    } catch (e) {
+      console.warn('Could not fetch units for payment modal:', e)
     }
+    if (!units.length) units = window.__cachedUnits || []
 
-    // 2. Map real outstanding invoice balances from invoices cache
+    // Outstanding is the sum of each flat's open bills, from the fresh unit list.
     const invoiceMap = {}
-    if (window.__cachedInvoices && window.__cachedInvoices.length > 0) {
-      window.__cachedInvoices.forEach(inv => {
-        const uNum = inv.unit?.unitNumber || inv.unitNumber
-        if (uNum && inv.balanceAmount > 0) {
-          invoiceMap[uNum] = (invoiceMap[uNum] || 0) + inv.balanceAmount
-        }
-      })
-    }
-
-    // Also check unit.invoices if returned from API
     units.forEach(u => {
-      if (u.invoices && u.invoices.length > 0) {
-        const invBal = u.invoices.reduce((sum, inv) => sum + (inv.balanceAmount || 0), 0)
-        if (invBal > 0) {
-          invoiceMap[u.unitNumber] = Math.max(invoiceMap[u.unitNumber] || 0, invBal)
-        }
-      }
+      const invBal = (u.invoices || []).reduce((sum, inv) => {
+        const owing = inv.balanceAmount > 0 ? inv.balanceAmount : 0
+        return sum + owing
+      }, 0)
+      invoiceMap[u.unitNumber] = invBal
     })
 
     // Natural sort units by unitNumber
@@ -2134,7 +2167,7 @@
           <div>
             <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Target Invoices</div>
             <div style="font-size:13px;font-weight:800;color:var(--text-primary);">
-              ${isSelected ? `Selected ${selectedIds.length} Specific Bills` : `All Unpaid Bills for ${currentMonth}`}
+              ${isSelected ? `Selected ${selectedIds.length} Specific Bills` : `All bills for ${currentMonth}, including ones already paid`}
             </div>
           </div>
           <div>
@@ -2157,7 +2190,7 @@
               <input type="radio" name="bulkAction" value="SET_AMOUNT" checked onchange="handleBulkActionChange('SET_AMOUNT')" style="margin-top:2px;" />
               <div style="flex:1;">
                 <div style="font-size:13px;font-weight:700;">Set New Flat Amount Across Bills</div>
-                <div style="font-size:11px;color:var(--text-muted);">Revises the total bill amount (e.g. adjust to ₹3,000) and recalculates outstanding balances.</div>
+                <div style="font-size:11px;color:var(--text-muted);">Sets a new total. If someone already paid more, the extra is collected at the office. If they paid less, they can pay the difference online.</div>
               </div>
             </label>
 
@@ -2219,7 +2252,7 @@
         <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.2);padding:10px 14px;border-radius:var(--r-md);display:flex;align-items:center;gap:10px;">
           <span style="font-size:18px;">🔔</span>
           <div style="font-size:12px;color:var(--text-secondary);line-height:1.4;">
-            <strong>Real-Time Broadcast:</strong> All related residents will receive an instant Socket.io notification and their dues ledger will update immediately.
+            <strong>Already paid:</strong> A higher bill leaves a balance they can pay here. A lower bill does not refund money in the app. You will be asked to notify those residents to collect the extra at the office. The resident bill shows who revised it and why.
           </div>
         </div>
       </div>
@@ -2256,6 +2289,36 @@
 
       showToast(`✅ ${data.message || 'Bulk revision complete!'}`, 'success')
 
+      const overpaid = data.overpaid || []
+      if (overpaid.length) {
+        const lines = overpaid.slice(0, 8).map(function(row) {
+          return 'Flat ' + row.unitNumber + ': paid ₹' + Number(row.paidAmount).toLocaleString('en-IN') + ', revised bill ₹' + Number(row.revisedTotal).toLocaleString('en-IN') + ', extra ₹' + Number(row.excess).toLocaleString('en-IN')
+        }).join('\n')
+        const more = overpaid.length > 8 ? '\n…and ' + (overpaid.length - 8) + ' more flats' : ''
+        const sendNotice = confirm(
+          'These flats already paid more than the revised bill.\nThis app does not refund that money.\n\n' +
+          lines + more +
+          '\n\nSend them a notice to visit the RWA office and collect the extra amount?'
+        )
+        if (sendNotice) {
+          const noticeRes = await (window.apiFetch || fetch)('/api/billing/invoices/bulk-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'NOTIFY_OFFICE_REFUND',
+              billingMonth,
+              invoiceIds: overpaid.map(function(row) { return row.invoiceId }),
+            }),
+          })
+          const noticeData = await noticeRes.json().catch(function() { return {} })
+          if (!noticeRes.ok || !noticeData.success) {
+            showToast(noticeData.error || 'The office notice could not be sent', 'error')
+          } else {
+            showToast(noticeData.message || 'Office collection notice sent', 'success')
+          }
+        }
+      }
+
       if (typeof window.loadLiveAdminDashboard === 'function') {
         window.loadLiveAdminDashboard()
       }
@@ -2288,13 +2351,7 @@
     csvContent += `B-205,Rohit Verma,Maintenance,3200,PAID,2026-10-03\n`
     csvContent += `C-302,Kavita Gupta,Maintenance,4500,PAID,2026-10-01\n`
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.setAttribute('download', filename)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    window.saveReportFile(filename, csvContent)
 
     showToast(`📄 ${reportTitle} downloaded successfully!`, 'success')
   }

@@ -665,13 +665,7 @@ window.exportNoticesCSV = function() {
     ]);
   });
   var csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
-  var encodedUri = encodeURI(csvContent);
-  var link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', 'Society_Notices_Registry_' + new Date().toISOString().split('T')[0] + '.csv');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile('Society_Notices_Registry_' + new Date().toISOString().split('T')[0] + '.csv', csvContent);
   if (typeof window.showToast === 'function') window.showToast('✓ Notices registry exported to CSV', 'success');
 };
 
@@ -1161,13 +1155,7 @@ window.exportBroadcastsCSV = function() {
     ]);
   });
   var csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
-  var encodedUri = encodeURI(csvContent);
-  var link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', 'Broadcast_Delivery_Log_' + new Date().toISOString().split('T')[0] + '.csv');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile('Broadcast_Delivery_Log_' + new Date().toISOString().split('T')[0] + '.csv', csvContent);
   if (typeof window.showToast === 'function') window.showToast('✓ Broadcast log exported to CSV', 'success');
 };
 
@@ -1771,13 +1759,7 @@ window.exportPollsCSV = function() {
     ]);
   });
   var csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
-  var encodedUri = encodeURI(csvContent);
-  var link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', 'Society_Polls_Report_' + new Date().toISOString().split('T')[0] + '.csv');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile('Society_Polls_Report_' + new Date().toISOString().split('T')[0] + '.csv', csvContent);
   if (typeof window.showToast === 'function') window.showToast('✓ Polls report exported to CSV', 'success');
 };
 

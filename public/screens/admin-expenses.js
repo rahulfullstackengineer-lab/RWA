@@ -974,14 +974,8 @@ window.exportExpensesCSV = function() {
   });
 
   var csv  = [headers.join(',')].concat(rows).join('\n');
-  var blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
-  var url  = URL.createObjectURL(blob);
-  var link = document.createElement('a');
   var org  = (localStorage.getItem('rwa_active_org_name') || 'Society').replace(/\s+/g,'_');
-  link.href = url;
-  link.download = org + '_Expenses_' + new Date().toISOString().split('T')[0] + '.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  window.saveReportFile(org + '_Expenses_' + new Date().toISOString().split('T')[0] + '.csv', csv);
   if (typeof window.showToast === 'function') window.showToast('Expenses exported: ' + list.length + ' records', 'success');
 };
 

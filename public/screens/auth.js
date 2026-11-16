@@ -1718,15 +1718,7 @@ window.downloadSampleMemberTemplate = function() {
     csv += 'B-101,"Harpreet Singh","9888019283","h.singh@chd.in","Tenant",1,1350,"SC-003"\n';
   }
 
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `RWA_Member_Directory_Template_${(state.society.name || 'Society').replace(/\s+/g, '_')}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.saveReportFile(`RWA_Member_Directory_Template_${(state.society.name || 'Society').replace(/\s+/g, '_')}.csv`, csv);
   showToast('📥 Clean Excel/CSV template downloaded with your configured units!', 'success');
 };
 

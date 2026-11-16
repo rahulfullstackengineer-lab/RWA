@@ -894,15 +894,9 @@ window.exportReceivablesCSV = function() {
   });
 
   var csvContent = [headers.join(',')].concat(rows).join('\n');
-  var blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  var url  = URL.createObjectURL(blob);
-  var link = document.createElement('a');
   var orgName = (localStorage.getItem('rwa_active_org_name') || 'Society').replace(/\s+/g, '_');
   var today   = new Date().toISOString().split('T')[0];
-  link.href = url;
-  link.download = orgName + '_Commercial_Receivables_' + today + '.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  window.saveReportFile(orgName + '_Commercial_Receivables_' + today + '.csv', csvContent);
 
   if (typeof showToast === 'function') {
     showToast('Commercial Receivables registry exported: ' + list.length + ' records', 'success');

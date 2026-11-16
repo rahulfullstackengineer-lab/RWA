@@ -3,6 +3,131 @@ import { prisma } from '@/lib/prisma'
 import { requireAdmin } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 
+function money(n: number) {
+  return Number(n || 0).toLocaleString('en-IN')
+}
+
+function labelMonth(month: string | null | undefined) {
+  if (!month) return 'this'
+  const [year, mon] = String(month).split('-')
+  const date = new Date(Number(year), Number(mon) - 1, 1)
+  if (Number.isNaN(date.getTime())) return String(month)
+  return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+
+function readRevision(notes: string | null | undefined) {
+  if (!notes) return null
+  try {
+    const parsed = JSON.parse(notes) as { revision?: { excess?: number; previousAmount?: number; balance?: number; updatedByName?: string; outcome?: string; residentMessage?: string } }
+    return parsed.revision || null
+  } catch {
+    return null
+  }
+}
+
+async function applyRevisedTotal(
+  inv: {
+    id: string
+    unitId: string
+    billingMonth: string
+    totalAmount: number
+    paidAmount: number
+    status: string
+    notes: string | null
+    unit?: { unitNumber?: string | null } | null
+  },
+  revisedTotal: number,
+  reason: string,
+  updatedByName: string,
+  options?: { keepItems?: boolean; adjustmentLine?: { description: string; amount: number } }
+) {
+  const paid = inv.paidAmount || 0
+  const previousAmount = inv.totalAmount || 0
+  const balance = Math.max(0, Math.round((revisedTotal - paid) * 100) / 100)
+  const excess = Math.max(0, Math.round((paid - revisedTotal) * 100) / 100)
+  const outcome = excess > 0.5 ? 'REFUND_AT_OFFICE' : balance > 0.5 && paid > 0.5 ? 'PAY_REMAINING' : balance <= 0.5 ? 'SETTLED' : 'REVISED'
+  const status = balance <= 0.5 ? 'PAID' : paid > 0.5 ? 'PARTIALLY_PAID' : inv.status === 'OVERDUE' ? 'OVERDUE' : 'ISSUED'
+  const monthLabel = labelMonth(inv.billingMonth)
+  const residentMessage = outcome === 'REFUND_AT_OFFICE'
+    ? `Your ${monthLabel} bill was revised from ₹${money(previousAmount)} to ₹${money(revisedTotal)} by ${updatedByName}. You already paid ₹${money(paid)}, which is ₹${money(excess)} more than the revised bill. This app does not refund that amount. The society office can return ₹${money(excess)} when you visit.`
+    : outcome === 'PAY_REMAINING'
+      ? `Your ${monthLabel} bill was revised from ₹${money(previousAmount)} to ₹${money(revisedTotal)} by ${updatedByName}. You have paid ₹${money(paid)}. ₹${money(balance)} is still due and can be paid online in the resident portal.`
+      : `Your ${monthLabel} bill was revised from ₹${money(previousAmount)} to ₹${money(revisedTotal)} by ${updatedByName}. Reason: ${reason}.`
+  const notes = JSON.stringify({
+    revision: {
+      previousAmount,
+      newAmount: revisedTotal,
+      paidAmount: paid,
+      excess,
+      balance,
+      reason,
+      updatedByName,
+      updatedAt: new Date().toISOString(),
+      outcome,
+      residentMessage,
+    },
+  })
+
+  if (!options?.keepItems) {
+    await prisma.invoiceItem.deleteMany({ where: { invoiceId: inv.id } })
+  }
+  await prisma.invoice.update({
+    where: { id: inv.id },
+    data: {
+      totalAmount: revisedTotal,
+      balanceAmount: balance,
+      status,
+      notes,
+      ...(options?.keepItems
+        ? {}
+        : {
+            items: {
+              create: [{
+                description: reason || 'Revised monthly maintenance',
+                amount: revisedTotal,
+                gstPercent: 0,
+                gstAmount: 0,
+                totalAmount: revisedTotal,
+              }],
+            },
+          }),
+    },
+  })
+  if (options?.adjustmentLine) {
+    await prisma.invoiceItem.create({
+      data: {
+        invoiceId: inv.id,
+        description: options.adjustmentLine.description,
+        amount: options.adjustmentLine.amount,
+        gstPercent: 0,
+        gstAmount: 0,
+        totalAmount: options.adjustmentLine.amount,
+      },
+    })
+  }
+  inv.notes = notes
+  inv.totalAmount = revisedTotal
+  return {
+    excess,
+    balance,
+    summary: {
+      invoiceId: inv.id,
+      unitNumber: inv.unit?.unitNumber || 'Flat',
+      paidAmount: paid,
+      previousAmount,
+      revisedTotal,
+      excess,
+    },
+    notice: {
+      invoiceId: inv.id,
+      unitId: inv.unitId,
+      billingMonth: inv.billingMonth,
+      balance,
+      message: residentMessage,
+    },
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { user, error } = await requireAdmin(request)
@@ -25,10 +150,62 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No society organization selected' }, { status: 400 })
     }
 
-    // Build filter for target invoices (bulk update applies to non-paid invoices)
-    const filter: any = {
+    if (action === 'NOTIFY_OFFICE_REFUND') {
+      const ids = Array.isArray(invoiceIds) ? invoiceIds.filter(Boolean) : []
+      if (!ids.length) {
+        return NextResponse.json({ error: 'Choose the bills that were paid above the revised amount' }, { status: 400 })
+      }
+      const targets = await prisma.invoice.findMany({
+        where: { id: { in: ids }, organizationId: orgId },
+        include: { unit: true },
+      })
+      let notified = 0
+      for (const inv of targets) {
+        const rev = readRevision(inv.notes)
+        const excess = rev?.excess || Math.max(0, (inv.paidAmount || 0) - (inv.totalAmount || 0))
+        if (excess <= 0.5) continue
+        const people = await prisma.user.findMany({
+          where: { organizationId: orgId, unitId: inv.unitId },
+          select: { id: true },
+        })
+        const message = `Your ${labelMonth(inv.billingMonth)} bill was revised from ₹${money(rev?.previousAmount ?? inv.totalAmount)} to ₹${money(inv.totalAmount)} by ${rev?.updatedByName || user.name}. You paid ₹${money(inv.paidAmount)}, which is ₹${money(excess)} more than the revised bill. This app does not refund money. Please visit the RWA office to collect ₹${money(excess)}.`
+        if (people.length) {
+          await prisma.notification.createMany({
+            data: people.map((person) => ({
+              organizationId: orgId,
+              userId: person.id,
+              title: `Collect ₹${money(excess)} at the RWA office`,
+              message,
+              type: 'BILL',
+              referenceType: 'INVOICE',
+              referenceId: inv.id,
+            })),
+          })
+          const io = (global as { __io?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } } }).__io
+          for (const person of people) {
+            io?.to(`user:${person.id}`).emit('bill-updated', {
+              billingMonth: inv.billingMonth,
+              message,
+              outcome: 'REFUND_AT_OFFICE',
+            })
+          }
+          notified += people.length
+        }
+      }
+      return NextResponse.json({
+        success: true,
+        message: notified
+          ? `Office collection notice sent to ${notified} resident${notified === 1 ? '' : 's'}`
+          : 'No resident account was linked to those flats',
+        notified,
+      })
+    }
+
+    // Amount changes include bills that are already paid. Due-date changes stay on open bills.
+    const changesAmount = action === 'SET_AMOUNT' || action === 'APPLY_ADJUSTMENT'
+    const filter: Record<string, unknown> = {
       organizationId: orgId,
-      status: { not: 'PAID' },
+      ...(changesAmount ? {} : { status: { not: 'PAID' } }),
     }
 
     if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
@@ -47,13 +224,15 @@ export async function POST(request: Request) {
 
     if (invoices.length === 0) {
       return NextResponse.json(
-        { error: 'No unpaid invoices found matching the selected criteria' },
+        { error: 'No invoices found for that selection' },
         { status: 404 }
       )
     }
 
     let updatedCount = 0
     let totalRevisedDemand = 0
+    const overpaid: Array<{ invoiceId: string; unitNumber: string; paidAmount: number; previousAmount: number; revisedTotal: number; excess: number }> = []
+    const payRemaining: Array<{ invoiceId: string; unitId: string; billingMonth: string; balance: number; message: string }> = []
 
     if (action === 'DELETE_UNPAID') {
       const idsToDelete = invoices.map((inv) => inv.id)
@@ -88,62 +267,23 @@ export async function POST(request: Request) {
     for (const inv of invoices) {
       if (action === 'SET_AMOUNT' && newAmount !== undefined) {
         const revisedTotal = Number(newAmount)
-        const balance = Math.max(0, revisedTotal - inv.paidAmount)
-        const newStatus = balance === 0 ? 'PAID' : (inv.paidAmount > 0 ? 'PARTIALLY_PAID' : 'ISSUED')
-
-        // Replace line items with revised head
-        await prisma.invoiceItem.deleteMany({
-          where: { invoiceId: inv.id },
-        })
-
-        await prisma.invoice.update({
-          where: { id: inv.id },
-          data: {
-            totalAmount: revisedTotal,
-            balanceAmount: balance,
-            status: newStatus,
-            items: {
-              create: [
-                {
-                  description: adjustmentReason || 'Revised Monthly Maintenance Charge',
-                  amount: revisedTotal,
-                  gstPercent: 0,
-                  gstAmount: 0,
-                  totalAmount: revisedTotal,
-                },
-              ],
-            },
-          },
-        })
-
+        const outcome = await applyRevisedTotal(inv, revisedTotal, adjustmentReason || 'Revised monthly maintenance', user.name)
+        if (outcome.excess > 0.5) overpaid.push(outcome.summary)
+        if (outcome.balance > 0.5 && (inv.paidAmount || 0) > 0.5) payRemaining.push(outcome.notice)
         totalRevisedDemand += revisedTotal
         updatedCount++
       } else if (action === 'APPLY_ADJUSTMENT' && adjustmentAmount !== undefined) {
         const adj = Number(adjustmentAmount)
         const revisedTotal = Math.max(0, inv.totalAmount + adj)
-        const balance = Math.max(0, revisedTotal - inv.paidAmount)
-        const newStatus = balance === 0 ? 'PAID' : (inv.paidAmount > 0 ? 'PARTIALLY_PAID' : 'ISSUED')
-
-        await prisma.invoiceItem.create({
-          data: {
-            invoiceId: inv.id,
-            description: `Adjustment: ${adjustmentReason} (${adj >= 0 ? '+' : '-'}₹${Math.abs(adj)})`,
+        const outcome = await applyRevisedTotal(inv, revisedTotal, adjustmentReason || 'Bill adjustment', user.name, {
+          keepItems: true,
+          adjustmentLine: {
+            description: `Adjustment: ${adjustmentReason} (${adj >= 0 ? '+' : '-'}₹${Math.abs(adj).toLocaleString('en-IN')})`,
             amount: adj,
-            gstPercent: 0,
-            gstAmount: 0,
-            totalAmount: adj,
           },
         })
-
-        await prisma.invoice.update({
-          where: { id: inv.id },
-          data: {
-            totalAmount: revisedTotal,
-            balanceAmount: balance,
-            status: newStatus,
-          },
-        })
-
+        if (outcome.excess > 0.5) overpaid.push(outcome.summary)
+        if (outcome.balance > 0.5 && (inv.paidAmount || 0) > 0.5) payRemaining.push(outcome.notice)
         totalRevisedDemand += revisedTotal
         updatedCount++
       } else if (action === 'UPDATE_DUE_DATE' && newDueDate) {
@@ -165,22 +305,26 @@ export async function POST(request: Request) {
       },
     })
 
-    const notifData = affectedUsers.map((u) => {
+    const notifData = affectedUsers.flatMap((u) => {
       const inv = invoices.find((i) => i.unitId === u.unitId)
-      return {
+      const rev = readRevision(inv?.notes)
+      if (rev?.outcome === 'REFUND_AT_OFFICE') return []
+      const message = rev?.residentMessage
+        || (action === 'UPDATE_DUE_DATE'
+          ? `The payment due date for your ${labelMonth(billingMonth)} bill was updated by ${user.name}.`
+          : `Your maintenance bill was revised by ${user.name}.`)
+      const title = rev?.outcome === 'PAY_REMAINING'
+        ? `₹${money(rev.balance || 0)} still due on your revised bill`
+        : `Bill revised for ${labelMonth(inv?.billingMonth || billingMonth)}`
+      return [{
         organizationId: orgId,
         userId: u.id,
-        title: `🔄 Revised Maintenance Bill: ${billingMonth || 'Active Cycle'}`,
-        message:
-          action === 'SET_AMOUNT'
-            ? `Your maintenance bill for ${billingMonth} was revised to ₹${Number(newAmount).toLocaleString('en-IN')}.`
-            : action === 'APPLY_ADJUSTMENT'
-            ? `An adjustment of ${Number(adjustmentAmount) >= 0 ? '+' : ''}₹${Number(adjustmentAmount).toLocaleString('en-IN')} (${adjustmentReason}) was applied to your bill.`
-            : `The payment due date for your ${billingMonth} bill has been updated.`,
+        title,
+        message,
         type: 'BILL',
         referenceType: 'INVOICE',
         referenceId: inv ? inv.id : null,
-      }
+      }]
     })
 
     if (notifData.length > 0) {
@@ -206,12 +350,16 @@ export async function POST(request: Request) {
       })
 
       for (const u of affectedUsers) {
+        const inv = invoices.find((i) => i.unitId === u.unitId)
+        const rev = readRevision(inv?.notes)
+        if (rev?.outcome === 'REFUND_AT_OFFICE') continue
         io.to(`user:${u.id}`).emit('bill-updated', {
           organizationId: orgId,
           billingMonth,
           action,
           newAmount,
-          message: `Your maintenance bill has been updated by the RWA committee.`,
+          message: rev?.residentMessage || `Your maintenance bill was revised by ${user.name}.`,
+          outcome: rev?.outcome || 'REVISED',
         })
       }
     }
@@ -244,6 +392,8 @@ export async function POST(request: Request) {
       totalRevisedDemand,
       billingMonth,
       action,
+      overpaid,
+      payRemainingCount: payRemaining.length,
     })
   } catch (err: unknown) {
     console.error('Invoices bulk update error:', err)

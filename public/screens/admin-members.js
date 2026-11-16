@@ -149,13 +149,51 @@ Screens['admin-members'] = function() {
   });
 };
 
+function memberPhoneKey(phone) {
+  return String(phone || '').replace(/\D/g, '').slice(-10);
+}
+
+function applyMemberOccupancy(member) {
+  if (!member) return member;
+  const phone = memberPhoneKey(member.phone);
+  const unit = member.unit || null;
+  const tenantPhone = memberPhoneKey(unit && unit.tenantPhone);
+  const ownerPhone = memberPhoneKey(unit && unit.ownerPhone);
+  const name = String(member.name || '').trim().toLowerCase();
+  if (phone && tenantPhone && phone === tenantPhone) member.occupancyType = 'TENANT';
+  else if (phone && ownerPhone && phone === ownerPhone) member.occupancyType = 'OWNER';
+  else if (unit && unit.tenantName && unit.tenantName.trim().toLowerCase() === name) member.occupancyType = 'TENANT';
+  else if (unit && unit.ownerName && unit.ownerName.trim().toLowerCase() === name) member.occupancyType = 'OWNER';
+  else if (member.occupancyType !== 'TENANT' && member.occupancyType !== 'OWNER' && member.role === 'RESIDENT') {
+    member.occupancyType = 'OWNER';
+  }
+  return member;
+}
+
+function memberStayLabel(member) {
+  if (!member) return 'Resident';
+  if (member.role === 'RWA_ADMIN') return 'Committee';
+  if (member.role === 'TREASURER') return 'Treasurer';
+  if (member.role === 'SECRETARY') return 'Secretary';
+  if (member.role === 'PRESIDENT') return 'President';
+  if (member.occupancyType === 'TENANT') return 'Tenant';
+  if (member.occupancyType === 'OWNER') return 'Owner';
+  return 'Resident';
+}
+
 Screens['admin-resident-detail'] = function() {
   const savedId = window.readScreenRecord ? window.readScreenRecord('member') : '';
   let m = window.__selectedMemberDetail || null;
-  if (savedId && m && m.id !== savedId) m = null;
+  if (m && savedId && m.id !== savedId) {
+    const fromCache = (window.__cachedMembers || []).find(function(item) { return item.id === savedId; });
+    if (fromCache) m = fromCache;
+  }
   if (!m && savedId && window.__cachedMembers) {
     m = window.__cachedMembers.find(function(item) { return item.id === savedId; }) || null;
-    if (m) window.__selectedMemberDetail = m;
+  }
+  if (m) {
+    applyMemberOccupancy(m);
+    window.__selectedMemberDetail = m;
   }
   if (!m) {
     setTimeout(function() { window.restoreOpenMember(savedId); }, 30);
@@ -181,11 +219,7 @@ Screens['admin-resident-detail'] = function() {
   const tenantName = m.unit?.tenantName || null;
   const tenantPhone = m.unit?.tenantPhone || null;
 
-  const roleBadge = m.role === 'RWA_ADMIN' ? 'Committee Admin'
-                  : m.role === 'TREASURER' ? 'Treasurer'
-                  : m.role === 'SECRETARY' ? 'Secretary'
-                  : m.role === 'PRESIDENT' ? 'President'
-                  : 'Resident';
+  const roleBadge = memberStayLabel(m);
   const roleColor = m.role === 'RWA_ADMIN' ? 'blue'
                   : m.role === 'TREASURER' ? 'purple'
                   : m.role === 'SECRETARY' ? 'purple'
@@ -404,7 +438,7 @@ window.loadLiveMembersScreen = async function() {
     }
 
     const data = await res.json();
-    const members = (data.members || []).filter(m => m.role !== 'STAFF');
+    const members = (data.members || []).filter(m => m.role !== 'STAFF').map(applyMemberOccupancy);
     window.__cachedMembers = members;
 
     // 1. Calculate Aggregated Metrics
@@ -598,8 +632,7 @@ function renderMembersData(members) {
     tbody.innerHTML = members.map(m => {
       const initials = (m.name || 'M').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
       const unitStr = m.unit ? m.unit.unitNumber : 'Common';
-      const roleBadge = m.role === 'RWA_ADMIN' ? 'Committee' : m.role === 'TREASURER' ? 'Treasurer' : 'Owner';
-      const roleColor = m.role === 'RWA_ADMIN' ? 'blue' : m.role === 'TREASURER' ? 'purple' : 'green';
+      const roleColor = m.role === 'RWA_ADMIN' ? 'blue' : m.role === 'TREASURER' ? 'purple' : (m.occupancyType === 'TENANT' ? 'purple' : 'green');
       const joinedStr = m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : 'Recent';
 
       const statusPill = (m.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
@@ -610,10 +643,12 @@ function renderMembersData(members) {
         ? '<span class="pill-badge pill-priority-urgent">committee</span>'
         : (m.role === 'TREASURER'
           ? '<span class="pill-badge pill-status-in-progress">treasurer</span>'
-          : '<span class="pill-badge pill-status-new">owner</span>');
+          : (m.occupancyType === 'TENANT'
+            ? '<span class="pill-badge pill-status-in-progress">tenant</span>'
+            : '<span class="pill-badge pill-status-new">owner</span>'));
 
       return `
-        <tr onclick="viewMemberDetail('${m.id}')" style="cursor:pointer;">
+        <tr onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" style="cursor:pointer;">
           <td>
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="avatar ${roleColor}" style="width:32px;height:32px;font-size:12px;font-weight:700;">
@@ -632,7 +667,7 @@ function renderMembersData(members) {
           <td>${statusPill}</td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:4px;">
-              <button class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail('${m.id}')" title="Open">View</button>
+              <button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" title="Open">View</button>
               ${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})" title="Remove from society">Remove</button>` : ''}
             </div>
           </td>
@@ -651,11 +686,11 @@ function renderMembersData(members) {
     cardsContainer.innerHTML = members.map(m => {
       const initials = (m.name || 'M').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
       const unitStr = m.unit ? m.unit.unitNumber : 'Common';
-      const roleBadge = m.role === 'RWA_ADMIN' ? 'Committee' : 'Resident';
-      const roleColor = m.role === 'RWA_ADMIN' ? 'blue' : 'green';
+      const roleBadge = memberStayLabel(m);
+      const roleColor = m.role === 'RWA_ADMIN' ? 'blue' : (m.occupancyType === 'TENANT' ? 'purple' : 'green');
 
       return `
-        <div class="card card-sm" style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);cursor:pointer;" onclick="viewMemberDetail('${m.id}')">
+        <div class="card card-sm" style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);cursor:pointer;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="avatar ${roleColor}" style="width:36px;height:36px;font-size:13px;font-weight:700;">${initials}</div>
@@ -673,7 +708,7 @@ function renderMembersData(members) {
           </div>
 
           <div style="display:flex;gap:8px;margin-top:4px;border-top:1px solid var(--border-light);padding-top:8px;" onclick="event.stopPropagation()">
-            <button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail('${m.id}')">
+            <button type="button" class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">
               Profile
             </button>
             ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove</button>` : ''}
@@ -721,9 +756,12 @@ window.restoreOpenMember = async function(memberId) {
   try {
     const res = await (window.apiFetch || fetch)('/api/members').catch(function() { return null; });
     const data = res && res.ok ? await res.json() : {};
-    window.__cachedMembers = data.members || [];
-    const id = memberId || (window.readScreenRecord ? window.readScreenRecord('member') : '');
-    const m = window.__cachedMembers.find(function(item) { return item.id === id; });
+    window.__cachedMembers = (data.members || []).map(applyMemberOccupancy);
+    const id = memberId || (window.readScreenRecord ? window.readScreenRecord('member') : '') || (window.__selectedMemberDetail && window.__selectedMemberDetail.id) || '';
+    let m = window.__cachedMembers.find(function(item) { return item.id === id; });
+    if (!m && window.__selectedMemberDetail && (!id || window.__selectedMemberDetail.id === id)) {
+      m = applyMemberOccupancy(window.__selectedMemberDetail);
+    }
     if (!m) {
       showToast('Open the resident again from Members.', 'warning');
       Router.go('admin-members');
@@ -737,13 +775,23 @@ window.restoreOpenMember = async function(memberId) {
   }
 };
 
-window.viewMemberDetail = function(memberId) {
+window.viewMemberDetail = function(memberId, event) {
+  if (event && event.stopPropagation) event.stopPropagation();
   const m = (window.__cachedMembers || []).find(mem => mem.id === memberId);
-  if (m) {
-    window.__selectedMemberDetail = m;
-    if (window.rememberScreenRecord) window.rememberScreenRecord('member', m.id);
-    Router.go('admin-resident-detail');
+  if (!m) {
+    if (typeof window.restoreOpenMember === 'function') window.restoreOpenMember(memberId);
+    return;
   }
+  applyMemberOccupancy(m);
+  window.__selectedMemberDetail = m;
+  try {
+    sessionStorage.setItem('rwa_open_member', m.id);
+    const url = new URL(window.location.href);
+    url.searchParams.set('member', m.id);
+    url.hash = 'admin-resident-detail';
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (e) {}
+  Router.go('admin-resident-detail');
 };
 
 window.exportMembersRegistry = function() {
@@ -757,7 +805,7 @@ window.exportMembersRegistry = function() {
     ...window.__cachedMembers.map(m => [
       m.name,
       m.unit ? m.unit.unitNumber : 'Common',
-      m.role,
+      memberStayLabel(m),
       m.phone,
       m.email || '',
       m.status || 'ACTIVE',
@@ -766,13 +814,7 @@ window.exportMembersRegistry = function() {
   ];
 
   const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(cell => `"${(cell + '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Society_Members_Directory_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile(`Society_Members_Directory_${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   showToast('Members directory exported successfully!', 'success');
 };
 

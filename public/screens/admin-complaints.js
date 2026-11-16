@@ -1456,13 +1456,7 @@ window.exportComplaintsCSV = function () {
     ]);
   });
   var csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
-  var encodedUri = encodeURI(csvContent);
-  var link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', 'Society_Helpdesk_Register_' + new Date().toISOString().split('T')[0] + '.csv');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile('Society_Helpdesk_Register_' + new Date().toISOString().split('T')[0] + '.csv', csvContent);
   if (typeof window.showToast === 'function') window.showToast('✓ Helpdesk register exported to CSV', 'success');
 };
 

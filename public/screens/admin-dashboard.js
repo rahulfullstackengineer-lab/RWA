@@ -59,7 +59,7 @@ window.loadDashHeroVideo = async function() {
   } catch (err) {}
 };
 
-window.__dashChartType = 'donut';
+window.__dashChartType = 'line';
 window.__dashSelectedPeriod = 'year';
 window.__dashTrendData = null;
 window.__dashActiveMonthIdx = 3; // Default active tooltip index (Apr)
@@ -222,7 +222,7 @@ Screens['admin-dashboard'] = function() {
   function tryLoadDash(attempts) {
     attempts = attempts || 0;
     if (typeof window.loadLiveAdminDashboard === 'function' && typeof window.renderDashChart === 'function') {
-      window.renderDashChart(null, 'donut');
+      window.renderDashChart(null, 'line');
       window.loadLiveAdminDashboard();
       if (typeof window.loadDashHeroVideo === 'function') window.loadDashHeroVideo();
     } else if (attempts < 20) {
@@ -345,8 +345,8 @@ Screens['admin-dashboard'] = function() {
               <div class="chart-controls-box">
                 <div class="chart-type-toggle">
                   <button class="chart-type-btn" id="btnChartBar" onclick="window.switchDashChartType('bar')">Bar</button>
-                  <button class="chart-type-btn" id="btnChartLine" onclick="window.switchDashChartType('line')">Line</button>
-                  <button class="chart-type-btn active" id="btnChartDonut" onclick="window.switchDashChartType('donut')">Donut</button>
+                  <button class="chart-type-btn active" id="btnChartLine" onclick="window.switchDashChartType('line')">Line</button>
+                  <button class="chart-type-btn" id="btnChartDonut" onclick="window.switchDashChartType('donut')">Donut</button>
                 </div>
                 <select class="dash-select-pill" id="dashChartPeriod" onchange="window.switchDashPeriod(this.value)">
                   <option value="year" selected>This year</option>
@@ -356,7 +356,7 @@ Screens['admin-dashboard'] = function() {
               </div>
             </div>
 
-            <div class="chart-legend-row" id="dashChartLegendRow" style="display:none;">
+            <div class="chart-legend-row" id="dashChartLegendRow" style="display:flex;">
               <div class="legend-item">
                 <span class="legend-dot grey"></span>
                 <span>Demand / Billed</span>
@@ -568,7 +568,7 @@ window.switchDashChartType = function(type) {
 
 window.switchDashPeriod = function(period) {
   window.__dashSelectedPeriod = period;
-  window.renderDashChart(null, window.__dashChartType || 'donut');
+  window.renderDashChart(null, window.__dashChartType || 'line');
 };
 
 window.showDashTooltip = function(event, billed, collected, label, elem) {
@@ -614,7 +614,7 @@ window.renderDashChart = function(data, type) {
   const wrap = document.getElementById('dashChartCanvasWrap');
   if (!wrap) return;
 
-  type = type || window.__dashChartType || 'donut';
+  type = type || window.__dashChartType || 'line';
   const period = window.__dashSelectedPeriod || (document.getElementById('dashChartPeriod')?.value) || 'year';
 
   if (type === 'donut') {
@@ -1598,7 +1598,7 @@ window.loadLiveAdminDashboard = async function() {
       }
 
       // Render Charts & Society Location Map
-      window.renderDashChart(null, window.__dashChartType || 'donut');
+      window.renderDashChart(null, window.__dashChartType || 'line');
       window.renderSocietyMap(organization, organization?.location);
 
       // Update Priority Counts
@@ -1699,7 +1699,7 @@ window.loadLiveAdminDashboard = async function() {
 
     } else {
       // Fallback initial render
-      window.renderDashChart(null, window.__dashChartType || 'donut');
+      window.renderDashChart(null, window.__dashChartType || 'line');
       window.renderSocietyMap(null, null);
     }
 
@@ -1736,7 +1736,7 @@ window.loadLiveAdminDashboard = async function() {
     }
   } catch (err) {
     console.error('Error hydrating live admin dashboard:', err);
-    window.renderDashChart(null, window.__dashChartType || 'donut');
+    window.renderDashChart(null, window.__dashChartType || 'line');
     window.renderSocietyMap(null, null);
   }
 };

@@ -544,13 +544,7 @@ window.downloadReport = function(reportId, format) {
       '5,REF-005,Utilities,Common Area Power,38000,0,PAID\n';
   }
 
-  var blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-  var url  = URL.createObjectURL(blob);
-  var link = document.createElement('a');
-  link.href = url;
-  link.download = orgName + '_' + reportId + '_' + today + '.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  window.saveReportFile(orgName + '_' + reportId + '_' + today + '.csv', csvContent);
 
   if (typeof showToast === 'function') {
     showToast('Downloaded ' + reportId.replace(/_/g, ' ') + ' (CSV/Excel)', 'success');

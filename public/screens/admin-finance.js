@@ -1692,7 +1692,7 @@ window.openPaymentReceiptModal = function(paymentId, directPaymentObj) {
       </div>
 
       <!-- Action Buttons -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;gap:8px;">
+      <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;gap:8px;">
         <button type="button" class="btn btn-secondary" onclick="window.print()">🖨️ Print Receipt</button>
         <button type="button" class="btn btn-primary" onclick="document.getElementById('rwaGlobalModal').style.display='none'">Done ✓</button>
       </div>
@@ -1724,15 +1724,7 @@ window.exportPaymentsRegister = function() {
   ]);
 
   const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Payments_Register_${new Date().toISOString().split('T')[0]}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.saveReportFile(`Payments_Register_${new Date().toISOString().split('T')[0]}.csv`, csv);
   showToast('📊 Payments Register exported to CSV!', 'success');
 };
 
@@ -2523,15 +2515,7 @@ window.exportDuesDefaulters = function() {
   ]);
 
   const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Society_Defaulters_Register_${new Date().toISOString().split('T')[0]}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.saveReportFile(`Society_Defaulters_Register_${new Date().toISOString().split('T')[0]}.csv`, csvContent);
 
   showToast('📊 Defaulters Registry exported to CSV!', 'success');
 };
@@ -3069,12 +3053,6 @@ window.exportInvoicesRegister = function() {
   ];
 
   const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(cell => `"${(cell + '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Invoices_Register_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile(`Invoices_Register_${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   showToast('Invoices register exported successfully!', 'success');
 };

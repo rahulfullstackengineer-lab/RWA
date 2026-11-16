@@ -56,9 +56,11 @@ export async function PATCH(request: Request) {
       if (user.organizationId && unit.organizationId !== user.organizationId) {
         return NextResponse.json({ error: 'That flat is not in your society' }, { status: 403 })
       }
+      const adminRoles = ['RWA_ADMIN', 'ADMIN', 'SUPER_ADMIN', 'SUPERADMIN', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN', 'PRESIDENT', 'SECRETARY', 'TREASURER']
+      const isSocietyAdmin = adminRoles.includes(user.role)
       const phone = normalizePhone(user.phone)
       const listed = phone && (normalizePhone(unit.ownerPhone) === phone || normalizePhone(unit.tenantPhone) === phone)
-      if (!listed) {
+      if (!isSocietyAdmin && !listed) {
         return NextResponse.json(
           { error: 'You can only link a flat that already lists your mobile number. Ask the society admin to add you.' },
           { status: 403 }

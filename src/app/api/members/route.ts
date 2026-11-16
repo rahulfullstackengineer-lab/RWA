@@ -150,9 +150,21 @@ export async function GET(request: Request) {
 
     const allMembers = [...members, ...newlyCreatedMembers]
 
+    const last10 = (phone: string | null | undefined) => String(phone || '').replace(/\D/g, '').slice(-10)
     const safeMembers = allMembers.map((member) => {
-      const safe = { ...member }
+      const safe = { ...member } as typeof member & { occupancyType?: string | null }
       delete (safe as { passwordHash?: string }).passwordHash
+      const phone = last10(safe.phone)
+      const unit = safe.unit
+      const tenantPhone = last10(unit?.tenantPhone)
+      const ownerPhone = last10(unit?.ownerPhone)
+      const name = String(safe.name || '').trim().toLowerCase()
+      if (phone && tenantPhone && phone === tenantPhone) safe.occupancyType = 'TENANT'
+      else if (phone && ownerPhone && phone === ownerPhone) safe.occupancyType = 'OWNER'
+      else if (unit?.tenantName && unit.tenantName.trim().toLowerCase() === name) safe.occupancyType = 'TENANT'
+      else if (unit?.ownerName && unit.ownerName.trim().toLowerCase() === name) safe.occupancyType = 'OWNER'
+      else if (safe.role === 'RESIDENT') safe.occupancyType = unit?.occupancyStatus === 'TENANTED' && !ownerPhone ? 'TENANT' : 'OWNER'
+      else safe.occupancyType = null
       return safe
     })
     return NextResponse.json({ members: safeMembers })

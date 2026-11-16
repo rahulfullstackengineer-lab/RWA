@@ -27,7 +27,7 @@ Screens['resident-dashboard'] = function() {
     actions: `
       <div id="residentHeaderFlatSelector" style="display:inline-flex;align-items:center;gap:6px;"></div>
       <button class="btn btn-primary btn-sm" onclick="Router.go('resident-bills')">📄 My Invoices</button>
-      <button class="btn btn-secondary btn-sm" onclick="window.openGenerateEntryPassModal()">🎫 Visitor Pass</button>
+      <button class="btn btn-primary btn-sm" onclick="window.openGenerateEntryPassModal()">🎫 Create visitor pass</button>
       <button class="btn btn-secondary btn-sm" onclick="openNewComplaintModal()">+ Raise Ticket</button>
       <button class="btn btn-secondary btn-sm" onclick="window.loadLiveResidentDashboard()">🔄 Refresh</button>
     `,
@@ -45,7 +45,7 @@ Screens['resident-dashboard'] = function() {
             <div class="res-bento-dark-meta">
               <span id="residentHeroUnitBadge" class="bento-unit-pill">Unit ${unitNum} · ${blockName} · Verified Resident</span>
               <span id="residentHeroPhone" style="font-size:12px;color:#94A3B8;font-weight:600;">${userPhone ? `📱 +91 ${userPhone}` : ''}</span>
-              <div id="residentHeroFlatPicker" style="display:inline-flex;align-items:center;gap:6px;"></div>
+              <div id="residentHeroFlatPicker" class="flat-picker"></div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
@@ -141,13 +141,21 @@ Screens['resident-dashboard'] = function() {
           <button class="res-action-pill-btn" onclick="window.openResidentStaffDutyModal()">
             🛡️ Staff On Duty
           </button>
-          <button class="res-action-pill-btn" onclick="window.openGenerateEntryPassModal()" style="border-color:rgba(59,130,246,0.35);color:#2563EB;">
-            🎫 Visitor Pass
+          <button class="res-action-pill-btn primary" onclick="window.openGenerateEntryPassModal()">
+            🎫 Create visitor pass
           </button>
           <button class="res-action-pill-btn danger" onclick="window.openEmergencyIntercomModal()">
             🚨 Emergency SOS
           </button>
         </div>
+      </div>
+
+      <div class="visitor-pass-callout">
+        <div>
+          <div class="visitor-pass-callout-title">Someone visiting your flat?</div>
+          <div class="visitor-pass-callout-text">Create a visitor pass before they arrive. Share the gate code and 4-digit PIN with your guest, and the guard can let them in.</div>
+        </div>
+        <button class="btn btn-primary" onclick="window.openGenerateEntryPassModal()">Create visitor pass</button>
       </div>
 
       <!-- Active Society Poll Banner -->
@@ -476,7 +484,7 @@ Screens['resident-bills'] = function() {
           <div class="page-title">Maintenance Invoices</div>
           <div class="page-subtitle" id="residentBillsSubtitle">Monthly society maintenance, sinking fund, water and backup electricity breakdown</div>
         </div>
-        <div id="residentBillsFlatPicker" style="display:flex;align-items:center;gap:8px;"></div>
+        <div id="residentBillsFlatPicker" class="flat-picker"></div>
       </div>
 
       <!-- Current / Active Bill Card -->
@@ -526,6 +534,30 @@ window.switchResidentBillsFlat = function(unitId) {
   if (!isAdmin) return;
   window.__residentPreviewUnitId = unitId;
   window.loadLiveResidentBills();
+};
+
+window.billRevisionHtml = function(inv) {
+  if (!inv || !inv.notes) return '';
+  var rev = null;
+  try { rev = JSON.parse(inv.notes).revision; } catch (e) { rev = null; }
+  if (!rev || !rev.residentMessage) return '';
+  var esc = function(value) {
+    return String(value || '').replace(/[&<>"']/g, function(ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  };
+  var when = '';
+  if (rev.updatedAt) {
+    var dt = new Date(rev.updatedAt);
+    if (!isNaN(dt.getTime())) {
+      when = dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+  }
+  return '<div style="margin-bottom:14px;padding:12px 14px;border:1px solid #E4E4E7;background:#FAFAFA;border-radius:2px;font-size:13px;line-height:1.5;color:#18181B;">'
+    + '<div style="font-weight:800;margin-bottom:4px;">Why this bill changed</div>'
+    + '<div>' + esc(rev.residentMessage) + '</div>'
+    + (when ? '<div style="margin-top:6px;font-size:11px;color:#71717A;">Updated ' + esc(when) + (rev.updatedByName ? ' by ' + esc(rev.updatedByName) : '') + '</div>' : '')
+    + '</div>';
 };
 
 window.loadLiveResidentBills = async function() {
@@ -629,6 +661,9 @@ window.loadLiveResidentBills = async function() {
     }
 
     const latest = invoices[0];
+    const latestRevision = (function() {
+      try { return latest.notes ? JSON.parse(latest.notes).revision : null; } catch (e) { return null; }
+    })();
     const isPaid = latest.status === 'PAID';
     const isOverdue = latest.status === 'OVERDUE';
     const badgeClass = isPaid ? 'badge-green' : (isOverdue ? 'badge-red' : 'badge-blue');
@@ -665,10 +700,14 @@ window.loadLiveResidentBills = async function() {
                 ₹${Number(displayAmount || 0).toLocaleString('en-IN')}
               </div>
               <div style="font-size:11.5px;font-weight:600;color:${isPaid ? 'var(--green)' : (isOverdue ? 'var(--red)' : 'var(--text-muted)')};margin-top:2px;">
-                ${isPaid ? '✓ Fully Paid via Online Gateway · Balance ₹0' : (isOverdue ? `⚠️ Overdue since ${dueDateStr}` : `Due by ${dueDateStr}`)}
+                ${latestRevision && latestRevision.outcome === 'REFUND_AT_OFFICE'
+                  ? 'Extra amount is collected at the RWA office'
+                  : (isPaid ? '✓ Fully paid · Balance ₹0' : (isOverdue ? `⚠️ Overdue since ${dueDateStr}` : `Due by ${dueDateStr}`))}
               </div>
             </div>
           </div>
+
+          ${window.billRevisionHtml(latest)}
 
           <!-- Breakdown table -->
           <div style="background:var(--bg-surface);border-radius:var(--r-md);border:1px solid var(--border);padding:16px;margin-bottom:16px;">
@@ -717,7 +756,7 @@ window.loadLiveResidentBills = async function() {
         return `
           <tr>
             <td style="font-family:monospace;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;" onclick="openResidentInvoiceModal('${b.id}')">${b.invoiceNumber}</td>
-            <td style="font-weight:600;">${b.billingMonth}</td>
+            <td style="font-weight:600;">${b.billingMonth}${window.billRevisionHtml(b) ? '<div style="font-size:11px;font-weight:600;color:#71717A;margin-top:2px;">Revised bill</div>' : ''}</td>
             <td>${issueDate}</td>
             <td>${dueD}</td>
             <td style="font-weight:700;">₹${Number(b.totalAmount).toLocaleString('en-IN')}</td>
@@ -2471,7 +2510,8 @@ window.connectAdminToUnit = async function(unitId) {
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to link flat to admin profile');
+      if (typeof showToast === 'function') showToast(errData.error || 'Failed to link flat to admin profile', 'error');
+      return;
     }
 
     const data = await res.json();
@@ -2573,6 +2613,8 @@ window.openResidentInvoiceModal = function(invoiceId) {
         </div>
       </div>
 
+      ${window.billRevisionHtml ? window.billRevisionHtml(inv) : ''}
+
       <!-- Dates & Summary Row -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:12px;background:var(--bg-surface);border:1px solid var(--border-light);border-radius:var(--r-md);padding:12px;">
         <div>
@@ -2633,7 +2675,7 @@ window.openResidentInvoiceModal = function(invoiceId) {
 
       <!-- Action Buttons -->
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:4px;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Print / Save PDF</button>
+        <button type="button" class="btn btn-secondary btn-sm no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
         <div style="display:flex;gap:8px;">
           ${!isPaid ? `
             <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('rwaGlobalModal').style.display='none'; triggerRazorpayPayment('${inv.id}', ${inv.balanceAmount || inv.totalAmount}, 'Flat ${unitNum}')">
@@ -2708,7 +2750,7 @@ window.openResidentReceiptModal = function(invoiceId) {
         This is a computer-generated digital receipt issued under RWA society bylaws. No physical signature required.
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:6px;">
+      <div class="no-print" style="display:flex;gap:10px;margin-top:6px;">
         <button type="button" class="btn btn-secondary" style="flex:1;" onclick="window.print()">🖨️ Print Receipt</button>
         <button type="button" class="btn btn-primary" style="flex:1;" onclick="document.getElementById('rwaGlobalModal').style.display='none'">Done ✓</button>
       </div>
@@ -2776,11 +2818,11 @@ Screens['resident-payments'] = function() {
           <div class="page-title">Payment Transactions & Receipts</div>
           <div class="page-subtitle" id="residentPaymentsSubtitle">All online payments, UPI transactions, and receipts verified by society administration</div>
         </div>
-        <div id="residentPaymentsFlatPicker" style="display:flex;align-items:center;gap:8px;"></div>
+        <div id="residentPaymentsFlatPicker" class="flat-picker"></div>
       </div>
 
       <!-- Quick Metrics Grid -->
-      <div class="grid-3 mb-md">
+      <div class="grid-3 pair-grid mb-md">
         <div class="stat-card">
           <div class="stat-label">Total Amount Settled</div>
           <div class="stat-value text-green" id="resPayStatTotal">₹0.00</div>
@@ -2985,6 +3027,7 @@ window.loadLiveResidentPayments = async function() {
 
     // Sort latest first
     transactions.sort((a, b) => b.timestamp - a.timestamp);
+    window.__residentPaymentRows = transactions;
 
     // Update stat cards
     const totalSettled = transactions.reduce((sum, t) => sum + (t.status === 'VERIFIED' ? t.amount : 0), 0);
@@ -3067,14 +3110,14 @@ Screens['resident-ledger'] = function() {
           <div class="page-title">Personal Unit Account Ledger</div>
           <div class="page-subtitle" id="residentLedgerSubtitle">Financial Year 2026-27 statement of account and verified transactions</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div id="residentLedgerFlatPicker" style="display:flex;align-items:center;gap:6px;"></div>
+        <div class="resident-tool-row">
+          <div id="residentLedgerFlatPicker" class="flat-picker"></div>
           <button class="btn btn-primary btn-sm" onclick="window.printResidentLedgerStatement()">📥 Statement PDF</button>
         </div>
       </div>
 
       <!-- Balance Card -->
-      <div class="grid-3 mb-md">
+      <div class="grid-3 pair-grid mb-md">
         <div class="stat-card">
           <div class="stat-label">Opening Balance (01 Apr 2026)</div>
           <div class="stat-value" id="ledgerStatOpening">₹0.00</div>
@@ -3422,7 +3465,7 @@ window.printResidentLedgerStatement = function() {
         </table>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:6px;">
+      <div class="no-print" style="display:flex;gap:10px;margin-top:6px;">
         <button class="btn btn-secondary w-full" onclick="window.print()">🖨️ Print Statement</button>
         <button class="btn btn-primary w-full" onclick="document.getElementById('rwaGlobalModal').style.display='none'">Done ✓</button>
       </div>
@@ -3430,6 +3473,28 @@ window.printResidentLedgerStatement = function() {
   `;
 
   showModal(`📋 Statement of Account · Flat ${data.unitNum}`, html, 'Close', () => {}, '540px');
+};
+
+window.exportResidentPaymentsCSV = function() {
+  const rows = window.__residentPaymentRows || [];
+  if (!rows.length) {
+    showToast('No payments to export', 'warning');
+    return;
+  }
+  const headers = ['Receipt', 'Date', 'Payment For', 'Method', 'Reference', 'Amount', 'Status'];
+  const lines = [headers.join(',')].concat(rows.map(function(t) {
+    return [
+      '"' + (t.receiptNo || '').replace(/"/g, '""') + '"',
+      '"' + (t.dateStr || '').replace(/"/g, '""') + '"',
+      '"' + (t.paymentFor || '').replace(/"/g, '""') + '"',
+      '"' + (t.method || '').replace(/"/g, '""') + '"',
+      '"' + (t.txnRef || '').replace(/"/g, '""') + '"',
+      t.amount || 0,
+      t.status || '',
+    ].join(',');
+  }));
+  window.saveReportFile('Payment_History.csv', lines.join('\n'));
+  showToast('Payment history downloaded', 'success');
 };
 
 window.exportResidentLedgerCSV = function() {
@@ -3451,13 +3516,7 @@ window.exportResidentLedgerCSV = function() {
   ]);
 
   const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Ledger_Statement_Flat_${data.unitNum}_FY2026-27.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile(`Ledger_Statement_Flat_${data.unitNum}_FY2026-27.csv`, csvContent);
   showToast('Ledger exported to CSV', 'success');
 };
 
@@ -4178,7 +4237,7 @@ Screens['resident-polls'] = function() {
     portal: 'resident',
     breadcrumb: 'Community',
     actions: `
-      <div id="residentPollsFlatPicker" style="display:inline-flex;align-items:center;gap:6px;"></div>
+      <div id="residentPollsFlatPicker" class="flat-picker"></div>
       <button class="btn btn-secondary btn-sm" onclick="window.loadLiveResidentPolls()">🔄 Refresh Polls</button>
     `,
     content: `
@@ -4193,7 +4252,7 @@ Screens['resident-polls'] = function() {
       </div>
 
       <!-- Quick Resolution Metrics Grid -->
-      <div class="grid-4 mb-md">
+      <div class="grid-4 pair-grid mb-md">
         <div class="stat-card">
           <div class="stat-label">Active Resolutions</div>
           <div class="stat-value text-blue" id="pollStatOpen">2 Live Votes</div>
@@ -4246,7 +4305,7 @@ Screens['resident-complaints'] = function() {
     portal: 'resident',
     breadcrumb: 'Helpdesk',
     actions: `
-      <div id="residentComplaintsHeaderFlatPicker" style="display:inline-flex;align-items:center;margin-right:8px;"></div>
+      <div id="residentComplaintsHeaderFlatPicker" class="flat-picker"></div>
       <button class="btn btn-primary btn-sm" onclick="openNewComplaintModal()">+ Raise Complaint</button>
       <button class="btn btn-secondary btn-sm" onclick="window.loadLiveResidentComplaints()">🔄 Refresh</button>
     `,
@@ -4258,9 +4317,9 @@ Screens['resident-complaints'] = function() {
             Track resolution progress, communicate with facility staff and monitor service SLA for your unit & common areas
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div id="residentComplaintsFlatPicker"></div>
-          <button class="btn btn-primary" onclick="openNewComplaintModal()">+ New Complaint</button>
+        <div class="resident-tool-row">
+          <div id="residentComplaintsFlatPicker" class="flat-picker"></div>
+          <button class="btn btn-primary btn-sm" onclick="openNewComplaintModal()">+ New Complaint</button>
         </div>
       </div>
 
@@ -5181,7 +5240,7 @@ window.viewMeetingDocketModal = function(meetingId) {
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px;">
+      <div class="no-print" style="display:flex;gap:10px;margin-top:16px;">
         <button class="btn btn-secondary" style="flex:1;" onclick="window.print()">🖨️ Print Notice</button>
         <button class="btn btn-primary" style="flex:1;" onclick="window.downloadMeetingDocketPDF('${m.id}')">📥 Download PDF</button>
       </div>
@@ -5237,7 +5296,7 @@ window.viewMeetingMinutesModal = function(meetingId) {
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px;">
+      <div class="no-print" style="display:flex;gap:10px;margin-top:16px;">
         <button class="btn btn-secondary" style="flex:1;" onclick="window.print()">🖨️ Print MoM</button>
         <button class="btn btn-primary" style="flex:1;" onclick="window.downloadMeetingMinutesPDF('${pm.id}')">📥 Download Signed PDF</button>
       </div>
@@ -5604,7 +5663,7 @@ window.previewResidentDocument = function(docId) {
       </div>
 
       <!-- Footer Buttons -->
-      <div style="display:flex;gap:10px;margin-top:16px;">
+      <div class="no-print" style="display:flex;gap:10px;margin-top:16px;">
         <button class="btn btn-secondary" style="flex:1;" onclick="window.print()">🖨️ Print Document</button>
         <button class="btn btn-primary" style="flex:1;" onclick="window.downloadResidentDocument('${doc.id}')">📥 Download (${doc.ext})</button>
       </div>
@@ -5641,15 +5700,11 @@ window.downloadResidentDocument = function(docId) {
     `Certified by Managing Committee Secretariat\n` +
     `========================================================\n`;
 
-  const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
-  const downloadUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = downloadUrl;
-  a.download = `${doc.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${(doc.ext || 'pdf').toLowerCase()}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(downloadUrl);
+  window.saveReportFile(
+    `${doc.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${(doc.ext || 'pdf').toLowerCase()}`,
+    textContent,
+    'text/plain;charset=utf-8'
+  );
 };
 
 // Resident Amenities Booking
@@ -5666,7 +5721,7 @@ Screens['resident-amenities'] = function() {
     breadcrumb: 'Facilities',
     actions: `
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="residentAmenitiesFlatPicker" style="display:inline-flex;align-items:center;gap:6px;"></div>
+        <div id="residentAmenitiesFlatPicker" class="flat-picker"></div>
         <button class="btn btn-secondary btn-sm" onclick="window.loadLiveResidentAmenities(true)">🔄 Refresh</button>
         <button class="btn btn-primary btn-sm" onclick="window.openResidentBookAmenityModal()">+ Book Facility</button>
       </div>
@@ -6413,7 +6468,7 @@ window.viewResidentBookingPass = function(bookingId) {
         </div>
       </div>
 
-      <div style="display:flex;gap:10px;">
+      <div class="no-print" style="display:flex;gap:10px;">
         <button class="btn btn-secondary" style="flex:1;" onclick="window.print()">🖨️ Print Pass</button>
         <button class="btn btn-primary" style="flex:1;" onclick="showToast('Pass saved to offline wallet', 'success');">📱 Save to Wallet</button>
       </div>
@@ -6437,7 +6492,7 @@ Screens['resident-profile'] = function() {
     breadcrumb: 'Account',
     actions: `
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="residentProfileFlatPicker" style="display:inline-flex;align-items:center;gap:6px;"></div>
+        <div id="residentProfileFlatPicker" class="flat-picker"></div>
         <button class="btn btn-secondary btn-sm" onclick="window.loadResidentProfileData(true)">🔄 Reset</button>
         <button class="btn btn-primary btn-sm" onclick="window.saveResidentProfile()">💾 Save Profile</button>
       </div>
@@ -7118,12 +7173,36 @@ window.saveEmergencyContact = function() {
 // RESIDENT VISITOR ENTRY PASS MODALS & GENERATOR
 // ============================================================
 
-window.openGenerateEntryPassModal = function() {
+window.currentVisitorHost = function() {
   let user = null;
   try { user = JSON.parse(localStorage.getItem('rwa_user') || '{}'); } catch(e) {}
-  const unitNum = user?.unitNumber || (user?.unit && user.unit.unitNumber) || 'A-101';
-  const residentName = user?.name || 'Resident';
-  const residentPhone = user?.phone || '';
+  const units = window.__residentAllSocietyUnits || [];
+  const selected = document.querySelector('#residentHeaderFlatSelector select, #residentHeroFlatPicker select');
+  const previewId = (selected && selected.value) || window.__residentPreviewUnitId || user?.unitId || '';
+  const unit = units.find(function(u) { return u.id === previewId; }) || null;
+  let unitNumber = unit?.unitNumber || user?.unitNumber || (user?.unit && user.unit.unitNumber) || '';
+  if (!unitNumber && selected && selected.selectedOptions && selected.selectedOptions[0]) {
+    const label = selected.selectedOptions[0].textContent || '';
+    const match = label.match(/Flat\s+([A-Za-z0-9-]+)/);
+    if (match) unitNumber = match[1];
+  }
+  return {
+    unitId: unit?.id || previewId || '',
+    unitNumber: unitNumber,
+    residentName: user?.name || 'Resident',
+    residentPhone: user?.phone || '',
+  };
+};
+
+window.openGenerateEntryPassModal = function() {
+  const host = window.currentVisitorHost();
+  const unitNum = host.unitNumber;
+  const residentName = host.residentName;
+  const residentPhone = host.residentPhone;
+  if (!unitNum) {
+    if (typeof showToast === 'function') showToast('Connect a flat first, then create a visitor pass for that home.', 'warning');
+    return;
+  }
 
   const modalHtml = `
     <form id="resCreatePassForm" onsubmit="window.handleResidentCreatePass(event)" style="display:flex;flex-direction:column;gap:14px;">
@@ -7140,8 +7219,13 @@ window.openGenerateEntryPassModal = function() {
       </div>
 
       <input type="hidden" id="resPassFlat" value="${unitNum}" />
+      <input type="hidden" id="resPassUnitId" value="${host.unitId || ''}" />
       <input type="hidden" id="resPassHostName" value="${residentName}" />
       <input type="hidden" id="resPassHostPhone" value="${residentPhone}" />
+
+      <div style="background:#F4F4F5;border:1px solid #E4E4E7;border-radius:2px;padding:10px 12px;font-size:12.5px;color:#18181B;line-height:1.45;">
+        Enter the visitor's name, choose how long the pass lasts, then share the gate code. The guard matches the code at the gate.
+      </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
@@ -7213,9 +7297,12 @@ window.openGenerateEntryPassModal = function() {
 
   if (typeof Modal !== 'undefined' && Modal.open) {
     Modal.open({
-      title: '🎫 Generate Visitor Entry Pass',
+      title: 'Create a visitor pass',
       body: modalHtml,
+      maxWidth: '640px',
     });
+  } else if (typeof showToast === 'function') {
+    showToast('Visitor pass form is still loading. Refresh and try again.', 'warning');
   }
 };
 
@@ -7229,6 +7316,7 @@ window.handleResidentCreatePass = async function(e) {
   const validHours = document.getElementById('resPassValidity')?.value;
   const purpose = document.getElementById('resPassPurpose')?.value;
   const residentUnit = document.getElementById('resPassFlat')?.value;
+  const unitId = document.getElementById('resPassUnitId')?.value;
   const residentName = document.getElementById('resPassHostName')?.value;
   const residentPhone = document.getElementById('resPassHostPhone')?.value;
 
@@ -7242,6 +7330,7 @@ window.handleResidentCreatePass = async function(e) {
         visitorType,
         vehicleNumber,
         residentUnit,
+        unitId,
         residentName,
         residentPhone,
         gateNumber,
@@ -7257,6 +7346,7 @@ window.handleResidentCreatePass = async function(e) {
         visitorType,
         vehicleNumber,
         residentUnit,
+        unitId,
         residentName,
         residentPhone,
         gateNumber,
@@ -7280,11 +7370,11 @@ window.handleResidentCreatePass = async function(e) {
         window.openDigitalPassModal(data.pass);
       }, 300);
     } else {
-      alert(data.error || 'Failed to generate entry pass');
+      if (typeof showToast === 'function') showToast(data.error || 'Could not create the visitor pass', 'error');
     }
   } catch (err) {
     console.error('Error generating resident pass:', err);
-    alert('Server communication error');
+    if (typeof showToast === 'function') showToast('Could not reach the server to create the pass', 'error');
   }
 };
 

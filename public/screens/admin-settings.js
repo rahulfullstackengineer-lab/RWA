@@ -1472,15 +1472,7 @@ window.exportAuditTrailCsv = function() {
     csvRows.push(row.join(','));
   });
 
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Society_Audit_Trail_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  window.saveReportFile(`Society_Audit_Trail_${new Date().toISOString().slice(0, 10)}.csv`, csvRows.join('\n'));
 
   showToast('✅ Audit trail exported to CSV successfully', 'success');
 };
@@ -2352,13 +2344,7 @@ window.exportVehiclesRegistry = function() {
   ];
 
   const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(cell => `"${(cell + '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Vehicle_Parking_Registry_${new Date().toISOString().slice(0, 10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.saveReportFile(`Vehicle_Parking_Registry_${new Date().toISOString().slice(0, 10)}.csv`, csvContent);
   showToast('Vehicle registry exported successfully!', 'success');
 };
 
