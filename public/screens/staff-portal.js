@@ -5,7 +5,13 @@
 window.Screens = window.Screens || {};
 
 Screens['staff-dashboard'] = function() {
+  let signedInRole = '';
+  try { signedInRole = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
+  if (signedInRole === 'RESIDENT') {
+    setTimeout(function() { if (typeof Router !== 'undefined') Router.go('resident-dashboard'); }, 0);
+  }
   function tryLoadStaffPortal(attempts) {
+    if (signedInRole === 'RESIDENT') return;
     attempts = attempts || 0;
     if (typeof window.loadLiveStaffPortal === 'function' && document.getElementById('staffPassesTableBody')) {
       window.loadLiveStaffPortal();

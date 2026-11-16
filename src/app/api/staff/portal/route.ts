@@ -68,6 +68,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error || 'Unauthorized' }, { status: 401 })
     }
 
+    if (user.role === 'RESIDENT') {
+      return NextResponse.json({ error: 'The staff portal is only for guards and the society admin' }, { status: 403 })
+    }
+
     const organizationId = user.organizationId
     const staffPhone = user.role === 'STAFF' ? user.phone : (phoneParam || user.phone)
 

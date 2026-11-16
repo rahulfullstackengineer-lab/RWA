@@ -26,6 +26,10 @@
     return 'resident';
   }
 
+  function onlyFor(roles) {
+    return roles.indexOf(audienceRole(getStoredUser().role)) !== -1
+  }
+
   function getActiveOrgId() {
     const user = getStoredUser();
     return localStorage.getItem('rwa_active_org_id') ||
@@ -240,6 +244,7 @@
       })
 
       socket.on('new-complaint-ticket', (data) => {
+        if (!onlyFor(['admin', 'staff'])) return
         showToast(`🎫 New Ticket ${data.ticketNumber}: ${data.title}`, 'info')
         updateNotificationBellBadge(true)
       })
@@ -250,6 +255,7 @@
       })
 
       socket.on('new-payment-received', (data) => {
+        if (!onlyFor(['admin'])) return
         showToast(`💰 Payment Received: Flat ${data.unitNumber} (₹${data.amount})`, 'success')
         updateNotificationBellBadge(true)
         if (typeof window.refreshPagesAfterPayment === 'function') window.refreshPagesAfterPayment()
@@ -261,6 +267,7 @@
       })
 
       socket.on('staff-salary-paid', (data) => {
+        if (!onlyFor(['admin', 'staff'])) return
         const title = data && data.title ? data.title : ''
         const forThisStaff = /credited to you/i.test(title)
         if (onStaffSurface() && !forThisStaff) {
@@ -285,20 +292,24 @@
       })
 
       socket.on('new-meeting-scheduled', (data) => {
+        if (!onlyFor(['admin', 'resident'])) return
         showToast(`📅 Meeting scheduled: ${data.title}`, 'info')
         updateNotificationBellBadge(true)
       })
 
       socket.on('new-amenity-booking', (data) => {
+        if (!onlyFor(['admin', 'resident'])) return
         showToast(`🏊 Booking confirmed: ${data.amenityName} for ${data.bookedByName}`, 'success')
       })
 
       socket.on('google-calendar-synced', (data) => {
+        if (!onlyFor(['admin'])) return
         showToast(`📅 Event "${data.title}" synced to Google Calendar!`, 'info')
       })
 
       // 👤 Real-Time Resident Onboarding Alert for RWA Admin
       socket.on('resident-onboarded', (data) => {
+        if (!onlyFor(['admin'])) return
         const typeStr = data.occupancyType === 'TENANT' ? 'Tenant' : 'Flat Owner'
         const text = data.message
           || (data.residentName
@@ -327,6 +338,7 @@
       // ⚡ Real-Time Billing & Invoices Socket Events
       socket.on('bills-generated', (data) => {
         console.log('⚡ Socket event bills-generated received:', data)
+        if (!onlyFor(['admin'])) return
         const count = data.count || data.createdCount || data.totalInvoices || ''
         const demandStr = data.totalDemand ? ` · Total Demand: ₹${Number(data.totalDemand).toLocaleString('en-IN')}` : ''
         showToast(`⚡ ${count} Monthly Bills Issued for ${data.billingMonth}!${demandStr}`, 'success')
@@ -360,6 +372,7 @@
 
       socket.on('bills-updated-bulk', (data) => {
         console.log('🔄 Socket event bills-updated-bulk received:', data)
+        if (!onlyFor(['admin'])) return
         showToast(`🔄 Bulk Update: ${data.updatedCount || 'All'} bills for ${data.billingMonth} revised!`, 'success')
         updateNotificationBellBadge(true)
 
@@ -409,6 +422,7 @@
 
       socket.on('sos:alarm-triggered', (data) => {
         console.log('🚨 Emergency SOS alarm received:', data)
+        if (!onlyFor(['admin', 'staff'])) return
         if (typeof showToast === 'function') {
           showToast(`🚨 SOS ALARM: Flat ${data.unitNumber || 'Campus'} (${data.residentName || 'Resident'}) triggered an emergency alert!`, 'error')
         }
@@ -427,9 +441,14 @@
           }
         }
         if (typeof updateNotificationBellBadge === 'function') updateNotificationBellBadge(true)
+        const passRole = getStoredUser().role
+        if (passRole === 'RESIDENT') {
+          if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
+          return
+        }
         if (typeof window.loadLiveAdminEntryPasses === 'function') window.loadLiveAdminEntryPasses()
-        if (typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
-        if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
+        if (passRole === 'STAFF' && typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
+        if (typeof window.loadLiveResidentDashboard === 'function' && passRole !== 'STAFF') window.loadLiveResidentDashboard()
       })
     } catch (err) {
       console.warn('Socket initialization error:', err)

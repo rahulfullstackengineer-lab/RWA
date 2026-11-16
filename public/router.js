@@ -26,10 +26,47 @@ var Router = (() => {
     }
   }
 
+  function signedInRole() {
+    try {
+      const stored = localStorage.getItem('rwa_user');
+      return stored ? (JSON.parse(stored).role || '') : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   function go(screen, params = {}) {
     // Normalization / Aliases
     if (screen === 'admin-communication') {
       screen = 'admin-notices';
+    }
+
+    const role = signedInRole();
+    const screenName = String(screen || '');
+    if (role === 'RESIDENT' && (screenName.startsWith('staff-') || screenName.startsWith('admin-') || screenName.startsWith('platform-'))) {
+      const residentScreens = {
+        'admin-invoices': 'resident-bills',
+        'admin-payments': 'resident-payments',
+        'admin-complaints': 'resident-complaints',
+        'admin-notices': 'resident-notices',
+        'admin-notifications': 'resident-notifications',
+        'admin-meetings': 'resident-meetings',
+        'admin-documents': 'resident-documents',
+        'admin-polls': 'resident-polls',
+        'admin-amenities': 'resident-amenities',
+        'admin-ledger': 'resident-ledger',
+        'admin-settings': 'resident-profile',
+        'staff-settings': 'resident-profile',
+      };
+      screen = residentScreens[screenName] || 'resident-dashboard';
+    } else if (role === 'STAFF' && (screenName.startsWith('admin-') || screenName.startsWith('resident-') || screenName.startsWith('platform-'))) {
+      const staffScreens = {
+        'admin-entry-passes': 'staff-passes',
+        'admin-duty': 'staff-roster',
+        'admin-emergency': 'staff-intercom',
+        'admin-settings': 'staff-settings',
+      };
+      screen = staffScreens[screenName] || 'staff-dashboard';
     }
 
     // Security Guard: Platform Super-Admin is strictly restricted to 8219587657
@@ -1160,6 +1197,23 @@ window.handleNotificationItemClick = async function(notifId, type, portal) {
 
   window.closeHeaderDropdowns();
 
+  let role = '';
+  try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
+  if (role === 'RESIDENT') {
+    if (type === 'BILL' || type === 'PAYMENT') Router.go('resident-bills');
+    else if (type === 'COMPLAINT') Router.go('resident-complaints');
+    else if (type === 'NOTICE') Router.go('resident-notices');
+    else if (type === 'RESIDENT_ONBOARDED') Router.go('resident-profile');
+    else Router.go('resident-notifications');
+    return;
+  }
+  if (role === 'STAFF') {
+    if (type === 'ENTRY_PASS') Router.go('staff-passes');
+    else if (type === 'STAFF_SALARY') Router.go('staff-dashboard');
+    else Router.go('staff-dashboard');
+    return;
+  }
+
   if (type === 'BILL') {
     Router.go(portal === 'admin' ? 'admin-invoices' : 'resident-bills');
   } else if (type === 'RESIDENT_ONBOARDED') {
@@ -1168,6 +1222,10 @@ window.handleNotificationItemClick = async function(notifId, type, portal) {
     Router.go(portal === 'admin' ? 'admin-complaints' : 'resident-complaints');
   } else if (type === 'NOTICE') {
     Router.go(portal === 'admin' ? 'admin-notices' : 'resident-notices');
+  } else if (type === 'ENTRY_PASS') {
+    Router.go('admin-entry-passes');
+  } else if (type === 'STAFF_SALARY') {
+    Router.go('admin-vendors');
   } else {
     Router.go(portal === 'admin' ? 'admin-notifications' : 'resident-notifications');
   }

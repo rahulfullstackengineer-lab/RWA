@@ -227,12 +227,18 @@ window.saveReportFile = function(filename, content, mime) {
       openBtn.onclick = function() {
         let role = '';
         try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
-        const current = typeof Router !== 'undefined' && Router.current ? String(Router.current() || '') : '';
-        const onStaff = document.body.dataset.portal === 'staff' || role === 'STAFF' || current.indexOf('staff-') === 0;
-        if (onStaff) {
+        const text = (window.__liveBroadcast && window.__liveBroadcast.text) || '';
+        if (role === 'RESIDENT') {
+          const screen = /bill|invoice|payment due/i.test(text) ? 'resident-bills'
+            : (/complaint|ticket/i.test(text) ? 'resident-complaints'
+            : (/notice/i.test(text) ? 'resident-notices' : 'resident-notifications'));
+          if (typeof Router !== 'undefined') Router.go(screen);
+          return;
+        }
+        if (role === 'STAFF') {
+          const current = typeof Router !== 'undefined' && Router.current ? String(Router.current() || '') : '';
           if (typeof Router !== 'undefined' && current !== 'staff-dashboard') Router.go('staff-dashboard');
-          const text = (window.__liveBroadcast && window.__liveBroadcast.text) || '';
-          const tab = /salary|paid|payout/i.test(text) ? 'salary' : (/pass|visitor|gate/i.test(text) ? 'passes' : (/shift|duty|roster/i.test(text) ? 'duty' : (/intercom|sos|emergency/i.test(text) ? 'emergency' : '')));
+          const tab = /salary|payout|credited to you/i.test(text) ? 'salary' : (/pass|visitor|gate/i.test(text) ? 'passes' : (/shift|duty|roster/i.test(text) ? 'duty' : (/intercom|sos|emergency/i.test(text) ? 'emergency' : '')));
           if (tab) {
             setTimeout(function() {
               const btn = document.querySelector('#staffPortalTabs button[data-staff-tab="' + tab + '"]');
@@ -241,7 +247,7 @@ window.saveReportFile = function(filename, content, mime) {
           }
           return;
         }
-        const screen = role === 'RESIDENT' ? 'resident-notifications' : 'admin-notifications';
+        const screen = /pass|visitor|gate/i.test(text) ? 'admin-entry-passes' : 'admin-notifications';
         if (typeof Router !== 'undefined') Router.go(screen);
       };
     }
