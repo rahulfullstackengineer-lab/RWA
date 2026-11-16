@@ -32,9 +32,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invoice is already fully paid' }, { status: 400 })
     }
 
-    // Resident check: user can only pay for their own unit (or admin can test pay)
-    if (user.role === 'RESIDENT' && user.unitId !== invoice.unitId) {
-      return NextResponse.json({ error: 'You can only pay for your own registered unit' }, { status: 403 })
+    if (user.role === 'RESIDENT') {
+      const phone = String(user.phone || '').replace(/\D/g, '').slice(-10)
+      const ownerPhone = String(invoice.unit.ownerPhone || '').replace(/\D/g, '').slice(-10)
+      const tenantPhone = String(invoice.unit.tenantPhone || '').replace(/\D/g, '').slice(-10)
+      const ownsFlat = user.unitId === invoice.unitId
+        || (phone.length === 10 && (phone === ownerPhone || phone === tenantPhone))
+      if (!ownsFlat) {
+        return NextResponse.json({ error: 'You can only pay for your own registered unit' }, { status: 403 })
+      }
     }
 
     const payableAmount = invoice.balanceAmount > 0 ? invoice.balanceAmount : invoice.totalAmount

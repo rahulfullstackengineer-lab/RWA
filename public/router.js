@@ -64,6 +64,26 @@ var Router = (() => {
 })();
 window.Router = Router;
 
+window.rememberScreenRecord = function(key, id) {
+  if (!key || !id) return;
+  try { sessionStorage.setItem('rwa_open_' + key, id); } catch (e) {}
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set(key, id);
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (e) {}
+};
+
+window.readScreenRecord = function(key) {
+  try {
+    return new URLSearchParams(window.location.search).get(key)
+      || sessionStorage.getItem('rwa_open_' + key)
+      || '';
+  } catch (e) {
+    return '';
+  }
+};
+
 // Authenticated fetch wrapper for API communication
 window.apiFetch = function(url, options = {}) {
   const token = localStorage.getItem('rwa_token');

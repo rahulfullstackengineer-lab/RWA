@@ -29,7 +29,7 @@ window.getMeetingsLocal = function() {
 window.fetchMeetingsData = async function(force = false) {
   if (window.__meetingsData && !force) return window.__meetingsData;
   try {
-    const res = await fetch('/api/meetings');
+    const res = await (window.apiFetch || fetch)('/api/meetings');
     if (res.ok) {
       const data = await res.json();
       window.__meetingsData = data;
@@ -57,9 +57,30 @@ window.setDetailTab = function(tab) {
   if (typeof Router !== 'undefined') Router.go('admin-meeting-detail');
 };
 
+window.restoreOpenMeeting = async function(meetingId) {
+  if (window.__restoringMeeting) return;
+  window.__restoringMeeting = true;
+  try {
+    const data = await window.fetchMeetingsData(true);
+    const id = meetingId || (window.readScreenRecord ? window.readScreenRecord('meeting') : '') || window.__selectedMeetingId;
+    const meeting = ((data && data.meetings) || []).find(function(item) { return item.id === id; });
+    if (!meeting) {
+      showToast('Open the meeting again from the list.', 'warning');
+      Router.go('admin-meetings');
+      return;
+    }
+    window.__selectedMeetingId = meeting.id;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('meeting', meeting.id);
+    Router.go('admin-meeting-detail');
+  } finally {
+    window.__restoringMeeting = false;
+  }
+};
+
 window.openMeetingDetail = function(id) {
   window.__selectedMeetingId = id;
   window.__detailActiveTab = 'agenda';
+  if (window.rememberScreenRecord) window.rememberScreenRecord('meeting', id);
   if (typeof Router !== 'undefined') Router.go('admin-meeting-detail');
 };
 
@@ -102,7 +123,7 @@ window.sendMeetingNotice = async function(idOrTitle) {
   showToast(`Dispatching formal notice for "${m.title}"...`, 'info');
 
   try {
-    const res = await fetch('/api/meetings', {
+    const res = await (window.apiFetch || fetch)('/api/meetings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: m.id, action: 'SEND_NOTICE' })
@@ -156,7 +177,7 @@ window.openAddAgendaItemModal = function(meetingId) {
         };
         m.agenda.push(newItem);
 
-        fetch('/api/meetings', {
+        (window.apiFetch || fetch)('/api/meetings', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: m.id, agenda: m.agenda })
@@ -212,7 +233,7 @@ window.openMarkAttendanceModal = function(meetingId) {
       });
 
       m.attendees = selected;
-      fetch('/api/meetings', {
+      (window.apiFetch || fetch)('/api/meetings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: m.id, action: 'ATTENDANCE', attendees: selected })
@@ -259,7 +280,7 @@ window.openRecordMinutesModal = function(meetingId) {
       m.minutesPublished = true;
       if (markCompleted) m.status = 'COMPLETED';
 
-      fetch('/api/meetings', {
+      (window.apiFetch || fetch)('/api/meetings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -397,7 +418,7 @@ window.openAddResolutionModal = function(meetingId) {
       };
       m.resolutions.push(newRes);
 
-      fetch('/api/meetings', {
+      (window.apiFetch || fetch)('/api/meetings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: m.id, action: 'ADD_RESOLUTION', resolution: newRes })
@@ -452,7 +473,7 @@ window.openAddMeetingActionItemModal = function(meetingId) {
       };
       m.actionItems.push(newAct);
 
-      fetch('/api/meetings', {
+      (window.apiFetch || fetch)('/api/meetings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: m.id, action: 'ADD_ACTION_ITEM', actionItem: newAct })
@@ -487,7 +508,7 @@ window.toggleActionItemStatus = async function(meetingId, actionItemId) {
   const nextIdx = (order.indexOf(found.status) + 1) % order.length;
   found.status = order[nextIdx];
 
-  fetch('/api/meetings', {
+  (window.apiFetch || fetch)('/api/meetings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: targetMeeting.id, action: 'ACTION_ITEMS', actionItems: targetMeeting.actionItems })
@@ -1379,8 +1400,17 @@ Screens['admin-meetings'] = function() {
 Screens['admin-meeting-detail'] = function() {
   const data = window.__meetingsData || window.getMeetingsLocal();
   const allMeetings = data.meetings || [];
-  const selectedId = window.__selectedMeetingId || 'MTG-001';
-  const meeting = allMeetings.find(m => m.id === selectedId) || allMeetings[0] || window.__defaultMeetingsData.meetings[0];
+  const selectedId = (window.readScreenRecord && window.readScreenRecord('meeting')) || window.__selectedMeetingId || '';
+  const meeting = allMeetings.find(m => m.id === selectedId);
+  if (!meeting) {
+    setTimeout(function() { window.restoreOpenMeeting(selectedId); }, 30);
+    return Shell.render('admin-meeting-detail', {
+      title: 'Meeting',
+      portal: 'admin',
+      breadcrumb: '<span onclick="Router.go(\'admin-meetings\')" style="cursor:pointer">Meetings</span>',
+      content: '<div style="padding:48px 20px;text-align:center;color:var(--text-muted);">Loading this meeting...</div>',
+    });
+  }
 
   const agendaItems = meeting.agenda || [];
   const attendees = meeting.attendees || [];

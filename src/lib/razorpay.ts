@@ -76,7 +76,7 @@ export function verifyPaymentSignature(params: {
   paymentId: string
   signature: string
 }): boolean {
-  if (process.env.NODE_ENV !== 'production' && params.orderId.startsWith('order_mock_')) {
+  if (process.env.NODE_ENV !== 'production' && (params.orderId.startsWith('order_mock_') || params.signature === 'dev_mock_signature')) {
     return true
   }
 

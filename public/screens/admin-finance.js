@@ -871,9 +871,16 @@ Screens['admin-invoices'] = function() {
 };
 
 Screens['admin-invoice-detail'] = function() {
-  const inv = window.__selectedInvoice || (window.__cachedInvoices && window.__cachedInvoices[0]) || null;
+  const savedId = window.readScreenRecord ? window.readScreenRecord('invoice') : '';
+  let inv = window.__selectedInvoice || null;
+  if (savedId && inv && inv.id !== savedId) inv = null;
+  if (!inv && savedId && window.__cachedInvoices) {
+    inv = window.__cachedInvoices.find(function(item) { return item.id === savedId; }) || null;
+    if (inv) window.__selectedInvoice = inv;
+  }
 
   if (!inv) {
+    setTimeout(function() { window.restoreOpenInvoice(savedId); }, 30);
     return Shell.render('admin-invoice-detail', {
       title: 'Invoice Details',
       portal: 'admin',
@@ -881,9 +888,9 @@ Screens['admin-invoice-detail'] = function() {
       content: `
         <div class="card" style="padding:48px 24px;text-align:center;max-width:500px;margin:30px auto;">
           <div style="font-size:40px;margin-bottom:12px;">📄</div>
-          <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin-bottom:6px;">No Invoice Selected</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin-bottom:6px;">Loading this bill</div>
           <div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
-            Please select an invoice record from the Invoices & Monthly Bills register.
+            The payment status is being loaded again.
           </div>
           <button class="btn btn-primary" onclick="Router.go('admin-invoices')">← Back to Invoices Register</button>
         </div>
@@ -891,7 +898,9 @@ Screens['admin-invoice-detail'] = function() {
     });
   }
 
-  const s = INVOICE_STATUS_MAP[inv.status] || { color: 'blue', label: inv.status };
+  if (window.rememberScreenRecord) window.rememberScreenRecord('invoice', inv.id);
+  const displayStatus = inv.computedStatus || inv.status;
+  const s = INVOICE_STATUS_MAP[displayStatus] || { color: 'blue', label: displayStatus };
   const unitNum = inv.unit ? inv.unit.unitNumber : 'Common';
   const ownerName = inv.unit ? (inv.unit.ownerName || 'Resident') : 'Resident';
 
@@ -901,7 +910,7 @@ Screens['admin-invoice-detail'] = function() {
     breadcrumb: '<span onclick="Router.go(\'admin-invoices\')" style="cursor:pointer;color:var(--blue);">Invoices</span>',
     actions: `
       <button class="btn btn-secondary btn-sm" onclick="showToast('PDF invoice downloaded', 'success')">⬇ Download PDF</button>
-      ${inv.status !== 'PAID' ? `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>` : ''}
+      ${displayStatus !== 'PAID' ? `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>` : ''}
     `,
     content: `
       <div class="detail-split-layout">
@@ -2853,10 +2862,33 @@ function renderInvoicesData(invoices) {
   }
 }
 
+window.restoreOpenInvoice = async function(invoiceId) {
+  if (window.__restoringInvoice) return;
+  window.__restoringInvoice = true;
+  try {
+    const res = await (window.apiFetch || fetch)('/api/billing/invoices').catch(function() { return null; });
+    const data = res && res.ok ? await res.json() : {};
+    window.__cachedInvoices = data.invoices || [];
+    const id = invoiceId || (window.readScreenRecord ? window.readScreenRecord('invoice') : '');
+    const inv = window.__cachedInvoices.find(function(item) { return item.id === id; });
+    if (!inv) {
+      showToast('Open the bill again from Invoices.', 'warning');
+      Router.go('admin-invoices');
+      return;
+    }
+    window.__selectedInvoice = inv;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('invoice', inv.id);
+    Router.go('admin-invoice-detail');
+  } finally {
+    window.__restoringInvoice = false;
+  }
+};
+
 window.viewInvoiceDetail = function(invoiceId) {
-  const inv = window.__cachedInvoices.find(i => i.id === invoiceId);
+  const inv = (window.__cachedInvoices || []).find(i => i.id === invoiceId);
   if (inv) {
     window.__selectedInvoice = inv;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('invoice', inv.id);
     Router.go('admin-invoice-detail');
   }
 };

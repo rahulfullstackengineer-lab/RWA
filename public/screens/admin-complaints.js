@@ -212,20 +212,23 @@ Screens['admin-complaints'] = function () {
 // Single Complaint Detail Screen
 // ============================================================
 Screens['admin-complaint-detail'] = function () {
-  var c = window.__selectedComplaint || (window.__cachedComplaints && window.__cachedComplaints[0]) || {
-    id: 'tkt_default',
-    ticketNumber: 'TKT-2026-3046',
-    title: 'Lift #2 Jerking & Floor Levelling Misalignment (Block A)',
-    description: 'Passenger lift stops 2 inches below landing on 4th floor. Grinding noise noticed during descent.',
-    category: 'LIFT',
-    priority: 'URGENT',
-    status: 'IN_PROGRESS',
-    assignedTo: 'Apex Elevator Services (Lift AMC)',
-    createdAt: new Date().toISOString(),
-    unit: { unitNumber: 'A-101' },
-    raisedBy: { name: 'Helpdesk Coordinator', phone: '+91 98765 43210' },
-    comments: [],
-  };
+  var savedId = window.readScreenRecord ? window.readScreenRecord('complaint') : '';
+  var c = window.__selectedComplaint || null;
+  if (savedId && c && c.id !== savedId) c = null;
+  if (!c && savedId && window.__cachedComplaints) {
+    c = window.__cachedComplaints.find(function(item) { return item.id === savedId; }) || null;
+    if (c) window.__selectedComplaint = c;
+  }
+  if (!c || !c.id || c.id === 'tkt_default') {
+    setTimeout(function() { window.restoreOpenComplaint(savedId); }, 30);
+    return Shell.render('admin-complaint-detail', {
+      title: 'Complaint',
+      portal: 'admin',
+      breadcrumb: '<span onclick="Router.go(\'admin-complaints\')" style="cursor:pointer;color:var(--blue);">Complaints</span>',
+      content: '<div style="padding:48px 20px;text-align:center;color:var(--text-muted);">Loading this complaint...</div>',
+    });
+  }
+  if (window.rememberScreenRecord) window.rememberScreenRecord('complaint', c.id);
 
   var pColor = COMPLAINTS_PRIORITY_COLOR[c.priority] || 'blue';
   var sColor = COMPLAINTS_STATUS_COLOR[c.status] || 'blue';
@@ -846,10 +849,33 @@ window.handleComplaintsSearch = function (query) {
   window.renderComplaintsView();
 };
 
+window.restoreOpenComplaint = async function(complaintId) {
+  if (window.__restoringComplaint) return;
+  window.__restoringComplaint = true;
+  try {
+    var res = await (window.apiFetch || fetch)('/api/complaints').catch(function() { return null; });
+    var data = res && res.ok ? await res.json() : {};
+    window.__cachedComplaints = data.complaints || [];
+    var id = complaintId || (window.readScreenRecord ? window.readScreenRecord('complaint') : '');
+    var c = window.__cachedComplaints.find(function(item) { return item.id === id; });
+    if (!c) {
+      showToast('Open the complaint again from the list.', 'warning');
+      Router.go('admin-complaints');
+      return;
+    }
+    window.__selectedComplaint = c;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('complaint', c.id);
+    Router.go('admin-complaint-detail');
+  } finally {
+    window.__restoringComplaint = false;
+  }
+};
+
 window.viewComplaintDetail = function (complaintId) {
   var c = (window.__cachedComplaints || []).find(comp => comp.id === complaintId);
   if (c) {
     window.__selectedComplaint = c;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('complaint', c.id);
     Router.go('admin-complaint-detail');
   }
 };

@@ -170,6 +170,11 @@
       socket.on('new-payment-received', (data) => {
         showToast(`💰 Payment Received: Flat ${data.unitNumber} (₹${data.amount})`, 'success')
         updateNotificationBellBadge(true)
+        if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen()
+        if (typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
+        if (typeof window.loadLiveAdminDashboard === 'function' && window.location.hash.includes('admin-dashboard')) {
+          window.loadLiveAdminDashboard()
+        }
       })
 
       socket.on('complaint-status-updated', (data) => {
@@ -1058,7 +1063,7 @@
     }
   }
 
-  window.openRecordPaymentModal = async function (preselectedUnitNumber = null, preselectedAmount = null) {
+  window.openRecordPaymentModal = async function (preselectedUnitNumber = null, preselectedAmount = null, invoiceId = null) {
     // 1. Fetch real society units from cache or API
     let units = window.__cachedUnits || []
     if (!units || units.length === 0) {
@@ -1209,7 +1214,7 @@
       const res = await (window.apiFetch || fetch)('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ unitNumber, amount, method, referenceNo, notes }),
+        body: JSON.stringify({ unitNumber, amount, method, referenceNo, notes, invoiceId: invoiceId || undefined }),
       })
 
       const data = await res.json()
@@ -1231,13 +1236,39 @@
       if (typeof window.loadLiveUnitsScreen === 'function') {
         window.loadLiveUnitsScreen()
       }
+      if (typeof window.restoreOpenUnit === 'function' && typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail') {
+        window.restoreOpenUnit(window.readScreenRecord ? window.readScreenRecord('unit') : '')
+      }
     }, '520px')
   }
 
   // ------------------------------------------------------------
   // 10. Live Razorpay Payment Engine
   // ------------------------------------------------------------
-  window.triggerRazorpayPayment = async function (invoiceId = 'INV-2026-10-048', amount = 3200, unitNumber = 'Flat 4B') {
+  window.triggerRazorpayPayment = async function (invoiceId, amount, unitNumber) {
+    if (!invoiceId) {
+      showToast('Choose a bill to pay', 'warning')
+      return
+    }
+    let orderData = null
+    try {
+      const orderRes = await (window.apiFetch || fetch)('/api/payments/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId }),
+      })
+      orderData = await orderRes.json()
+      if (!orderRes.ok || !orderData.success) {
+        showToast(orderData.error || 'Could not start this payment', 'error')
+        return
+      }
+    } catch (err) {
+      showToast('Could not start this payment', 'error')
+      return
+    }
+    window.__rzpCheckout = orderData
+    amount = orderData.invoice.amount
+    unitNumber = 'Flat ' + (orderData.invoice.unitNumber || '')
     let modal = document.getElementById('rwaRazorpayModal')
     if (!modal) {
       modal = document.createElement('div')
@@ -1290,7 +1321,7 @@
             </div>
           </div>
 
-          <button id="rzpSubmitBtn" onclick="processRzpPayment('${invoiceId}', ${amount})" style="margin-top:20px; width:100%; padding:13px; border-radius:8px; background:#2563EB; color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 4px 12px rgba(37,99,235,0.25);">
+          <button id="rzpSubmitBtn" onclick="processRzpPayment()" style="margin-top:20px; width:100%; padding:13px; border-radius:8px; background:#18181B; color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
             🔒 Pay ₹${Number(amount).toLocaleString('en-IN')} via Razorpay
           </button>
 
@@ -1363,39 +1394,59 @@
     }
   }
 
-  window.processRzpPayment = async function (invoiceId, amount) {
+  window.processRzpPayment = async function () {
+    const checkout = window.__rzpCheckout
     const btn = document.getElementById('rzpSubmitBtn')
+    if (!checkout || !checkout.order || !checkout.invoice) {
+      showToast('Start the payment again', 'warning')
+      return
+    }
     if (btn) {
-      btn.innerHTML = '⏳ Verifying with Razorpay...'
+      btn.textContent = 'Recording payment...'
       btn.disabled = true
     }
 
     try {
-      await fetch('/api/payments/verify', {
+      const verifyRes = await (window.apiFetch || fetch)('/api/payments/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          razorpayOrderId: `order_rzp_${Date.now()}`,
-          razorpayPaymentId: `pay_rzp_${Date.now()}`,
-          razorpaySignature: 'valid_mock_sig',
-          invoiceId: invoiceId || 'INV-2026-10-001',
+          razorpayOrderId: checkout.order.id,
+          razorpayPaymentId: 'pay_mock_' + Date.now(),
+          razorpaySignature: 'dev_mock_signature',
+          invoiceId: checkout.invoice.id,
           method: 'UPI',
         }),
       })
-    } catch {
-      // fallback
+      const data = await verifyRes.json().catch(function () { return {} })
+      if (!verifyRes.ok || !data.success) {
+        showToast(data.error || 'Payment was not recorded. The bill is still pending.', 'error')
+        if (btn) {
+          btn.disabled = false
+          btn.textContent = 'Try payment again'
+        }
+        return
+      }
+    } catch (err) {
+      showToast('Payment was not recorded. The bill is still pending.', 'error')
+      if (btn) btn.disabled = false
+      return
     }
 
-    setTimeout(() => {
-      const modal = document.getElementById('rwaRazorpayModal')
-      if (modal) modal.style.display = 'none'
-
-      showToast(`🎉 Payment of ₹${Number(amount).toLocaleString('en-IN')} Verified! Receipt issued.`, 'success')
-
-      if (typeof Router !== 'undefined') {
-        Router.go(Router.current())
-      }
-    }, 1000)
+    const modal = document.getElementById('rwaRazorpayModal')
+    if (modal) modal.style.display = 'none'
+    window.__rzpCheckout = null
+    showToast('Payment recorded. This bill is now paid.', 'success')
+    if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen()
+    if (typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
+    if (typeof window.loadLiveResidentBills === 'function') window.loadLiveResidentBills()
+    if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
+    if (typeof window.loadLiveResidentPayments === 'function') window.loadLiveResidentPayments()
+    if (typeof window.restoreOpenUnit === 'function' && typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail') {
+      window.restoreOpenUnit(window.readScreenRecord ? window.readScreenRecord('unit') : '')
+      return
+    }
+    if (typeof Router !== 'undefined' && Router.current) Router.go(Router.current())
   }
 
   // ------------------------------------------------------------

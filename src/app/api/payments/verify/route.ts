@@ -43,28 +43,24 @@ export async function POST(request: Request) {
       },
     })
 
-    const finalInvoiceId = invoiceId || payment?.invoiceId
+    const finalInvoiceId = payment?.invoiceId || invoiceId
 
-    let invoice = finalInvoiceId
+    const invoice = finalInvoiceId
       ? await prisma.invoice.findFirst({
           where: {
-            OR: [
-              { id: finalInvoiceId },
-              { invoiceNumber: finalInvoiceId },
+            AND: [
+              {
+                OR: [
+                  { id: finalInvoiceId },
+                  { invoiceNumber: finalInvoiceId },
+                ],
+              },
+              ...(user.organizationId ? [{ organizationId: user.organizationId }] : []),
             ],
           },
           include: { unit: true },
         })
       : null
-
-    if (!invoice) {
-      invoice = await prisma.invoice.findFirst({
-        where: {
-          organizationId: user.organizationId || undefined,
-        },
-        include: { unit: true },
-      })
-    }
 
     if (!invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })

@@ -150,10 +150,15 @@ Screens['admin-members'] = function() {
 };
 
 Screens['admin-resident-detail'] = function() {
-  const m = window.__selectedMemberDetail;
+  const savedId = window.readScreenRecord ? window.readScreenRecord('member') : '';
+  let m = window.__selectedMemberDetail || null;
+  if (savedId && m && m.id !== savedId) m = null;
+  if (!m && savedId && window.__cachedMembers) {
+    m = window.__cachedMembers.find(function(item) { return item.id === savedId; }) || null;
+    if (m) window.__selectedMemberDetail = m;
+  }
   if (!m) {
-    // Nothing selected – go back to members list
-    setTimeout(() => Router.go('admin-members'), 100);
+    setTimeout(function() { window.restoreOpenMember(savedId); }, 30);
     return Shell.render('admin-resident-detail', {
       title: 'Member Detail',
       portal: 'admin',
@@ -710,10 +715,33 @@ window.removeSocietyResident = async function(memberId, memberName) {
   }
 };
 
+window.restoreOpenMember = async function(memberId) {
+  if (window.__restoringMember) return;
+  window.__restoringMember = true;
+  try {
+    const res = await (window.apiFetch || fetch)('/api/members').catch(function() { return null; });
+    const data = res && res.ok ? await res.json() : {};
+    window.__cachedMembers = data.members || [];
+    const id = memberId || (window.readScreenRecord ? window.readScreenRecord('member') : '');
+    const m = window.__cachedMembers.find(function(item) { return item.id === id; });
+    if (!m) {
+      showToast('Open the resident again from Members.', 'warning');
+      Router.go('admin-members');
+      return;
+    }
+    window.__selectedMemberDetail = m;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('member', m.id);
+    Router.go('admin-resident-detail');
+  } finally {
+    window.__restoringMember = false;
+  }
+};
+
 window.viewMemberDetail = function(memberId) {
-  const m = window.__cachedMembers.find(mem => mem.id === memberId);
+  const m = (window.__cachedMembers || []).find(mem => mem.id === memberId);
   if (m) {
     window.__selectedMemberDetail = m;
+    if (window.rememberScreenRecord) window.rememberScreenRecord('member', m.id);
     Router.go('admin-resident-detail');
   }
 };

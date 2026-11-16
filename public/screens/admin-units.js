@@ -144,17 +144,25 @@ Screens['admin-units'] = Screens['admin-structure'];
 
 // Dynamic Unit Detail Screen
 Screens['admin-unit-detail'] = function() {
-  const u = window.__selectedUnit || (window.__cachedUnits && window.__cachedUnits[0]) || {
-    unitNumber: 'A-101',
-    block: { name: 'Main Block' },
-    unitType: 'FLAT_3BHK',
-    occupancyStatus: 'OWNER_OCCUPIED',
-    ownerName: 'Resident',
-    ownerPhone: '',
-    ownerEmail: '',
-    floor: 1,
-    areaSqft: 1950,
-  };
+  const savedId = (typeof URLSearchParams !== 'undefined' && new URLSearchParams(window.location.search).get('unit'))
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('rwa_open_unit_id'))
+    || '';
+  let u = window.__selectedUnit || null;
+  if (savedId && u && u.id !== savedId) u = null;
+  if (!u && savedId && window.__cachedUnits) {
+    u = window.__cachedUnits.find(function(unit) { return unit.id === savedId; }) || null;
+    if (u) window.__selectedUnit = u;
+  }
+  if (!u || !u.id) {
+    setTimeout(function() { window.restoreOpenUnit(savedId); }, 30);
+    return Shell.render('admin-unit-detail', {
+      title: 'Unit',
+      portal: 'admin',
+      breadcrumb: '<span onclick="Router.go(\'admin-structure\')" style="cursor:pointer;color:var(--blue);">Property Structure</span>',
+      content: '<div style="padding:48px 20px;text-align:center;color:var(--text-muted);">Loading this flat...</div>',
+    });
+  }
+  if (typeof window.rememberOpenUnit === 'function') window.rememberOpenUnit(u.id);
 
   const statusObj = STATUS_LABELS[u.occupancyStatus] || { label: u.occupancyStatus || 'Occupied', color: 'blue' };
   const allInvoices = u.invoices || [];
@@ -316,7 +324,7 @@ Screens['admin-unit-detail'] = function() {
                           </td>
                           <td style="padding:8px 10px;text-align:center;">
                             ${isUnpaid ? `
-                              <button class="btn btn-secondary btn-xs" onclick="openRecordPaymentModal('${u.unitNumber}', ${inv.balanceAmount || 0})">
+                              <button class="btn btn-secondary btn-xs" onclick="openRecordPaymentModal('${u.unitNumber}', ${inv.balanceAmount || 0}, '${inv.id}')">
                                 Pay Due
                               </button>
                             ` : `
@@ -422,6 +430,16 @@ window.loadLiveUnitsScreen = async function() {
 
     // Render Table & Mobile Cards
     renderUnitsData(units);
+
+    if (window.__selectedUnit) {
+      const fresh = units.find(function(unit) { return unit.id === window.__selectedUnit.id; });
+      if (fresh) {
+        window.__selectedUnit = fresh;
+        if (typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail') {
+          Router.go('admin-unit-detail');
+        }
+      }
+    }
 
   } catch (err) {
     console.error('Error in loadLiveUnitsScreen:', err);
@@ -779,10 +797,44 @@ function renderUnitsData(units) {
   }
 }
 
+window.rememberOpenUnit = function(unitId) {
+  if (!unitId) return;
+  try { sessionStorage.setItem('rwa_open_unit_id', unitId); } catch (e) {}
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('unit', unitId);
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (e) {}
+};
+
+window.restoreOpenUnit = async function(unitId) {
+  if (window.__restoringUnit) return;
+  window.__restoringUnit = true;
+  try {
+    const res = await (window.apiFetch || fetch)('/api/units').catch(function() { return null; });
+    const data = res && res.ok ? await res.json() : {};
+    window.__cachedUnits = data.units || [];
+    window.__cachedBlocks = data.blocks || window.__cachedBlocks || [];
+    const id = unitId || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('rwa_open_unit_id')) || '';
+    const u = window.__cachedUnits.find(function(unit) { return unit.id === id; });
+    if (!u) {
+      showToast('Open the flat again from Units.', 'warning');
+      Router.go('admin-structure');
+      return;
+    }
+    window.__selectedUnit = u;
+    window.rememberOpenUnit(u.id);
+    Router.go('admin-unit-detail');
+  } finally {
+    window.__restoringUnit = false;
+  }
+};
+
 window.viewUnitDetail = function(unitId) {
-  const u = window.__cachedUnits.find(unit => unit.id === unitId);
+  const u = (window.__cachedUnits || []).find(unit => unit.id === unitId);
   if (u) {
     window.__selectedUnit = u;
+    window.rememberOpenUnit(u.id);
     Router.go('admin-unit-detail');
   }
 };
