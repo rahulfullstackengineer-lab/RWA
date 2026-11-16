@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
+import { clearSalaryMarkedPaidByExpense, staffCreditsFor } from '@/app/api/staff/route'
 import fs from 'fs'
 import path from 'path'
 
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
     }
 
     console.log('[STAFF PORTAL API] organizationId:', organizationId)
+    await clearSalaryMarkedPaidByExpense(organizationId)
 
     const org = await prisma.organization.findUnique({
       where: { id: organizationId },
@@ -192,7 +194,17 @@ export async function GET(request: Request) {
       ? ''
       : (shownDuty.locationPost || '')
     const monthlySalary = Number(shownDuty.salaryAmount) || Number(shownStored?.salary) || 0
-    const payDateIsDefault = !shownDuty.salaryDate || shownDuty.salaryDate === '5th of every month' || shownDuty.salaryDate === '—'
+    const credits = staffCreditsFor(organizationId, shownDuty.phone, shownDuty.staffName)
+    const latestCredit = credits[0]
+    let nextSalaryCredit = ''
+    if (latestCredit?.paidAt) {
+      const next = new Date(latestCredit.paidAt)
+      if (!Number.isNaN(next.getTime())) {
+        next.setMonth(next.getMonth() + 1)
+        nextSalaryCredit = next.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      }
+    }
+    const payDateIsDefault = !latestCredit && (!shownDuty.salaryDate || shownDuty.salaryDate === '5th of every month' || shownDuty.salaryDate === '—')
     const attendanceIsDefault = shownDuty.attendancePresent === 26 && shownDuty.attendanceTotal === 28
     const attendancePresent = attendanceIsDefault ? 0 : (shownDuty.attendancePresent || 0)
     const attendanceTotal = attendanceIsDefault ? 0 : (shownDuty.attendanceTotal || 0)
@@ -270,10 +282,13 @@ export async function GET(request: Request) {
       },
       salary: {
         monthlySalary,
-        salaryDate: payDateIsDefault ? '' : shownDuty.salaryDate,
-        nextSalaryCredit: '',
-        paymentStatus: shownDuty.lastPaidDate ? (shownDuty.paymentStatus || '') : '',
-        lastPaidDate: shownDuty.lastPaidDate || '',
+        salaryDate: latestCredit?.paidLabel || (payDateIsDefault ? '' : shownDuty.salaryDate),
+        nextSalaryCredit,
+        paymentStatus: credits.length ? 'PAID' : (shownDuty.lastPaidDate ? (shownDuty.paymentStatus || '') : ''),
+        lastPaidDate: latestCredit?.paidLabel || shownDuty.lastPaidDate || '',
+        creditCount: credits.length,
+        totalCredited: credits.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
+        credits,
         bankAccount: shownStored?.upiId || shownStored?.accountNumber || '',
         attendancePresent,
         attendanceTotal,

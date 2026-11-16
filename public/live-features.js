@@ -150,6 +150,7 @@
     'passes:updated': true,
     'duty:roster-updated': true,
     'sos:alarm-triggered': true,
+    'staff-salary-paid': true,
     'poll-status-changed': true,
     'amenity-booking-updated': true,
   };
@@ -213,6 +214,23 @@
       socket.on('complaint-status-updated', (data) => {
         showToast(`Ticket ${data.ticketNumber || ''} updated to ${data.newStatus}`, 'info')
         updateNotificationBellBadge(true)
+      })
+
+      socket.on('staff-salary-paid', (data) => {
+        const amount = Number(data && (data.amount || (data.payment && data.payment.amount)) || 0)
+        const who = data && data.staffName ? data.staffName : 'this staff member'
+        const line = data && data.title
+          ? data.title
+          : ('₹' + amount.toLocaleString('en-IN') + ' credited to ' + who)
+        if (typeof showToast === 'function') showToast(line, 'success')
+        updateNotificationBellBadge(true)
+        checkUnreadNotificationsBadge()
+        var screen = ''
+        try { screen = (typeof Router !== 'undefined' && Router.current) ? Router.current() : '' } catch (e) {}
+        if (!screen) screen = (window.location.hash || '').replace('#', '')
+        if (String(screen).indexOf('staff-') === 0 && typeof window.loadLiveStaffPortal === 'function') {
+          window.loadLiveStaffPortal()
+        }
       })
 
       socket.on('new-expense-recorded', (data) => {
@@ -838,36 +856,49 @@
   // ------------------------------------------------------------
   window.openRecordExpenseModal = async function () {
     let people = []
+    let payroll = []
     try {
       const res = await (window.apiFetch || fetch)('/api/staff/duty')
       const data = await res.json().catch(function () { return {} })
       people = (data && data.duties) || []
+      const staffRes = await (window.apiFetch || fetch)('/api/staff')
+      const staffData = staffRes && staffRes.ok ? await staffRes.json().catch(function () { return {} }) : {}
+      payroll = staffData.staff || []
     } catch (e) {
-      people = []
+      people = people || []
     }
     const esc = function (value) {
       return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
     }
+    const phoneTail = function (value) {
+      const digits = String(value || '').replace(/\D/g, '')
+      return digits.length >= 10 ? digits.slice(-10) : ''
+    }
     const personOptions = people.length
       ? people.map(function (person) {
           const role = person.role || person.category || 'Staff'
-          return '<option value="' + esc(person.id) + '" data-name="' + esc(person.staffName) + '">' + esc(person.staffName) + ' · ' + esc(role) + '</option>'
+          const saved = payroll.find(function (row) {
+            return phoneTail(row.phone) && phoneTail(row.phone) === phoneTail(person.phone)
+              || (row.name && person.staffName && row.name.trim().toLowerCase() === person.staffName.trim().toLowerCase())
+          })
+          const salary = Number(saved && saved.salary) || Number(person.salaryAmount) || 0
+          return '<option value="' + esc(person.id) + '" data-name="' + esc(person.staffName) + '" data-salary="' + (salary > 0 ? salary : '') + '">' + esc(person.staffName) + ' · ' + esc(role) + '</option>'
         }).join('')
       : '<option value="" disabled>No staff saved yet</option>'
 
     const html = `
       <div>
         <label class="form-label">Expense Title / Description *</label>
-        <input type="text" id="expTitle" required placeholder="e.g. Security guard salary for November" class="form-input" style="width:100%;" />
+        <input type="text" id="expTitle" required placeholder="Filled from the staff member's name" class="form-input" style="width:100%;" oninput="this.dataset.autofill=''" />
       </div>
       <div style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label class="form-label">Amount (₹) *</label>
-          <input type="number" id="expAmount" required placeholder="8500" class="form-input" style="width:100%;" />
+          <input type="number" id="expAmount" required placeholder="Saved monthly salary" class="form-input" style="width:100%;" oninput="this.dataset.autofill=''" />
         </div>
         <div style="flex:1;">
           <label class="form-label">Expense Date *</label>
-          <input type="date" id="expDate" required value="${new Date().toISOString().split('T')[0]}" class="form-input" style="width:100%;" />
+          <input type="date" id="expDate" required value="${new Date().toISOString().split('T')[0]}" class="form-input" style="width:100%;" onchange="window.syncExpenseStaffFields()" />
         </div>
       </div>
       <div style="display:flex; gap:10px;">
@@ -900,7 +931,7 @@
         <div style="display:flex;gap:10px;">
           <div style="flex:1;">
             <label class="form-label">Person name *</label>
-            <input type="text" id="expNewName" placeholder="Full name" class="form-input" style="width:100%;" />
+            <input type="text" id="expNewName" placeholder="Full name" class="form-input" style="width:100%;" oninput="window.syncExpenseStaffFields()" />
           </div>
           <div style="flex:1;">
             <label class="form-label">Phone number *</label>
@@ -920,7 +951,7 @@
       </div>
       <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
         <input type="checkbox" id="expCreditSalary" style="margin-top:2px;" />
-        <span>This is their salary. Update the amount, payout date, and paid status on their staff portal.</span>
+        <span>This is their monthly salary. The amount is saved on their record. It stays unpaid until you disburse the salary.</span>
       </label>
     `
 
@@ -1000,7 +1031,36 @@
     if (fresh) fresh.style.display = isNew ? 'block' : 'none'
     if (credit && isSalary) credit.checked = true
     const selected = person && person.selectedIndex >= 0 ? person.options[person.selectedIndex] : null
-    const staffName = selected ? (selected.getAttribute('data-name') || '') : ''
+    const typedName = document.getElementById('expNewName') ? document.getElementById('expNewName').value.trim() : ''
+    const staffName = isNew ? typedName : (selected ? (selected.getAttribute('data-name') || '') : '')
+    const savedSalary = selected ? Number(selected.getAttribute('data-salary') || 0) : 0
+    const title = document.getElementById('expTitle')
+    const amount = document.getElementById('expAmount')
+    const dateValue = document.getElementById('expDate') ? document.getElementById('expDate').value : ''
+    let monthLabel = ''
+    if (dateValue) {
+      const dated = new Date(dateValue + 'T12:00:00')
+      if (!Number.isNaN(dated.getTime())) monthLabel = dated.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    }
+    const generatedTitle = staffName
+      ? ((isSalary || (credit && credit.checked)) ? 'Salary for ' + staffName : ((cat && cat.value) || 'Expense') + ' for ' + staffName) + (monthLabel ? ' — ' + monthLabel : '')
+      : ''
+    if (title && generatedTitle && (!title.value.trim() || title.dataset.autofill === '1')) {
+      title.value = generatedTitle
+      title.dataset.autofill = '1'
+    }
+    if (title && !generatedTitle && title.dataset.autofill === '1') {
+      title.value = ''
+      title.dataset.autofill = ''
+    }
+    if (amount && savedSalary > 0 && (isSalary || (credit && credit.checked)) && (!amount.value || amount.dataset.autofill === '1')) {
+      amount.value = String(savedSalary)
+      amount.dataset.autofill = '1'
+    }
+    if (amount && (!staffName || !(isSalary || (credit && credit.checked))) && amount.dataset.autofill === '1') {
+      amount.value = ''
+      amount.dataset.autofill = ''
+    }
     if (vendor && staffName && (!vendor.value.trim() || vendor.dataset.autofill === '1')) {
       vendor.value = staffName
       vendor.dataset.autofill = '1'
@@ -2993,6 +3053,35 @@
   }
 
   // ---- Main loader: fetches /api/staff/portal ----------------
+  window.paintStaffSalaryCredits = function(sal) {
+    const box = document.getElementById('staffSalaryCredits')
+    if (!box) return
+    const credits = (sal && sal.credits) || []
+    const esc = function(value) {
+      return String(value || '').replace(/[&<>"]/g, function(ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]
+      })
+    }
+    const money = function(value) { return '₹' + Number(value || 0).toLocaleString('en-IN') }
+    if (!credits.length) {
+      box.innerHTML = '<div style="font-size:15px;font-weight:800;color:#18181B;">Money credited</div>'
+        + '<div style="font-size:13px;color:#3F3F46;margin-top:8px;">No salary has been credited to this account yet. It appears here after Confirm &amp; Disburse Salary.</div>'
+      return
+    }
+    const total = credits.reduce(function(sum, row) { return sum + Number(row.amount || 0) }, 0)
+    const rows = credits.map(function(row) {
+      return '<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #E4E4E7;">'
+        + '<div><div style="font-weight:800;font-size:13px;color:#18181B;">' + esc(row.paidLabel || row.month || 'Credit') + '</div>'
+        + '<div style="font-size:12px;color:#71717A;margin-top:2px;">' + esc(row.method || 'Payment') + (row.reference ? ' · ' + esc(row.reference) : '') + (row.month ? ' · ' + esc(row.month) : '') + '</div></div>'
+        + '<div style="font-weight:800;font-size:14px;color:#166534;">' + money(row.amount) + '</div></div>'
+    }).join('')
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">'
+      + '<div><div style="font-size:15px;font-weight:800;color:#18181B;">Money credited</div>'
+      + '<div style="font-size:12px;color:#71717A;margin-top:4px;">' + credits.length + (credits.length === 1 ? ' payment has been sent to this account.' : ' payments have been sent to this account.') + '</div></div>'
+      + '<div style="text-align:right;"><div style="font-size:11px;color:#71717A;font-weight:700;">TOTAL CREDITED</div><div style="font-size:18px;font-weight:800;color:#18181B;">' + money(total) + '</div></div></div>'
+      + rows
+  }
+
   window.loadLiveStaffPortal = async function() {
     try {
       const orgId = localStorage.getItem('rwa_active_org_id') || ''
@@ -3090,6 +3179,7 @@
         statusBadge.style.borderColor = isPaid ? '#BBF7D0' : (isKnown ? '#FECACA' : '#E4E4E7')
       }
       setTxt('salaryCardLastPaid', sal.lastPaidDate || 'Not recorded')
+      window.paintStaffSalaryCredits(sal)
 
       // Bank info
       const bankEl = document.getElementById('salaryCardBank')

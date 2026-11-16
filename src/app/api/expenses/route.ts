@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
-import { applyPayrollFromExpense, ensureStaffAccount, undoPayrollFromExpense } from '@/app/api/staff/route'
+import { ensureStaffAccount, undoPayrollFromExpense } from '@/app/api/staff/route'
 
 type StaffExpenseLink = {
   staffDutyId?: string
@@ -65,31 +65,8 @@ async function creditStaffSalary(orgId: string, link: StaffExpenseLink, amount: 
     where: { id: duty.id },
     data: {
       salaryAmount: amount > 0 ? amount : duty.salaryAmount,
-      paymentStatus: 'PAID',
-      lastPaidDate: label,
-      salaryDate: label,
     },
   })
-  const tail = phoneTail(duty.phone)
-  if (tail) {
-    const people = await prisma.user.findMany({
-      where: { organizationId: orgId },
-      select: { id: true, phone: true },
-    })
-    const staffUser = people.find((person) => phoneTail(person.phone) === tail)
-    if (staffUser) {
-      await notifyUsers({
-        orgId,
-        userIds: [staffUser.id],
-        title: 'Salary credited',
-        message: `₹${amount.toLocaleString('en-IN')} has been recorded as salary for ${duty.staffName} on ${label}.`,
-        type: 'SALARY',
-        event: 'staff-salary-credited',
-        referenceType: 'STAFF_DUTY',
-        referenceId: duty.id,
-      }).catch(() => {})
-    }
-  }
   return { duty, notes: JSON.stringify(nextNotes), paidLabel: label }
 }
 
@@ -226,9 +203,9 @@ export async function POST(request: Request) {
         vendorName: (vendorName || linkedDuty?.staffName || 'General Vendor').trim(),
         description: description?.trim() || null,
         billDate: when,
-        paidDate: paySalary ? when : null,
-        paidBy: paySalary ? (user.name || 'Admin') : null,
-        status: paySalary ? 'PAID' : 'PENDING_APPROVAL',
+        paidDate: null,
+        paidBy: null,
+        status: 'PENDING_APPROVAL',
         notes: credit?.notes || (link ? JSON.stringify(link) : null),
         createdBy: user.name,
         isRecurring: Boolean(isRecurring),
@@ -236,15 +213,6 @@ export async function POST(request: Request) {
         recurringMonth: recurringMonth || null,
       },
     })
-
-    if (paySalary && linkedDuty) {
-      applyPayrollFromExpense(orgId, { phone: linkedDuty.phone, name: linkedDuty.staffName }, {
-        amount: numAmount,
-        when,
-        paidBy: user.name || 'Admin',
-        expenseId: expense.id,
-      })
-    }
 
     await notifyUsers({
       orgId,
@@ -336,12 +304,6 @@ export async function PATCH(request: Request) {
         paidOn,
       )
       if (credit) notesUpdate = credit.notes
-      applyPayrollFromExpense(payrollOrgId, { phone: link.staffPhone, name: link.staffName }, {
-        amount: Number(existingExpense.totalAmount || existingExpense.amount || 0),
-        when: paidOn,
-        paidBy: user.name || 'Admin',
-        expenseId: existingExpense.id,
-      })
     }
 
     const updated = await prisma.expense.update({

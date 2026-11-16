@@ -213,17 +213,34 @@ window.saveReportFile = function(filename, content, mime) {
         window.__liveBroadcast = null;
         bar.remove();
       };
-      bar.querySelector('.live-broadcast-open').onclick = function() {
-        let role = '';
-        try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
-        const screen = role === 'RESIDENT' ? 'resident-notifications' : (role === 'STAFF' ? 'staff-dashboard' : 'admin-notifications');
-        if (typeof Router !== 'undefined') Router.go(screen);
-      };
     } else if (bar.parentElement !== content) {
       content.insertBefore(bar, content.firstChild);
     }
     bar.className = 'live-broadcast live-broadcast-' + (item.kind || 'info');
     bar.querySelector('.live-broadcast-text').textContent = item.text;
+    const openBtn = bar.querySelector('.live-broadcast-open');
+    if (openBtn) {
+      openBtn.onclick = function() {
+        let role = '';
+        try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
+        const current = typeof Router !== 'undefined' && Router.current ? String(Router.current() || '') : '';
+        const onStaff = document.body.dataset.portal === 'staff' || role === 'STAFF' || current.indexOf('staff-') === 0;
+        if (onStaff) {
+          if (typeof Router !== 'undefined' && current !== 'staff-dashboard') Router.go('staff-dashboard');
+          const text = (window.__liveBroadcast && window.__liveBroadcast.text) || '';
+          const tab = /salary|paid|payout/i.test(text) ? 'salary' : (/pass|visitor|gate/i.test(text) ? 'passes' : (/shift|duty|roster/i.test(text) ? 'duty' : (/intercom|sos|emergency/i.test(text) ? 'emergency' : '')));
+          if (tab) {
+            setTimeout(function() {
+              const btn = document.querySelector('#staffPortalTabs button[data-staff-tab="' + tab + '"]');
+              if (typeof window.switchStaffTab === 'function') window.switchStaffTab(tab, btn);
+            }, current === 'staff-dashboard' ? 0 : 80);
+          }
+          return;
+        }
+        const screen = role === 'RESIDENT' ? 'resident-notifications' : 'admin-notifications';
+        if (typeof Router !== 'undefined') Router.go(screen);
+      };
+    }
   };
 
   // Global Modal Helper for legacy callers

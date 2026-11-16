@@ -30,6 +30,12 @@ export interface StaffRecord {
   aadhaarNumber?: string
   emergencyContact?: string
   portalAccess?: string[]
+  startTime?: string
+  endTime?: string
+  supervisorName?: string
+  supervisorPhone?: string
+  reliefName?: string
+  reliefPhone?: string
   createdAt: string
   updatedAt?: string
 }
@@ -62,7 +68,7 @@ function cleanPortalAccess(value: unknown, department?: string) {
   return picked.length ? Array.from(new Set(picked)) : defaultPortalAccess(department)
 }
 
-function notesWithAccess(existingNotes: string | null | undefined, portalAccess: string[]) {
+function notesWithAccess(existingNotes: string | null | undefined, portalAccess: string[], handover?: { supervisorName?: string; supervisorPhone?: string; reliefName?: string; reliefPhone?: string }) {
   let base: Record<string, unknown> = {}
   try {
     if (existingNotes && existingNotes.trim().startsWith('{')) base = JSON.parse(existingNotes)
@@ -71,6 +77,12 @@ function notesWithAccess(existingNotes: string | null | undefined, portalAccess:
     base = existingNotes ? { note: existingNotes } : {}
   }
   base.portalAccess = portalAccess
+  if (handover) {
+    base.supervisorName = handover.supervisorName || ''
+    base.supervisorPhone = handover.supervisorPhone || ''
+    base.reliefName = handover.reliefName || ''
+    base.reliefPhone = handover.reliefPhone || ''
+  }
   return JSON.stringify(base)
 }
 
@@ -196,11 +208,80 @@ export function applyPayrollFromExpense(orgId: string, match: { phone?: string |
       notes: `Recorded from expense ${payment.expenseId}`,
     })
   }
-  staffMember.lastPaidMonth = month
-  staffMember.lastPaidDate = payment.when.toISOString()
   staffMember.updatedAt = new Date().toISOString()
   saveStoredStaffData(orgId, data)
   return { staffId: staffMember.id, name: staffMember.name, month }
+}
+
+function isExpenseOnlyPayment(notes?: string | null) {
+  return String(notes || '').startsWith('Recorded from expense')
+}
+
+export function staffCreditsFor(orgId: string, phone?: string | null, name?: string | null) {
+  const data = getStoredStaffData(orgId)
+  const tail = phoneTail(phone)
+  const wanted = String(name || '').trim().toLowerCase()
+  const member = data.staff.find((row) => tail && phoneTail(row.phone) === tail)
+    || data.staff.find((row) => wanted && row.name.trim().toLowerCase() === wanted)
+  if (!member) return []
+  return data.payments
+    .filter((row) => row.staffId === member.id && !isExpenseOnlyPayment(row.notes))
+    .map((row) => {
+      const when = new Date(row.paidAt)
+      const paidLabel = Number.isNaN(when.getTime())
+        ? row.paidAt
+        : when.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      return {
+        id: row.id,
+        amount: row.amount,
+        month: row.month,
+        method: row.paymentMethod,
+        reference: row.transactionRef,
+        paidAt: row.paidAt,
+        paidLabel,
+        notes: row.notes || '',
+      }
+    })
+}
+
+export async function clearSalaryMarkedPaidByExpense(orgId: string) {
+  const data = getStoredStaffData(orgId)
+  let changed = false
+  for (const member of data.staff) {
+    const own = data.payments.filter((row) => row.staffId === member.id)
+    const real = own.filter((row) => !isExpenseOnlyPayment(row.notes))
+    const fake = own.filter((row) => isExpenseOnlyPayment(row.notes))
+    if (!fake.length) continue
+    data.payments = data.payments.filter((row) => !(row.staffId === member.id && isExpenseOnlyPayment(row.notes)))
+    changed = true
+    if (!real.length) {
+      member.lastPaidMonth = ''
+      member.lastPaidDate = ''
+    } else {
+      member.lastPaidMonth = real[0].month
+      member.lastPaidDate = real[0].paidAt
+    }
+  }
+  if (changed) saveStoredStaffData(orgId, data)
+
+  const duties = await prisma.staffDuty.findMany({ where: { organizationId: orgId } })
+  for (const duty of duties) {
+    const tail = phoneTail(duty.phone)
+    const member = data.staff.find((row) => (tail && phoneTail(row.phone) === tail) || row.name.trim().toLowerCase() === duty.staffName.trim().toLowerCase())
+    if (!member) continue
+    const real = data.payments.filter((row) => row.staffId === member.id && !isExpenseOnlyPayment(row.notes))
+    if (real.length) continue
+    if (!duty.lastPaidDate && duty.paymentStatus !== 'PAID') continue
+    const paidLabel = duty.lastPaidDate || ''
+    await prisma.staffDuty.update({
+      where: { id: duty.id },
+      data: {
+        paymentStatus: '',
+        lastPaidDate: '',
+        salaryDate: duty.salaryDate === paidLabel ? '' : duty.salaryDate,
+      },
+    })
+  }
 }
 
 export async function ensureStaffAccount(orgId: string, input: { name: string; phone: string; department?: string; salary?: number; role?: string }) {
@@ -362,12 +443,14 @@ export async function GET(request: Request) {
     if (!user.organizationId) return NextResponse.json({ staff: [], payments: [], metrics: {} })
     const orgId = user.organizationId
     const data = getStoredStaffData(orgId)
-    const metrics = calculateStaffMetrics(data.staff, payrollMonthLabel())
-    const staff = data.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => rest)
+    await clearSalaryMarkedPaidByExpense(orgId)
+    const fresh = getStoredStaffData(orgId)
+    const metrics = calculateStaffMetrics(fresh.staff, payrollMonthLabel())
+    const staff = fresh.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => rest)
 
     return NextResponse.json({
       staff,
-      payments: data.payments,
+      payments: fresh.payments,
       metrics,
     })
   } catch (err: unknown) {
@@ -461,7 +544,7 @@ export async function POST(request: Request) {
       const duty = dutyRows.find((row) => phoneTail(row.phone) === tail)
         || dutyRows.find((row) => row.staffName.trim().toLowerCase() === staffMember.name.trim().toLowerCase())
       if (duty) {
-        const paidOn = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        const paidOn = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
         await prisma.staffDuty.update({
           where: { id: duty.id },
           data: {
@@ -474,18 +557,31 @@ export async function POST(request: Request) {
       }
 
       const paidStaff = await findUserByPhone(staffMember.phone)
+      const amountLabel = `₹${payAmount.toLocaleString('en-IN')}`
+      const creditMessage = `${amountLabel} for ${month} has been sent to your account via ${paymentMethod}. Reference ${paymentRecord.transactionRef}.`
+      if (paidStaff) {
+        await notifyUsers({
+          orgId,
+          userIds: [paidStaff.id],
+          title: 'Salary credited to you',
+          message: creditMessage,
+          type: 'STAFF_SALARY',
+          event: 'staff-salary-paid',
+          referenceType: 'STAFF',
+          referenceId: staffMember.id,
+          data: { payment: paymentRecord, staffName: staffMember.name, staffPhone: staffMember.phone, amount: payAmount },
+        })
+      }
       await notifyUsers({
         orgId,
         roles: ['admin'],
-        userIds: paidStaff ? [paidStaff.id] : [],
-        excludeUserId: user.id,
-        title: `Salary paid: ${staffMember.name}`,
-        message: `₹${payAmount.toLocaleString('en-IN')} for ${month} via ${paymentMethod}`,
+        title: `Salary sent to ${staffMember.name}`,
+        message: `${amountLabel} for ${month} was credited via ${paymentMethod}. Reference ${paymentRecord.transactionRef}.`,
         type: 'STAFF_SALARY',
         event: 'staff-salary-paid',
         referenceType: 'STAFF',
         referenceId: staffMember.id,
-        data: { payment: paymentRecord, staff: staffMember },
+        data: { payment: paymentRecord, staffName: staffMember.name, staffPhone: staffMember.phone, amount: payAmount },
       })
 
       await logAudit({
@@ -668,7 +764,7 @@ export async function PATCH(request: Request) {
 
     const orgId = user.organizationId!
     const body = await request.json()
-    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact, portalAccess } = body
+    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact, portalAccess, startTime, endTime, supervisorName, supervisorPhone, reliefName, reliefPhone } = body
 
     if (!id) return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 })
 
@@ -692,6 +788,12 @@ export async function PATCH(request: Request) {
     if (aadhaarNumber !== undefined) staffMember.aadhaarNumber = aadhaarNumber.trim()
     if (emergencyContact !== undefined) staffMember.emergencyContact = emergencyContact.trim()
     if (portalAccess !== undefined) staffMember.portalAccess = cleanPortalAccess(portalAccess, staffMember.department)
+    if (startTime !== undefined) staffMember.startTime = String(startTime).trim()
+    if (endTime !== undefined) staffMember.endTime = String(endTime).trim()
+    if (supervisorName !== undefined) staffMember.supervisorName = String(supervisorName).trim()
+    if (supervisorPhone !== undefined) staffMember.supervisorPhone = String(supervisorPhone).trim()
+    if (reliefName !== undefined) staffMember.reliefName = String(reliefName).trim()
+    if (reliefPhone !== undefined) staffMember.reliefPhone = String(reliefPhone).trim()
     staffMember.updatedAt = new Date().toISOString()
 
     saveStoredStaffData(orgId, data)
@@ -723,17 +825,28 @@ export async function PATCH(request: Request) {
       const access = staffMember.portalAccess && staffMember.portalAccess.length
         ? staffMember.portalAccess
         : defaultPortalAccess(staffMember.department)
-      const dutyNotes = notesWithAccess(existingDuty?.notes, access)
+      const handover = (startTime !== undefined || supervisorName !== undefined || reliefName !== undefined) ? {
+        supervisorName: staffMember.supervisorName || '',
+        supervisorPhone: staffMember.supervisorPhone || '',
+        reliefName: staffMember.reliefName || '',
+        reliefPhone: staffMember.reliefPhone || '',
+      } : undefined
+      const dutyNotes = notesWithAccess(existingDuty?.notes, access, handover)
+      const clock = {
+        ...(staffMember.startTime !== undefined ? { startTime: staffMember.startTime } : {}),
+        ...(staffMember.endTime !== undefined ? { endTime: staffMember.endTime } : {}),
+      }
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: { ...dutyFields, phone: targetPhone, category: cat, notes: dutyNotes },
+          data: { ...dutyFields, ...clock, phone: targetPhone, category: cat, notes: dutyNotes },
         })
       } else {
         await prisma.staffDuty.create({
           data: {
             organizationId: orgId,
             ...dutyFields,
+            ...clock,
             phone: targetPhone,
             category: cat,
             notes: dutyNotes,

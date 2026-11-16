@@ -1417,9 +1417,28 @@ window.openPaySalaryModal = function(staffId) {
 };
 
 // Edit Staff Modal
-window.openEditStaffModal = function(staffId) {
+window.openEditStaffModal = async function(staffId) {
   var staff = (window.__cachedStaffList || []).find(s => s.id === staffId);
   if (!staff) return;
+  var dutyNotes = {};
+  try {
+    var dutyRes = await (window.apiFetch ? window.apiFetch('/api/staff/duty') : fetch('/api/staff/duty'));
+    var dutyData = dutyRes && dutyRes.ok ? await dutyRes.json() : {};
+    var tail = String(staff.phone || '').replace(/\D/g, '').slice(-10);
+    var duty = (dutyData.duties || []).find(function(row) {
+      var rowTail = String(row.phone || '').replace(/\D/g, '').slice(-10);
+      return (tail && rowTail === tail) || (row.staffName && row.staffName.trim().toLowerCase() === String(staff.name || '').trim().toLowerCase());
+    });
+    if (duty) {
+      if (!staff.startTime && duty.startTime) staff.startTime = duty.startTime;
+      if (!staff.endTime && duty.endTime) staff.endTime = duty.endTime;
+      try { if (duty.notes && String(duty.notes).trim().charAt(0) === '{') dutyNotes = JSON.parse(duty.notes); } catch (e) {}
+    }
+  } catch (e) {}
+  var supervisorName = staff.supervisorName || dutyNotes.supervisorName || '';
+  var supervisorPhone = staff.supervisorPhone || dutyNotes.supervisorPhone || '';
+  var reliefName = staff.reliefName || dutyNotes.reliefName || '';
+  var reliefPhone = staff.reliefPhone || dutyNotes.reliefPhone || '';
 
   var html = `
     <div>
@@ -1477,6 +1496,39 @@ window.openEditStaffModal = function(staffId) {
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
+        <label class="form-label">Shift starts</label>
+        <input type="text" id="estfStart" value="${staff.startTime || ''}" placeholder="06:00 AM" class="form-input" style="width:100%;" />
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Shift ends</label>
+        <input type="text" id="estfEnd" value="${staff.endTime || ''}" placeholder="02:00 PM" class="form-input" style="width:100%;" />
+      </div>
+    </div>
+    <div style="font-size:12px;color:#64748B;margin-top:-6px;">These clock hours show on Today’s Shift Hours in the staff portal.</div>
+
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label class="form-label">Supervisor name</label>
+        <input type="text" id="estfSupervisor" value="${supervisorName}" placeholder="Supervisor on this shift" class="form-input" style="width:100%;" />
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Supervisor phone</label>
+        <input type="tel" id="estfSupervisorPhone" value="${supervisorPhone}" placeholder="10-digit mobile" class="form-input" style="width:100%;" />
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label class="form-label">Relief guard name</label>
+        <input type="text" id="estfRelief" value="${reliefName}" placeholder="Guard on the next shift" class="form-input" style="width:100%;" />
+      </div>
+      <div style="flex:1;">
+        <label class="form-label">Relief guard phone</label>
+        <input type="tel" id="estfReliefPhone" value="${reliefPhone}" placeholder="10-digit mobile" class="form-input" style="width:100%;" />
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
         <label class="form-label">Registered UPI ID</label>
         <input type="text" id="estfUpi" value="${staff.upiId || ''}" class="form-input" style="width:100%;" />
       </div>
@@ -1510,6 +1562,12 @@ window.openEditStaffModal = function(staffId) {
     var salary = parseFloat(document.getElementById('estfSalary').value) || 0;
     var status = document.getElementById('estfStatus').value;
     var shift = document.getElementById('estfShift').value;
+    var startTime = (document.getElementById('estfStart')?.value || '').trim();
+    var endTime = (document.getElementById('estfEnd')?.value || '').trim();
+    var supervisorNameValue = (document.getElementById('estfSupervisor')?.value || '').trim();
+    var supervisorPhone = (document.getElementById('estfSupervisorPhone')?.value || '').trim();
+    var reliefName = (document.getElementById('estfRelief')?.value || '').trim();
+    var reliefPhone = (document.getElementById('estfReliefPhone')?.value || '').trim();
     var upiId = document.getElementById('estfUpi').value.trim();
     var aadhaarNumber = document.getElementById('estfAadhaar').value.trim();
     var pin = (document.getElementById('estfPin')?.value || '').trim();
@@ -1519,7 +1577,7 @@ window.openEditStaffModal = function(staffId) {
       throw new Error('Portal access required');
     }
 
-    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber, portalAccess };
+    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, upiId, aadhaarNumber, portalAccess };
     if (pin && pin.length >= 4) {
       updatePayload.pin = pin;
     }

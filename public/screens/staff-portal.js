@@ -257,6 +257,11 @@ Screens['staff-dashboard'] = function() {
           </div>
         </div>
 
+        <div id="staffSalaryCredits" style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:18px;">
+          <div style="font-size:15px;font-weight:800;color:#18181B;">Money credited</div>
+          <div style="font-size:12px;color:#71717A;margin-top:4px;">Each confirmed salary disbursement appears here.</div>
+        </div>
+
         <!-- Detailed Salary Breakdown Slip -->
         <div style="background:var(--bg-surface,#fff);border:1px solid var(--border,#E2E8F0);border-radius:14px;padding:22px;">
           <div class="staff-slip-head" style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border,#F1F5F9);padding-bottom:12px;margin-bottom:16px;">
