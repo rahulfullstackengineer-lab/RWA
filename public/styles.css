@@ -851,13 +851,28 @@ body {
 
 .content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden !important;
   min-width: 0 !important;
   max-width: 100% !important;
+  min-height: 0;
   box-sizing: border-box !important;
-  padding: 24px 24px 80px 24px;
+  padding: 24px;
   -webkit-overflow-scrolling: touch;
+}
+
+.page-sheet {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0 !important;
+  min-height: 280px;
+}
+
+.page-sheet > div {
+  flex: 1 1 auto;
 }
 
 .content::-webkit-scrollbar { width: 6px; }
@@ -7724,7 +7739,26 @@ body.mobile-frame-view .cutora-otp-digit {
   background: #18181B !important;
 }
 .auth-bottom-cover {
-  display: none;
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 22px;
+}
+.cutora-auth-modern.cutora-auth-screen {
+  min-height: 100dvh;
+  height: 100dvh;
+}
+.cutora-auth-modern .cutora-card-panel {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cutora-auth-modern .cutora-form-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 @media (max-width: 1024px) {
   .cutora-auth-modern.cutora-auth-screen {

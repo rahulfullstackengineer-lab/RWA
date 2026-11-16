@@ -194,17 +194,70 @@ export async function GET(request: Request) {
       ? ''
       : (shownDuty.locationPost || '')
     const monthlySalary = Number(shownDuty.salaryAmount) || Number(shownStored?.salary) || 0
-    const credits = staffCreditsFor(organizationId, shownDuty.phone, shownDuty.staffName)
-    const latestCredit = credits[0]
+    const disbursements = staffCreditsFor(organizationId, shownDuty.phone, shownDuty.staffName).map((row) => ({
+      ...row,
+      status: 'PAID',
+      category: 'Staff Salary',
+      title: row.month ? `Salary for ${row.month}` : 'Salary disbursement',
+      salary: true,
+    }))
+    const coveredExpenseIds = new Set(
+      disbursements
+        .map((row) => (String(row.notes || '').match(/Expense\s+(\S+)/) || [])[1])
+        .filter(Boolean),
+    )
+    const personName = shownDuty.staffName.trim().toLowerCase()
+    const personPhone = usablePhone(shownDuty.phone)
+    const orgExpenses = await prisma.expense.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    })
+    const expenseCredits = orgExpenses.flatMap((expense) => {
+      if (coveredExpenseIds.has(expense.id)) return []
+      let link: { staffDutyId?: string; staffName?: string; staffPhone?: string; salaryPayment?: boolean } | null = null
+      if (expense.notes && expense.notes.trim().startsWith('{')) {
+        try { link = JSON.parse(expense.notes) } catch { link = null }
+      }
+      const linkedByDuty = !!link?.staffDutyId && link.staffDutyId === shownDuty.id
+      const linkedByPhone = !!personPhone && usablePhone(link?.staffPhone) === personPhone
+      const linkedName = String(link?.staffName || '').trim().toLowerCase()
+      const vendorName = String(expense.vendorName || '').trim().toLowerCase()
+      const linkedByName = !!personName && (linkedName === personName || vendorName === personName)
+      if (!linkedByDuty && !linkedByPhone && !linkedByName) return []
+      const when = expense.status === 'PAID'
+        ? (expense.paidDate || expense.billDate || expense.createdAt)
+        : (expense.billDate || expense.createdAt)
+      const category = expense.category || 'Expense'
+      const salary = !!(link?.salaryPayment) || /salary/i.test(category) || /salary/i.test(expense.title || '')
+      const paidLabel = when.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      return [{
+        id: expense.id,
+        amount: Number(expense.totalAmount || expense.amount) || 0,
+        month: '',
+        method: category,
+        reference: expense.title,
+        paidAt: when.toISOString(),
+        paidLabel,
+        notes: '',
+        status: expense.status || 'PENDING_APPROVAL',
+        category,
+        title: expense.title,
+        salary,
+      }]
+    })
+    const credits = [...disbursements, ...expenseCredits].sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
+    const paidSalary = credits.filter((row) => row.status === 'PAID' && row.salary)
+    const paidAny = credits.filter((row) => row.status === 'PAID')
+    const latestSalary = paidSalary[0]
     let nextSalaryCredit = ''
-    if (latestCredit?.paidAt) {
-      const next = new Date(latestCredit.paidAt)
+    if (latestSalary?.paidAt) {
+      const next = new Date(latestSalary.paidAt)
       if (!Number.isNaN(next.getTime())) {
         next.setMonth(next.getMonth() + 1)
         nextSalaryCredit = next.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
       }
     }
-    const payDateIsDefault = !latestCredit && (!shownDuty.salaryDate || shownDuty.salaryDate === '5th of every month' || shownDuty.salaryDate === '—')
+    const payDateIsDefault = !latestSalary && (!shownDuty.salaryDate || shownDuty.salaryDate === '5th of every month' || shownDuty.salaryDate === '—')
     const attendanceIsDefault = shownDuty.attendancePresent === 26 && shownDuty.attendanceTotal === 28
     const attendancePresent = attendanceIsDefault ? 0 : (shownDuty.attendancePresent || 0)
     const attendanceTotal = attendanceIsDefault ? 0 : (shownDuty.attendanceTotal || 0)
@@ -282,12 +335,12 @@ export async function GET(request: Request) {
       },
       salary: {
         monthlySalary,
-        salaryDate: latestCredit?.paidLabel || (payDateIsDefault ? '' : shownDuty.salaryDate),
+        salaryDate: latestSalary?.paidLabel || (payDateIsDefault ? '' : ''),
         nextSalaryCredit,
-        paymentStatus: credits.length ? 'PAID' : (shownDuty.lastPaidDate ? (shownDuty.paymentStatus || '') : ''),
-        lastPaidDate: latestCredit?.paidLabel || shownDuty.lastPaidDate || '',
+        paymentStatus: paidAny.length ? 'PAID' : '',
+        lastPaidDate: paidAny[0]?.paidLabel || '',
         creditCount: credits.length,
-        totalCredited: credits.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
+        totalCredited: paidAny.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
         credits,
         bankAccount: shownStored?.upiId || shownStored?.accountNumber || '',
         attendancePresent,

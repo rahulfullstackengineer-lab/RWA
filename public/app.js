@@ -163,7 +163,11 @@ window.saveReportFile = function(filename, content, mime) {
     toast.querySelector('.app-toast-text').textContent = text;
     container.prepend(toast);
 
-    if (typeof window.pinLiveBroadcast === 'function' && !/^(processing|executing|loading|saving|connecting)\b/i.test(text)) {
+    var role = '';
+    try { role = JSON.parse(localStorage.getItem('rwa_user') || '{}').role || ''; } catch (e) {}
+    var onStaff = (document.body && document.body.dataset.portal === 'staff') || role === 'STAFF' || (location.hash || '').indexOf('staff-') !== -1;
+    var expenseNotice = /expense/i.test(text);
+    if (typeof window.pinLiveBroadcast === 'function' && !/^(processing|executing|loading|saving|connecting)\b/i.test(text) && !(onStaff && expenseNotice)) {
       window.pinLiveBroadcast({ text: text, kind: kind });
     }
 

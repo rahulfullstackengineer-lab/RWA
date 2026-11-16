@@ -167,7 +167,7 @@ export async function POST(request: Request) {
         category: newExpense.category,
         vendorName: newExpense.vendorName,
         status: newExpense.status,
-      }, { orgId })
+      }, { orgId, roles: ['admin'] })
     }
 
     // Log Audit Trail

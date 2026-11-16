@@ -199,7 +199,7 @@ Screens['admin-expenses'] = function() {
       </div>
 
       <!-- Desktop Table -->
-      <div class="card" style="padding:0;overflow:hidden;margin-bottom:80px;" id="expTableCard">
+      <div class="card page-sheet" style="padding:0;overflow:hidden;" id="expTableCard">
         <div style="overflow-x:auto;">
           <table class="table" style="min-width:860px;">
             <thead>

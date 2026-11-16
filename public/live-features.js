@@ -87,6 +87,53 @@
     }
   }
 
+  function currentScreen() {
+    let screen = ''
+    try { screen = (typeof Router !== 'undefined' && Router.current) ? Router.current() : '' } catch (e) {}
+    if (!screen) screen = (window.location.hash || '').replace('#', '')
+    return String(screen || '')
+  }
+
+  function onStaffSurface() {
+    const role = getStoredUser().role
+    return role === 'STAFF'
+      || (document.body && document.body.dataset.portal === 'staff')
+      || currentScreen().indexOf('staff-') === 0
+  }
+
+  function isExpenseNotice(note) {
+    const type = String((note && (note.type || note.event)) || '')
+    const title = String((note && (note.title || note.text)) || '')
+    const message = String((note && note.message) || '')
+    return type.toUpperCase() === 'EXPENSE'
+      || type === 'new-expense-recorded'
+      || type === 'expense-status-updated'
+      || /expense/i.test(title + ' ' + message)
+  }
+
+  function noticeFitsSurface(note) {
+    const role = audienceRole(getStoredUser().role)
+    const audience = note && note.audience
+    if (Array.isArray(audience) && audience.length && audience.indexOf(role) === -1 && !(note && note.userId)) return false
+    if (role === 'resident' && isExpenseNotice(note)) return false
+    if (!onStaffSurface()) return role !== 'staff' || !isExpenseNotice(note)
+    if (isExpenseNotice(note)) return false
+    const title = String((note && (note.title || note.text)) || '')
+    const type = String((note && (note.type || note.event)) || '').toUpperCase()
+    if (/salary sent to/i.test(title)) return false
+    if (type === 'STAFF_SALARY' || /salary credited to you/i.test(title)) return true
+    if (/pass|visitor|gate|duty|shift|sos|emergency|complaint|ticket/i.test(title + ' ' + String((note && note.message) || ''))) return true
+    return false
+  }
+
+  function hideMismatchedLiveBar() {
+    const item = window.__liveBroadcast
+    if (!item) return
+    if (noticeFitsSurface({ title: item.text, text: item.text, type: item.kind })) return
+    window.__liveBroadcast = null
+    if (typeof window.mountLiveBroadcast === 'function') window.mountLiveBroadcast()
+  }
+
   function updateNotificationBellBadge(showDot = true) {
     const dot = document.getElementById('headerNotifDot');
     if (dot) {
@@ -103,7 +150,8 @@
         const data = await res.json();
         const unreadCount = data.unreadCount || 0;
         updateNotificationBellBadge(unreadCount > 0);
-        const newest = (data.notifications || []).find(function(note) { return !note.isRead; });
+        const newest = (data.notifications || []).find(function(note) { return !note.isRead && noticeFitsSurface(note); });
+        hideMismatchedLiveBar();
         if (newest && typeof window.pinLiveBroadcast === 'function') {
           const line = newest.title ? (newest.title + (newest.message ? '. ' + newest.message : '')) : newest.message;
           window.pinLiveBroadcast({ id: 'note:' + newest.id, text: line, kind: 'info', fromInbox: true, createdAt: newest.createdAt });
@@ -171,11 +219,7 @@
       })
 
       socket.on('live-notification', (data) => {
-        const mine = audienceRole(getStoredUser().role);
-        const audience = data && data.audience;
-        if (Array.isArray(audience) && audience.length && audience.indexOf(mine) === -1 && !data.userId) {
-          return;
-        }
+        if (!noticeFitsSurface(data)) return;
         updateNotificationBellBadge(true);
         checkUnreadNotificationsBadge();
         if (data && data.event && socketEventsWithOwnToast[data.event]) return;
@@ -217,23 +261,26 @@
       })
 
       socket.on('staff-salary-paid', (data) => {
+        const title = data && data.title ? data.title : ''
+        const forThisStaff = /credited to you/i.test(title)
+        if (onStaffSurface() && !forThisStaff) {
+          if (typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
+          return
+        }
+        if (!onStaffSurface() && forThisStaff && audienceRole(getStoredUser().role) !== 'staff') return
         const amount = Number(data && (data.amount || (data.payment && data.payment.amount)) || 0)
         const who = data && data.staffName ? data.staffName : 'this staff member'
-        const line = data && data.title
-          ? data.title
-          : ('₹' + amount.toLocaleString('en-IN') + ' credited to ' + who)
+        const line = title || ('₹' + amount.toLocaleString('en-IN') + ' credited to ' + who)
         if (typeof showToast === 'function') showToast(line, 'success')
         updateNotificationBellBadge(true)
         checkUnreadNotificationsBadge()
-        var screen = ''
-        try { screen = (typeof Router !== 'undefined' && Router.current) ? Router.current() : '' } catch (e) {}
-        if (!screen) screen = (window.location.hash || '').replace('#', '')
-        if (String(screen).indexOf('staff-') === 0 && typeof window.loadLiveStaffPortal === 'function') {
+        if (currentScreen().indexOf('staff-') === 0 && typeof window.loadLiveStaffPortal === 'function') {
           window.loadLiveStaffPortal()
         }
       })
 
       socket.on('new-expense-recorded', (data) => {
+        if (onStaffSurface() || audienceRole(getStoredUser().role) !== 'admin') return
         showToast(`🧾 Expense of ₹${Number(data.amount).toLocaleString('en-IN')} (${data.title}) recorded!`, 'info')
       })
 
@@ -3063,26 +3110,40 @@
       })
     }
     const money = function(value) { return '₹' + Number(value || 0).toLocaleString('en-IN') }
+    const statusLabel = function(status) {
+      const value = String(status || '').toUpperCase()
+      if (value === 'PAID') return 'Paid'
+      if (value === 'APPROVED') return 'Approved'
+      if (value === 'REJECTED') return 'Rejected'
+      if (value === 'PENDING_APPROVAL') return 'Pending'
+      return value || 'Recorded'
+    }
     if (!credits.length) {
-      box.innerHTML = '<div style="font-size:15px;font-weight:800;color:#18181B;">Money credited</div>'
-        + '<div style="font-size:13px;color:#3F3F46;margin-top:8px;">No salary has been credited to this account yet. It appears here after Confirm &amp; Disburse Salary.</div>'
+      box.innerHTML = '<div style="font-size:15px;font-weight:800;color:#18181B;">Payments for this person</div>'
+        + '<div style="font-size:13px;color:#3F3F46;margin-top:8px;">No salary or other expense is linked to this account yet.</div>'
       return
     }
-    const total = credits.reduce(function(sum, row) { return sum + Number(row.amount || 0) }, 0)
+    const paidRows = credits.filter(function(row) { return String(row.status || 'PAID').toUpperCase() === 'PAID' })
+    const total = paidRows.reduce(function(sum, row) { return sum + Number(row.amount || 0) }, 0)
     const rows = credits.map(function(row) {
+      const status = String(row.status || 'PAID').toUpperCase()
+      const color = status === 'PAID' ? '#166534' : (status === 'REJECTED' ? '#71717A' : '#92400E')
+      const detail = [row.category || row.method || 'Expense', row.title || row.reference || '', row.paidLabel || row.month || ''].filter(Boolean).join(' · ')
       return '<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #E4E4E7;">'
-        + '<div><div style="font-weight:800;font-size:13px;color:#18181B;">' + esc(row.paidLabel || row.month || 'Credit') + '</div>'
-        + '<div style="font-size:12px;color:#71717A;margin-top:2px;">' + esc(row.method || 'Payment') + (row.reference ? ' · ' + esc(row.reference) : '') + (row.month ? ' · ' + esc(row.month) : '') + '</div></div>'
-        + '<div style="font-weight:800;font-size:14px;color:#166534;">' + money(row.amount) + '</div></div>'
+        + '<div><div style="font-weight:800;font-size:13px;color:#18181B;">' + esc(row.title || row.reference || row.category || 'Payment') + '</div>'
+        + '<div style="font-size:12px;color:#71717A;margin-top:2px;">' + esc(detail) + '</div></div>'
+        + '<div style="text-align:right;"><div style="font-weight:800;font-size:14px;color:' + color + ';">' + money(row.amount) + '</div>'
+        + '<div style="font-size:11px;font-weight:700;color:' + color + ';">' + statusLabel(status) + '</div></div></div>'
     }).join('')
     box.innerHTML = '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">'
-      + '<div><div style="font-size:15px;font-weight:800;color:#18181B;">Money credited</div>'
-      + '<div style="font-size:12px;color:#71717A;margin-top:4px;">' + credits.length + (credits.length === 1 ? ' payment has been sent to this account.' : ' payments have been sent to this account.') + '</div></div>'
-      + '<div style="text-align:right;"><div style="font-size:11px;color:#71717A;font-weight:700;">TOTAL CREDITED</div><div style="font-size:18px;font-weight:800;color:#18181B;">' + money(total) + '</div></div></div>'
+      + '<div><div style="font-size:15px;font-weight:800;color:#18181B;">Payments for this person</div>'
+      + '<div style="font-size:12px;color:#71717A;margin-top:4px;">Salary and other expenses linked to this account, including maintenance.</div></div>'
+      + '<div style="text-align:right;"><div style="font-size:11px;color:#71717A;font-weight:700;">TOTAL PAID</div><div style="font-size:18px;font-weight:800;color:#18181B;">' + money(total) + '</div></div></div>'
       + rows
   }
 
   window.loadLiveStaffPortal = async function() {
+    if (typeof hideMismatchedLiveBar === 'function') hideMismatchedLiveBar()
     try {
       const orgId = localStorage.getItem('rwa_active_org_id') || ''
       const url   = '/api/staff/portal' + (orgId ? '?orgId=' + encodeURIComponent(orgId) : '')

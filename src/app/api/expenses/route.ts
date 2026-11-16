@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import { ensureStaffAccount, undoPayrollFromExpense } from '@/app/api/staff/route'
+import { findUserByPhone } from '@/lib/phone'
 
 type StaffExpenseLink = {
   staffDutyId?: string
@@ -318,6 +319,23 @@ export async function PATCH(request: Request) {
     })
 
     const targetOrgId = user.organizationId || updated.organizationId
+    if (targetOrgId && status === 'PAID' && link?.staffPhone) {
+      const paidStaff = await findUserByPhone(link.staffPhone)
+      if (paidStaff) {
+        const amountLabel = `₹${Number(updated.totalAmount || updated.amount || 0).toLocaleString('en-IN')}`
+        await notifyUsers({
+          orgId: targetOrgId,
+          userIds: [paidStaff.id],
+          title: 'Payment credited to you',
+          message: `${amountLabel} for ${updated.category || 'Expense'} (${updated.title}) has been marked paid.`,
+          type: 'STAFF_SALARY',
+          event: 'staff-salary-paid',
+          referenceType: 'EXPENSE',
+          referenceId: updated.id,
+          data: { amount: updated.totalAmount, staffName: link.staffName, staffPhone: link.staffPhone },
+        })
+      }
+    }
     if (targetOrgId) {
       await notifyUsers({
         orgId: targetOrgId,
