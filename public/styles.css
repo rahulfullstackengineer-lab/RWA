@@ -875,6 +875,124 @@ body {
   flex: 1 1 auto;
 }
 
+.page-sheet > .resident-pay-panel,
+.page-sheet > .res-action-bar-card,
+.page-sheet > .visitor-pass-callout {
+  flex: 0 0 auto;
+}
+
+.resident-pay-panel {
+  flex: 0 0 auto;
+  height: auto;
+  overflow: visible;
+  background: #FFFFFF;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  padding: 16px;
+  margin: 0 0 16px;
+}
+.resident-pay-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.resident-pay-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 800;
+  color: #18181B;
+  letter-spacing: 0;
+}
+.resident-pay-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: #52525B;
+  font-size: 12px;
+  font-weight: 650;
+}
+.resident-pay-pill {
+  background: #F4F4F5;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  color: #18181B;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.resident-pay-ledger {
+  flex: 0 0 auto;
+  background: #18181B;
+  color: #FFFFFF;
+  border: 0;
+  border-radius: 2px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.resident-pay-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.resident-pay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 118px;
+  text-align: left;
+  background: #F4F4F5;
+  border: 1px solid #E4E4E7;
+  border-radius: 2px;
+  padding: 14px;
+  cursor: pointer;
+  color: #18181B;
+}
+.resident-pay-card strong {
+  font-size: 18px;
+  line-height: 1.25;
+  font-weight: 800;
+  color: #18181B;
+}
+.resident-pay-card span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #52525B;
+}
+.resident-pay-label {
+  font-size: 11px !important;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #71717A !important;
+}
+.resident-pay-card-due {
+  background: #18181B;
+  border-color: #18181B;
+  cursor: pointer;
+}
+.resident-pay-card-due strong,
+.resident-pay-card-due span,
+.resident-pay-card-due .resident-pay-label {
+  color: #FFFFFF !important;
+}
+@media (max-width: 980px) {
+  .resident-pay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .resident-pay-head { flex-direction: column; }
+  .resident-pay-grid { grid-template-columns: 1fr 1fr; }
+  .resident-pay-card { min-height: 108px; padding: 12px; }
+  .resident-pay-card strong { font-size: 16px; }
+}
+
 .content::-webkit-scrollbar { width: 6px; }
 .content::-webkit-scrollbar-track { background: transparent; }
 .content::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }

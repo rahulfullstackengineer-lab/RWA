@@ -35,85 +35,43 @@ Screens['resident-dashboard'] = function() {
       <!-- Admin Flat Connection / Inspection Top Banner -->
       <div id="adminUnitConnectTopBanner" style="display:none;margin-bottom:18px;"></div>
 
-      <!-- 1. Bento Top Dark Section: Payments & Dues Command Center (Image 2 Inspiration) -->
-      <div class="res-bento-dark-bar">
-        <div class="res-bento-dark-header">
+      <section class="resident-pay-panel">
+        <div class="resident-pay-head">
           <div>
-            <div class="res-bento-dark-title">
-              <span>Payments &amp; Maintenance</span>
-            </div>
-            <div class="res-bento-dark-meta">
-              <span id="residentHeroUnitBadge" class="bento-unit-pill">Unit ${unitNum} · ${blockName} · Verified Resident</span>
-              <span id="residentHeroPhone" style="font-size:12px;color:#94A3B8;font-weight:600;">${userPhone ? `📱 +91 ${userPhone}` : ''}</span>
+            <h2 class="resident-pay-title">Payments &amp; Maintenance</h2>
+            <div class="resident-pay-meta">
+              <span id="residentHeroUnitBadge" class="resident-pay-pill">Unit ${unitNum} · ${blockName}</span>
+              <span id="residentHeroPhone">${userPhone ? '+91 ' + userPhone : ''}</span>
               <div id="residentHeroFlatPicker" class="flat-picker"></div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <div class="bento-time-dropdown">
-              <span>This billing cycle</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="Router.go('resident-bills')" style="color:#D8F833;border:1px solid rgba(216,248,51,0.3);border-radius:99px;font-size:11.5px;padding:4px 12px;font-weight:700;">
-              View Ledger ↗
-            </button>
-          </div>
+          <button type="button" class="resident-pay-ledger" onclick="Router.go('resident-bills')">View ledger</button>
         </div>
-
-        <!-- 4 Bento Metric Cards inside Dark Bar -->
-        <div class="res-bento-dark-grid">
-          <!-- Card 1: Neon Lime Outstanding Dues & Instant Pay -->
-          <div class="res-bento-neon-card" onclick="Router.go('resident-bills')">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.04em;">Outstanding Dues</span>
-              <div class="bento-circle-arrow">↗</div>
-            </div>
-            <div>
-              <div id="residentHeroBalanceAmount" style="font-size:28px;font-weight:800;letter-spacing:-0.03em;color:#0F172A;line-height:1.1;">₹0.00</div>
-              <div id="residentHeroBalanceStatus" style="font-size:11.5px;font-weight:700;color:#15803D;margin-top:4px;">
-                ✓ All dues cleared
-              </div>
-            </div>
-            <div id="residentHeroPayBtnWrap" style="margin-top:6px;display:none;"></div>
+        <div class="resident-pay-grid">
+          <div class="resident-pay-card resident-pay-card-due" onclick="Router.go('resident-bills')">
+            <span class="resident-pay-label">Outstanding dues</span>
+            <strong id="residentHeroBalanceAmount">₹0.00</strong>
+            <span id="residentHeroBalanceStatus">All dues cleared</span>
+            <span id="residentHeroPayBtnWrap" style="display:none;"></span>
           </div>
-
-          <!-- Card 2: Monthly Maintenance Fee -->
-          <div class="res-bento-glass-card" onclick="Router.go('resident-bills')">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Monthly Maintenance</span>
-              <div class="bento-circle-arrow-dark">↗</div>
-            </div>
-            <div>
-              <div id="statDescInvoices" style="font-size:18px;font-weight:800;color:#FFFFFF;line-height:1.2;">Loading bills...</div>
-              <div style="font-size:11px;color:#64748B;margin-top:4px;">Official society ledger</div>
-            </div>
-          </div>
-
-          <!-- Card 3: Helpdesk & Active Service Tickets -->
-          <div class="res-bento-glass-card" onclick="Router.go('resident-complaints')">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Service Requests</span>
-              <div class="bento-circle-arrow-dark">↗</div>
-            </div>
-            <div>
-              <div id="statDescComplaints" style="font-size:18px;font-weight:800;color:#FFFFFF;line-height:1.2;">Loading tickets...</div>
-              <div style="font-size:11px;color:#64748B;margin-top:4px;">Plumbing, electrical &amp; lifts</div>
-            </div>
-          </div>
-
-          <!-- Card 4: Open Facilities & Amenities -->
-          <div class="res-bento-glass-card" onclick="Router.go('resident-amenities')">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;">Clubhouse &amp; Sports</span>
-              <div class="bento-circle-arrow-dark">↗</div>
-            </div>
-            <div>
-              <div id="statDescAmenities" style="font-size:18px;font-weight:800;color:#FFFFFF;line-height:1.2;">Loading facilities...</div>
-              <div id="statDescAmenitiesSub" style="font-size:11px;color:#64748B;margin-top:4px;">Society facilities &amp; spaces</div>
-            </div>
-          </div>
+          <button type="button" class="resident-pay-card" onclick="Router.go('resident-bills')">
+            <span class="resident-pay-label">Monthly maintenance</span>
+            <strong id="statDescInvoices">Loading bills...</strong>
+            <span>Official society ledger</span>
+          </button>
+          <button type="button" class="resident-pay-card" onclick="Router.go('resident-complaints')">
+            <span class="resident-pay-label">Service requests</span>
+            <strong id="statDescComplaints">Loading tickets...</strong>
+            <span>Plumbing, electrical and lifts</span>
+          </button>
+          <button type="button" class="resident-pay-card" onclick="Router.go('resident-amenities')">
+            <span class="resident-pay-label">Clubhouse and sports</span>
+            <strong id="statDescAmenities">Loading facilities...</strong>
+            <span id="statDescAmenitiesSub">Society facilities and spaces</span>
+          </button>
         </div>
         <div id="statDescNotices" style="display:none;"></div>
-      </div>
+      </section>
 
       <!-- 2. Greeting & Quick Action Bar -->
       <div class="res-action-bar-card">
@@ -1058,22 +1016,22 @@ window.loadLiveResidentDashboard = async function() {
     if (balEl && statusEl) {
       if (pendingBalance > 0) {
         balEl.textContent = '₹' + pendingBalance.toLocaleString('en-IN');
-        balEl.style.color = '#0F172A';
-        statusEl.innerHTML = `<span style="color:#B91C1C;font-weight:700;">⚠️ ₹${pendingBalance.toLocaleString('en-IN')} Due</span>`;
+        balEl.style.color = '#FFFFFF';
+        statusEl.innerHTML = `<span style="color:#FCA5A5;font-weight:700;">₹${pendingBalance.toLocaleString('en-IN')} due</span>`;
         if (payBtnWrap && unpaidInvoices.length > 0) {
           payBtnWrap.style.display = 'block';
           const oldestInv = unpaidInvoices[unpaidInvoices.length - 1];
           payBtnWrap.innerHTML = `
-            <button class="btn btn-primary btn-xs w-full" style="font-size:11px;padding:4px 8px;font-weight:700;"
-              onclick="triggerRazorpayPayment('${oldestInv.id}', ${oldestInv.balanceAmount || oldestInv.totalAmount}, 'Flat ${unitNum}')">
-              ⚡ Pay Now
+            <button type="button" style="font-size:12px;padding:6px 10px;font-weight:700;background:#FFFFFF;color:#18181B;border:0;border-radius:2px;cursor:pointer;"
+              onclick="event.stopPropagation(); triggerRazorpayPayment('${oldestInv.id}', ${oldestInv.balanceAmount || oldestInv.totalAmount}, 'Flat ${unitNum}')">
+              Pay now
             </button>
           `;
         }
       } else {
         balEl.textContent = '₹0.00';
-        balEl.style.color = '#0F172A';
-        statusEl.innerHTML = `<span style="color:#15803D;font-weight:700;">✓ All dues cleared</span>`;
+        balEl.style.color = '#FFFFFF';
+        statusEl.innerHTML = `<span style="color:#FFFFFF;font-weight:700;">All dues cleared</span>`;
         if (payBtnWrap) payBtnWrap.style.display = 'none';
       }
     }
@@ -1086,13 +1044,13 @@ window.loadLiveResidentDashboard = async function() {
     if (statInv) {
       if (pendingBalance > 0) {
         statInv.textContent = `₹${pendingBalance.toLocaleString('en-IN')} due · ${unpaidInvoices.length} bill(s)`;
-        statInv.style.color = '#FCA5A5';
+        statInv.style.color = '#991B1B';
       } else if (latestInv) {
         statInv.textContent = `₹${(latestInv.totalAmount || 0).toLocaleString('en-IN')} / mo · All clear`;
-        statInv.style.color = '#86EFAC';
+        statInv.style.color = '#166534';
       } else {
-        statInv.textContent = `✓ All clear · 0 unpaid bills`;
-        statInv.style.color = '#86EFAC';
+        statInv.textContent = 'All clear · 0 unpaid bills';
+        statInv.style.color = '#166534';
       }
     }
 
