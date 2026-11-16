@@ -534,6 +534,10 @@ window.openQuickReassignModal = function(dutyId) {
 window.openEditStaffDutyModal = function(dutyId) {
   const duty = (window._staffDutyData || []).find(d => d.id === dutyId);
   if (!duty) return;
+  let handover = {};
+  try {
+    if (duty.notes && String(duty.notes).trim().charAt(0) === '{') handover = JSON.parse(duty.notes);
+  } catch (e) { handover = {}; }
 
   const formHtml = `
     <div style="display:flex;flex-direction:column;gap:12px;">
@@ -605,7 +609,28 @@ window.openEditStaffDutyModal = function(dutyId) {
         </div>
         <div>
           <label style="display:block;font-size:12px;font-weight:700;color:#166534;margin-bottom:4px;">💵 Monthly Salary (₹)</label>
-          <input type="number" id="dutyEditSalary" class="form-input" value="${duty.salaryAmount || 22500}" style="width:100%;font-size:13px;background:#fff;" />
+          <input type="number" id="dutyEditSalary" class="form-input" value="${duty.salaryAmount || ''}" style="width:100%;font-size:13px;background:#fff;" />
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Supervisor name</label>
+          <input type="text" id="dutyEditSupervisor" class="form-input" value="${handover.supervisorName || ''}" placeholder="Who this guard reports to" style="width:100%;font-size:13px;" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Supervisor phone</label>
+          <input type="tel" id="dutyEditSupervisorPhone" class="form-input" value="${handover.supervisorPhone || ''}" placeholder="10-digit mobile" style="width:100%;font-size:13px;" />
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Relief guard name</label>
+          <input type="text" id="dutyEditRelief" class="form-input" value="${handover.reliefName || ''}" placeholder="Guard who takes the next shift" style="width:100%;font-size:13px;" />
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:4px;">Relief guard phone</label>
+          <input type="tel" id="dutyEditReliefPhone" class="form-input" value="${handover.reliefPhone || ''}" placeholder="10-digit mobile" style="width:100%;font-size:13px;" />
         </div>
       </div>
 
@@ -643,6 +668,10 @@ window.openEditStaffDutyModal = function(dutyId) {
       const altPhone = document.getElementById('dutyEditAltPhone')?.value;
       const pin = document.getElementById('dutyEditPin')?.value;
       const salaryAmount = document.getElementById('dutyEditSalary')?.value;
+      const supervisorName = document.getElementById('dutyEditSupervisor')?.value || '';
+      const supervisorPhone = document.getElementById('dutyEditSupervisorPhone')?.value || '';
+      const reliefName = document.getElementById('dutyEditRelief')?.value || '';
+      const reliefPhone = document.getElementById('dutyEditReliefPhone')?.value || '';
       const status = document.getElementById('dutyEditStatus')?.value;
       const notifyResidents = document.getElementById('dutyEditNotify')?.checked;
 
@@ -655,7 +684,7 @@ window.openEditStaffDutyModal = function(dutyId) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: duty.id, staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, pin, salaryAmount, status, notifyResidents
+          id: duty.id, staffName, category, role, blockName, locationPost, shiftName, startTime, endTime, phone, altPhone, pin, salaryAmount, supervisorName, supervisorPhone, reliefName, reliefPhone, status, notifyResidents
         }),
       });
 

@@ -172,41 +172,58 @@ export async function GET(request: Request) {
       ROTATIONAL: 'Rotational',
       GENERAL: 'General Shift',
     }
-    const inventedPosts = new Set(['Gate 1 Entrance Desk', 'Gate 1 - Main Entrance', 'Gate 1 - Main Entrance Desk', 'Not assigned'])
-    const hoursAreDefault = !activeStaff.startTime || !activeStaff.endTime
-      || (activeStaff.startTime === '06:00 AM' && activeStaff.endTime === '02:00 PM')
-      || (activeStaff.startTime === '08:00 AM' && activeStaff.endTime === '08:00 PM')
-    const shiftIsDefault = !activeStaff.shiftName || activeStaff.shiftName === 'Morning Shift' || activeStaff.shiftName === 'General Duty'
-    const shiftName = storedStaff
-      ? (shiftLabels[storedStaff.shift] || activeStaff.shiftName)
-      : (shiftIsDefault ? '' : activeStaff.shiftName)
-    const startTime = hoursAreDefault ? '' : (activeStaff.startTime || '')
-    const endTime = hoursAreDefault ? '' : (activeStaff.endTime || '')
-    const locationPost = inventedPosts.has(activeStaff.locationPost || '') ? '' : (activeStaff.locationPost || '')
-    const monthlySalary = storedStaff ? Number(storedStaff.salary) || 0 : (activeStaff.salaryAmount || 0)
-    const payDateIsDefault = !activeStaff.salaryDate || activeStaff.salaryDate === '5th of every month' || activeStaff.salaryDate === '—'
-    const attendanceIsDefault = activeStaff.attendancePresent === 26 && activeStaff.attendanceTotal === 28
-    const attendancePresent = attendanceIsDefault ? 0 : (activeStaff.attendancePresent || 0)
-    const attendanceTotal = attendanceIsDefault ? 0 : (activeStaff.attendanceTotal || 0)
-
-    if (staffMember && staffMember.id && staffMember.id !== 'default') {
-      const repair: Record<string, string | number> = {}
-      if ((shiftName || '') !== (staffMember.shiftName || '')) repair.shiftName = shiftName || ''
-      if ((startTime || '') !== (staffMember.startTime || '')) repair.startTime = startTime || ''
-      if ((endTime || '') !== (staffMember.endTime || '')) repair.endTime = endTime || ''
-      const storedPost = locationPost || 'Not assigned'
-      if (storedPost !== (staffMember.locationPost || '')) repair.locationPost = storedPost
-      if (payDateIsDefault && staffMember.salaryDate) repair.salaryDate = ''
-      if (attendanceIsDefault) {
-        repair.attendancePresent = 0
-        repair.attendanceTotal = 0
-      }
-      if (!staffMember.lastPaidDate && staffMember.paymentStatus) repair.paymentStatus = ''
-      if (monthlySalary && staffMember.salaryAmount !== monthlySalary) repair.salaryAmount = monthlySalary
-      if (Object.keys(repair).length) {
-        await prisma.staffDuty.update({ where: { id: staffMember.id }, data: repair })
-      }
+    const inventedPosts = new Set(['Gate 1 Entrance Desk', 'Gate 1 - Main Entrance', 'Gate 1 - Main Entrance Desk'])
+    const hasSavedPost = (row: { locationPost?: string | null; staffName?: string | null }) => {
+      const post = row.locationPost || ''
+      return !!post && post !== 'Not assigned' && !inventedPosts.has(post) && !sampleDutyNames.has(row.staffName || '')
     }
+    const savedDuties = await prisma.staffDuty.findMany({
+      where: { organizationId },
+      orderBy: { updatedAt: 'desc' },
+    })
+    const ownDuty = staffMember && hasSavedPost(staffMember) ? staffMember : null
+    const shownDuty = ownDuty || savedDuties.find((row) => hasSavedPost(row)) || activeStaff
+    const shownStored = readStoredStaffMatch(organizationId, shownDuty.phone, shownDuty.staffName) || storedStaff
+    const shiftName = shownDuty.shiftName
+      || (shownStored ? (shiftLabels[shownStored.shift] || '') : '')
+    const startTime = shownDuty.startTime || ''
+    const endTime = shownDuty.endTime || ''
+    const locationPost = inventedPosts.has(shownDuty.locationPost || '') || shownDuty.locationPost === 'Not assigned'
+      ? ''
+      : (shownDuty.locationPost || '')
+    const monthlySalary = Number(shownDuty.salaryAmount) || Number(shownStored?.salary) || 0
+    const payDateIsDefault = !shownDuty.salaryDate || shownDuty.salaryDate === '5th of every month' || shownDuty.salaryDate === '—'
+    const attendanceIsDefault = shownDuty.attendancePresent === 26 && shownDuty.attendanceTotal === 28
+    const attendancePresent = attendanceIsDefault ? 0 : (shownDuty.attendancePresent || 0)
+    const attendanceTotal = attendanceIsDefault ? 0 : (shownDuty.attendanceTotal || 0)
+    const blockName = shownDuty.blockName && shownDuty.blockName !== 'Campus Wide' ? shownDuty.blockName : ''
+    let handover: { supervisorName?: string; supervisorPhone?: string; reliefName?: string; reliefPhone?: string; portalAccess?: string[]; rounds?: Record<string, { date?: string; done?: string[] }> } = {}
+    try {
+      if (shownDuty.notes && shownDuty.notes.trim().startsWith('{')) handover = JSON.parse(shownDuty.notes)
+    } catch { handover = {} }
+    const categoryDefaults: Record<string, string[]> = {
+      SECURITY: ['gate', 'visitors', 'shift', 'salary', 'intercom'],
+      HOUSEKEEPING: ['cleaning', 'jobs', 'shift', 'salary', 'intercom'],
+      GARDENING: ['garden', 'jobs', 'shift', 'salary', 'intercom'],
+      OFFICE: ['office', 'jobs', 'shift', 'salary', 'intercom'],
+      MAINTENANCE: ['jobs', 'shift', 'salary', 'intercom'],
+    }
+    const storedAccess = Array.isArray((shownStored as { portalAccess?: string[] } | null)?.portalAccess)
+      ? (shownStored as { portalAccess?: string[] }).portalAccess
+      : null
+    const notedAccess = Array.isArray(handover.portalAccess) ? handover.portalAccess : null
+    const portalAccess = (notedAccess && notedAccess.length ? notedAccess : storedAccess) || categoryDefaults[shownDuty.category] || categoryDefaults.MAINTENANCE
+    const namedSupervisor = handover.supervisorName ? {
+      name: handover.supervisorName,
+      role: 'Supervisor',
+      phone: handover.supervisorPhone || '',
+    } : null
+    const namedRelief = handover.reliefName ? {
+      name: handover.reliefName,
+      role: 'Relief guard',
+      phone: handover.reliefPhone || '',
+      shift: '',
+    } : null
 
     return NextResponse.json({
       success: true,
@@ -217,45 +234,47 @@ export async function GET(request: Request) {
         city: org?.city,
       },
       staff: {
-        id: activeStaff.id,
-        name: activeStaff.staffName,
-        role: activeStaff.role,
-        category: activeStaff.category,
-        phone: activeStaff.phone,
-        altPhone: activeStaff.altPhone,
+        id: shownDuty.id,
+        name: shownDuty.staffName,
+        role: shownDuty.role,
+        category: shownDuty.category,
+        phone: shownDuty.phone,
+        altPhone: shownDuty.altPhone,
         locationPost,
-        blockName: activeStaff.blockName && activeStaff.blockName !== 'Campus Wide' && activeStaff.blockName !== 'Main Gate' ? activeStaff.blockName : '',
+        blockName,
         shiftName,
         startTime,
         endTime,
-        status: activeStaff.status,
-        notes: activeStaff.notes,
+        status: shownDuty.status,
+        notes: shownDuty.notes,
+        portalAccess,
       },
+      rounds: handover.rounds || {},
       duty: {
         currentPost: locationPost,
-        currentBlock: activeStaff.blockName && activeStaff.blockName !== 'Campus Wide' && activeStaff.blockName !== 'Main Gate' ? activeStaff.blockName : '',
+        currentBlock: blockName,
         currentShift: shiftName,
         timing: startTime && endTime ? `${startTime} – ${endTime}` : '',
-        status: activeStaff.status,
-        supervisor: realSupervisor ? {
+        status: shownDuty.status,
+        supervisor: namedSupervisor || (realSupervisor && realSupervisor.id !== shownDuty.id ? {
           name: realSupervisor.staffName,
           role: realSupervisor.role,
           phone: realSupervisor.phone,
-        } : null,
-        reliefGuard: realRelief ? {
+        } : null),
+        reliefGuard: namedRelief || (realRelief && realRelief.id !== shownDuty.id ? {
           name: realRelief.staffName,
           role: realRelief.role,
           phone: realRelief.phone,
           shift: realRelief.shiftName || '',
-        } : null,
+        } : null),
       },
       salary: {
         monthlySalary,
-        salaryDate: payDateIsDefault ? '' : activeStaff.salaryDate,
+        salaryDate: payDateIsDefault ? '' : shownDuty.salaryDate,
         nextSalaryCredit: '',
-        paymentStatus: activeStaff.lastPaidDate ? (activeStaff.paymentStatus || '') : '',
-        lastPaidDate: activeStaff.lastPaidDate || '',
-        bankAccount: storedStaff?.upiId || storedStaff?.accountNumber || '',
+        paymentStatus: shownDuty.lastPaidDate ? (shownDuty.paymentStatus || '') : '',
+        lastPaidDate: shownDuty.lastPaidDate || '',
+        bankAccount: shownStored?.upiId || shownStored?.accountNumber || '',
         attendancePresent,
         attendanceTotal,
         attendancePercent: attendanceTotal ? Math.round((attendancePresent / attendanceTotal) * 100) : 0,
@@ -296,6 +315,57 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const { action, passCodeOrPin, passId, guardName, locationPost } = body
+
+    if (action === 'save_round' || action === 'update_job') {
+      const duty = await prisma.staffDuty.findFirst({
+        where: { id: String(body.dutyId || ''), organizationId: user.organizationId },
+      })
+      if (!duty) return NextResponse.json({ error: 'Staff record not found' }, { status: 404 })
+      let notes: Record<string, unknown> = {}
+      try {
+        if (duty.notes && duty.notes.trim().startsWith('{')) notes = JSON.parse(duty.notes)
+      } catch { notes = {} }
+
+      if (action === 'save_round') {
+        const kind = body.kind === 'garden' ? 'garden' : 'cleaning'
+        const done = Array.isArray(body.done) ? body.done.map((item: unknown) => String(item)).slice(0, 20) : []
+        const rounds = (notes.rounds && typeof notes.rounds === 'object') ? notes.rounds as Record<string, unknown> : {}
+        rounds[kind] = { date: new Date().toISOString().slice(0, 10), done }
+        notes.rounds = rounds
+        await prisma.staffDuty.update({ where: { id: duty.id }, data: { notes: JSON.stringify(notes) } })
+        return NextResponse.json({ success: true, rounds })
+      }
+
+      const access = Array.isArray(notes.portalAccess) ? notes.portalAccess.map(String) : []
+      const canUpdateJobs = user.role !== 'STAFF' || access.includes('jobs') || access.includes('office') || access.length === 0
+      if (!canUpdateJobs) return NextResponse.json({ error: 'This staff member cannot update work orders' }, { status: 403 })
+      const nextStatus = body.status === 'RESOLVED' ? 'RESOLVED' : 'IN_PROGRESS'
+      const complaint = await prisma.complaint.findFirst({
+        where: { id: String(body.complaintId || ''), organizationId: user.organizationId },
+      })
+      if (!complaint) return NextResponse.json({ error: 'Complaint not found' }, { status: 404 })
+      const updatedComplaint = await prisma.complaint.update({
+        where: { id: complaint.id },
+        data: {
+          status: nextStatus,
+          assignedTo: user.name || duty.staffName,
+          resolvedAt: nextStatus === 'RESOLVED' ? new Date() : null,
+        },
+      })
+      await notifyUsers({
+        orgId: user.organizationId,
+        roles: ['admin'],
+        userIds: [complaint.raisedById],
+        excludeUserId: user.id,
+        title: nextStatus === 'RESOLVED' ? `Ticket resolved: ${complaint.title}` : `Ticket in progress: ${complaint.title}`,
+        message: `${user.name || duty.staffName} updated ${complaint.ticketNumber}.`,
+        type: 'COMPLAINT',
+        event: 'complaint-updated',
+        referenceType: 'COMPLAINT',
+        referenceId: complaint.id,
+      }).catch(() => {})
+      return NextResponse.json({ success: true, complaint: updatedComplaint })
+    }
 
     if (action === 'quick_verify') {
       const code = (passCodeOrPin || '').trim()

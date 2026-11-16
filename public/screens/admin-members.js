@@ -78,13 +78,13 @@ Screens['admin-members'] = function() {
       </div>
 
       <!-- Pending applications banner (conditionally displayed if pending > 0) -->
-      <div id="membersPendingBanner" class="responsive-banner banner-amber" style="margin-bottom:18px;display:none;">
+      <div id="membersPendingBanner" class="responsive-banner banner-amber is-hidden" style="margin-bottom:18px;">
         <span class="banner-icon">⏳</span>
         <div class="banner-content">
           <div class="banner-title" id="pendingBannerTitle">Membership applications pending review</div>
-          <div class="banner-desc">Review and approve or reject resident onboarding applications.</div>
+          <div class="banner-desc">These residents asked to join and cannot sign in until you approve them.</div>
         </div>
-        <button class="btn btn-secondary btn-sm banner-action" onclick="filterMembersByRole('PENDING')">Review Applications</button>
+        <button class="btn btn-secondary btn-sm banner-action" onclick="window.reviewMembershipApplications()">Review Applications</button>
       </div>
 
       <!-- Modern Table Toolbar matching reference image -->
@@ -107,7 +107,7 @@ Screens['admin-members'] = function() {
           <div class="filter-pill" onclick="filterMembersByRole('OWNER', this)">Owners</div>
           <div class="filter-pill" onclick="filterMembersByRole('TENANT', this)">Tenants</div>
           <div class="filter-pill" onclick="filterMembersByRole('ADMIN', this)">Committee</div>
-          <div class="filter-pill" onclick="filterMembersByRole('PENDING', this)">Pending</div>
+          <div class="filter-pill" id="membersPendingPill" onclick="filterMembersByRole('PENDING', this)">Pending</div>
         </div>
         <button class="btn btn-secondary btn-sm" onclick="exportMembersRegistry()">Export</button>
       </div>
@@ -470,11 +470,9 @@ window.loadLiveMembersScreen = async function() {
     const pendingBanner = document.getElementById('membersPendingBanner');
     const pendingTitle = document.getElementById('pendingBannerTitle');
     if (pendingBanner) {
-      if (pendingCount > 0) {
-        pendingBanner.style.display = 'flex';
-        if (pendingTitle) pendingTitle.textContent = `${pendingCount} membership application${pendingCount > 1 ? 's' : ''} pending review`;
-      } else {
-        pendingBanner.style.display = 'none';
+      pendingBanner.classList.toggle('is-hidden', pendingCount === 0);
+      if (pendingCount > 0 && pendingTitle) {
+        pendingTitle.textContent = `${pendingCount} membership application${pendingCount > 1 ? 's' : ''} pending review`;
       }
     }
 
@@ -557,11 +555,35 @@ window.renderMembersAnalytics = function(members) {
   }
 
   var countEl = document.getElementById('membersTableCount');
-  if (countEl) {
-    var total = members.length;
-    var showing = Math.min(10, total);
-    countEl.textContent = 'Showing 1 to ' + showing + ' of ' + total + ' items';
+  if (countEl) countEl.textContent = window.membersListCount(members.length, members.length);
+};
+
+window.membersListCount = function(shown, total) {
+  if (!total) return 'Showing 0 items';
+  return 'Showing 1 to ' + Math.min(shown, total) + ' of ' + total + ' items';
+};
+
+window.reviewMembershipApplications = function() {
+  const pill = document.getElementById('membersPendingPill');
+  window.filterMembersByRole('PENDING', pill);
+  const table = document.getElementById('membersTableBody');
+  if (table && table.scrollIntoView) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+window.decideMembershipApplication = async function(memberId, memberName, decision) {
+  const approving = decision === 'ACTIVE';
+  const res = await (window.apiFetch || fetch)('/api/members', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: memberId, status: approving ? 'ACTIVE' : 'REJECTED' }),
+  });
+  const data = await res.json().catch(function() { return {}; });
+  if (!res.ok || !data.success) {
+    showToast(data.error || 'Could not update this application', 'error');
+    return;
   }
+  showToast(approving ? (memberName + ' can now sign in') : (memberName + ' was declined'), 'success');
+  if (typeof window.loadLiveMembersScreen === 'function') window.loadLiveMembersScreen();
 };
 
 window.filterMembersByRole = function(roleCategory, pillEl) {
@@ -573,7 +595,7 @@ window.filterMembersByRole = function(roleCategory, pillEl) {
     pillEl.classList.add('active');
   }
 
-  let filtered = window.__cachedMembers;
+  let filtered = window.__cachedMembers || [];
   if (roleCategory === 'ADMIN') {
     filtered = filtered.filter(m => m.role === 'RWA_ADMIN' || m.role === 'TREASURER');
   } else if (roleCategory === 'PENDING') {
@@ -611,10 +633,7 @@ function renderMembersData(members) {
   const summaryEl = document.getElementById('membersPaginationSummary');
   const countEl = document.getElementById('membersTableCount');
 
-  if (countEl) {
-    const showing = Math.min(10, members.length);
-    countEl.textContent = `Showing 1 to ${showing} of ${members.length} items`;
-  }
+  if (countEl) countEl.textContent = window.membersListCount(members.length, members.length);
 
   if (summaryEl) {
     summaryEl.textContent = `Showing ${members.length} of ${window.__cachedMembers.length} total residents`;
@@ -667,8 +686,9 @@ function renderMembersData(members) {
           <td>${statusPill}</td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:4px;">
-              <button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" title="Open">View</button>
-              ${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})" title="Remove from society">Remove</button>` : ''}
+              ${(m.status || '').toUpperCase() === 'PENDING'
+                ? `<button class="btn btn-primary btn-sm" style="background:#18181B;border:none;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'REJECTED')">Reject</button>`
+                : `<button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" title="Open">View</button>${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})" title="Remove from society">Remove</button>` : ''}`}
             </div>
           </td>
         </tr>
@@ -708,10 +728,9 @@ function renderMembersData(members) {
           </div>
 
           <div style="display:flex;gap:8px;margin-top:4px;border-top:1px solid var(--border-light);padding-top:8px;" onclick="event.stopPropagation()">
-            <button type="button" class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">
-              Profile
-            </button>
-            ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove</button>` : ''}
+            ${(m.status || '').toUpperCase() === 'PENDING'
+              ? `<button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;background:#18181B;border:none;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'REJECTED')">Reject</button>`
+              : `<button type="button" class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">Profile</button>${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove</button>` : ''}`}
           </div>
         </div>
       `;

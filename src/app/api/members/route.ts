@@ -340,6 +340,55 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PATCH(request: Request) {
+  try {
+    const { user, error } = await requireAdmin(request)
+    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
+    if (!user.organizationId) return NextResponse.json({ error: 'No organization attached to this request' }, { status: 400 })
+
+    const body = await request.json()
+    const memberId = String(body.id || '')
+    const decision = body.status === 'ACTIVE' ? 'ACTIVE' : (body.status === 'REJECTED' ? 'REJECTED' : '')
+    if (!memberId || !decision) {
+      return NextResponse.json({ error: 'Choose approve or reject' }, { status: 400 })
+    }
+
+    const member = await prisma.user.findFirst({
+      where: { id: memberId, organizationId: user.organizationId, status: 'PENDING' },
+    })
+    if (!member) return NextResponse.json({ error: 'No pending application for this person' }, { status: 404 })
+
+    if (decision === 'ACTIVE') {
+      await prisma.user.update({ where: { id: member.id }, data: { status: 'ACTIVE' } })
+    } else {
+      await prisma.user.update({
+        where: { id: member.id },
+        data: { status: 'REJECTED', organizationId: null, unitId: null },
+      })
+    }
+
+    await notifyUsers({
+      orgId: user.organizationId,
+      userIds: decision === 'ACTIVE' ? [member.id] : [],
+      roles: ['admin'],
+      excludeUserId: user.id,
+      title: decision === 'ACTIVE' ? `Membership approved: ${member.name}` : `Membership declined: ${member.name}`,
+      message: decision === 'ACTIVE'
+        ? `${member.name} can now sign in to the society.`
+        : `${member.name} was not added to the society.`,
+      type: 'MEMBER',
+      event: 'membership-reviewed',
+      referenceType: 'USER',
+      referenceId: member.id,
+    }).catch(() => {})
+
+    return NextResponse.json({ success: true, status: decision })
+  } catch (err: unknown) {
+    console.error('Membership review error:', err)
+    return NextResponse.json({ error: 'Failed to update the application' }, { status: 500 })
+  }
+}
+
 export async function DELETE(request: Request) {
   try {
     const { user, error } = await requireAdmin(request)

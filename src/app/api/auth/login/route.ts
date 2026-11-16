@@ -394,6 +394,20 @@ export async function POST(request: Request) {
       )
     }
 
+    if (user.status === 'PENDING') {
+      return NextResponse.json(
+        { error: 'Your membership is waiting for the society admin to approve it.' },
+        { status: 403 }
+      )
+    }
+
+    if (user.status === 'REJECTED') {
+      return NextResponse.json(
+        { error: 'This membership application was declined. Contact the society office.' },
+        { status: 403 }
+      )
+    }
+
     // Mandatory PIN check: If user does not have a PIN setup yet, require setup
     if (!user.passwordHash) {
       return NextResponse.json({

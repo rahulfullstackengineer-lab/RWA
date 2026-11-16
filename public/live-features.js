@@ -836,11 +836,29 @@
   // ------------------------------------------------------------
   // 6. Record Expense Modal
   // ------------------------------------------------------------
-  window.openRecordExpenseModal = function () {
+  window.openRecordExpenseModal = async function () {
+    let people = []
+    try {
+      const res = await (window.apiFetch || fetch)('/api/staff/duty')
+      const data = await res.json().catch(function () { return {} })
+      people = (data && data.duties) || []
+    } catch (e) {
+      people = []
+    }
+    const esc = function (value) {
+      return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+    }
+    const personOptions = people.length
+      ? people.map(function (person) {
+          const role = person.role || person.category || 'Staff'
+          return '<option value="' + esc(person.id) + '" data-name="' + esc(person.staffName) + '">' + esc(person.staffName) + ' · ' + esc(role) + '</option>'
+        }).join('')
+      : '<option value="" disabled>No staff saved yet</option>'
+
     const html = `
       <div>
         <label class="form-label">Expense Title / Description *</label>
-        <input type="text" id="expTitle" required placeholder="e.g. Lift AMC Monthly Servicing" class="form-input" style="width:100%;" />
+        <input type="text" id="expTitle" required placeholder="e.g. Security guard salary for November" class="form-input" style="width:100%;" />
       </div>
       <div style="display:flex; gap:10px;">
         <div style="flex:1;">
@@ -855,8 +873,9 @@
       <div style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label class="form-label">Category</label>
-          <select id="expCat" class="form-select" style="width:100%;">
+          <select id="expCat" class="form-select" style="width:100%;" onchange="window.syncExpenseStaffFields()">
             <option value="Maintenance">Maintenance & Repairs</option>
+            <option value="Staff Salary">Staff Salary</option>
             <option value="Security">Security Guard AMC</option>
             <option value="Electrical">DG & Power Backup</option>
             <option value="Sanitation">Housekeeping & Waste</option>
@@ -868,26 +887,135 @@
           <input type="text" id="expVendor" required placeholder="e.g. Otis Elevator India Ltd" class="form-input" style="width:100%;" />
         </div>
       </div>
+      <div>
+        <label class="form-label">Related staff member</label>
+        <select id="expPerson" class="form-select" style="width:100%;" onchange="window.syncExpenseStaffFields()">
+          <option value="">Not tied to one person</option>
+          <option value="__new__">New person — create an account</option>
+          ${personOptions}
+        </select>
+        <div id="expPersonHint" style="font-size:12px;color:#64748B;margin-top:6px;">Choose a saved staff account, or add someone who is not in the society yet.</div>
+      </div>
+      <div id="expNewPerson" style="display:none;gap:10px;">
+        <div style="display:flex;gap:10px;">
+          <div style="flex:1;">
+            <label class="form-label">Person name *</label>
+            <input type="text" id="expNewName" placeholder="Full name" class="form-input" style="width:100%;" />
+          </div>
+          <div style="flex:1;">
+            <label class="form-label">Phone number *</label>
+            <input type="tel" id="expNewPhone" placeholder="10-digit mobile" class="form-input" style="width:100%;" />
+          </div>
+        </div>
+        <div style="margin-top:10px;">
+          <label class="form-label">Department</label>
+          <select id="expNewDept" class="form-select" style="width:100%;">
+            <option value="Security">Security</option>
+            <option value="Housekeeping">Housekeeping</option>
+            <option value="Gardening">Gardening</option>
+            <option value="Maintenance">Technical & Maintenance</option>
+            <option value="Administration">Society Office & Admin</option>
+          </select>
+        </div>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
+        <input type="checkbox" id="expCreditSalary" style="margin-top:2px;" />
+        <span>This is their salary. Update the amount, payout date, and paid status on their staff portal.</span>
+      </label>
     `
 
     showModal('Record Society Expense', html, 'Save Expense', async () => {
       const title = document.getElementById('expTitle').value.trim()
       const amount = document.getElementById('expAmount').value
-      const vendor = document.getElementById('expVendor').value.trim()
+      const vendorInput = document.getElementById('expVendor')
+      const vendor = vendorInput ? vendorInput.value.trim() : ''
       const category = document.getElementById('expCat').value
       const expenseDate = document.getElementById('expDate').value
+      const personEl = document.getElementById('expPerson')
+      const personValue = personEl ? personEl.value : ''
+      const isNewPerson = personValue === '__new__'
+      const staffDutyId = isNewPerson ? '' : personValue
+      const selected = !isNewPerson && personEl && personEl.selectedIndex >= 0 ? personEl.options[personEl.selectedIndex] : null
+      const staffName = selected ? (selected.getAttribute('data-name') || '') : ''
+      const newName = document.getElementById('expNewName') ? document.getElementById('expNewName').value.trim() : ''
+      const newPhone = document.getElementById('expNewPhone') ? document.getElementById('expNewPhone').value.trim() : ''
+      const newDept = document.getElementById('expNewDept') ? document.getElementById('expNewDept').value : 'Security'
+      const salaryPayment = Boolean(document.getElementById('expCreditSalary') && document.getElementById('expCreditSalary').checked)
 
-      await fetch('/api/expenses', {
+      if (!title || !amount) {
+        showToast('Title and amount are required', 'warning')
+        throw new Error('Validation failed')
+      }
+      if (isNewPerson && (!newName || !newPhone)) {
+        showToast('Enter the name and phone number for the new account', 'warning')
+        throw new Error('New person required')
+      }
+      if ((category === 'Staff Salary' || salaryPayment) && !staffDutyId && !isNewPerson) {
+        showToast('Choose the staff member this salary is for, or create a new account', 'warning')
+        throw new Error('Staff required')
+      }
+
+      const res = await (window.apiFetch || fetch)('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, amount, vendorName: vendor, category, date: expenseDate }),
-      }).catch(() => {})
-
-      showToast(`Expense of ₹${Number(amount).toLocaleString('en-IN')} to ${vendor} recorded for ${expenseDate}!`, 'success')
-      if (typeof Router !== 'undefined') {
-        Router.go(Router.current())
+        body: JSON.stringify({
+          title,
+          amount,
+          vendorName: vendor || staffName || newName,
+          category,
+          date: expenseDate,
+          staffDutyId: staffDutyId || null,
+          salaryPayment,
+          newPerson: isNewPerson ? { name: newName, phone: newPhone, department: newDept } : null,
+        }),
+      })
+      const data = await res.json().catch(function () { return {} })
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Could not save this expense', 'error')
+        throw new Error(data.error || 'Failed to record expense')
       }
+
+      const linkedName = (data.staffCredited && data.staffCredited.name) || data.accountName || staffName || newName
+      if (data.accountCreated && linkedName) {
+        showToast('Account created for ' + linkedName + '. They sign in with this phone and PIN 1234. The expense is connected to them.', 'success')
+      } else if (data.staffCredited && data.staffCredited.name) {
+        showToast('Salary of ₹' + Number(amount).toLocaleString('en-IN') + ' is now on ' + data.staffCredited.name + "'s account", 'success')
+      } else {
+        showToast('Expense of ₹' + Number(amount).toLocaleString('en-IN') + ' recorded' + (linkedName ? ' for ' + linkedName : ''), 'success')
+      }
+      if (typeof window.loadLiveExpenses === 'function') window.loadLiveExpenses()
+      else if (typeof Router !== 'undefined') Router.go(Router.current())
     })
+  }
+
+  window.syncExpenseStaffFields = function () {
+    const cat = document.getElementById('expCat')
+    const person = document.getElementById('expPerson')
+    const credit = document.getElementById('expCreditSalary')
+    const vendor = document.getElementById('expVendor')
+    const hint = document.getElementById('expPersonHint')
+    const isSalary = cat && cat.value === 'Staff Salary'
+    const isNew = person && person.value === '__new__'
+    const fresh = document.getElementById('expNewPerson')
+    if (fresh) fresh.style.display = isNew ? 'block' : 'none'
+    if (credit && isSalary) credit.checked = true
+    const selected = person && person.selectedIndex >= 0 ? person.options[person.selectedIndex] : null
+    const staffName = selected ? (selected.getAttribute('data-name') || '') : ''
+    if (vendor && staffName && (!vendor.value.trim() || vendor.dataset.autofill === '1')) {
+      vendor.value = staffName
+      vendor.dataset.autofill = '1'
+    }
+    if (vendor && !staffName && vendor.dataset.autofill === '1') {
+      vendor.value = ''
+      vendor.dataset.autofill = ''
+    }
+    if (hint) {
+      hint.textContent = isNew
+        ? 'A staff account is created with this name and phone, then the expense is connected to it.'
+        : (isSalary || (credit && credit.checked)
+          ? 'This amount is written onto the selected staff member’s salary portal.'
+          : 'Choose a saved staff account, or add someone who is not in the society yet.')
+    }
   }
 
   // ------------------------------------------------------------
@@ -2660,27 +2788,11 @@
     const d = data.duty || {}
     const sal = data.salary || {}
     const dummyPosts = ['Gate 1 Entrance Desk', 'Gate 1 - Main Entrance', 'Gate 1 - Main Entrance Desk', 'Gate 1 Desk', 'Not assigned']
-    const dummyBlocks = ['Campus Wide', 'Main Gate', 'Main Gate Perimeter']
     const sampleNames = ['Ram Singh', 'Dharmendra Kumar', 'Bijender Yadav', 'Manoj Tiwari', 'Suraj Sharma', 'Ramesh Paswan', 'Sunita Devi', 'Rekha Rani', 'Mahesh Electrician', 'Shankar Plumber', 'Radhey Shyam', 'Dr. Vikram Malhotra']
-    const hoursLookDefault = function(start, end) {
-      return !start || !end || (start === '06:00 AM' && end === '02:00 PM') || (start === '08:00 AM' && end === '08:00 PM')
-    }
     if (dummyPosts.indexOf(s.locationPost) !== -1) s.locationPost = ''
     if (dummyPosts.indexOf(d.currentPost) !== -1) d.currentPost = ''
-    if (dummyBlocks.indexOf(s.blockName) !== -1) s.blockName = ''
-    if (dummyBlocks.indexOf(d.currentBlock) !== -1) d.currentBlock = ''
-    if (hoursLookDefault(s.startTime, s.endTime)) {
-      s.startTime = ''
-      s.endTime = ''
-    }
-    if (!d.timing || d.timing.indexOf('06:00') !== -1 || d.timing.indexOf('08:00 AM – 08:00 PM') !== -1 || d.timing.indexOf('08:00 AM - 08:00 PM') !== -1) {
-      if (!s.startTime || !s.endTime) d.timing = ''
-    }
-    const shiftLooksDefault = !s.shiftName || s.shiftName === 'Morning Shift' || s.shiftName === 'General Duty' || s.shiftName === 'Active Shift'
-    if (shiftLooksDefault && !s.startTime) s.shiftName = ''
-    if (!d.currentShift || d.currentShift === 'Morning Shift' || d.currentShift === 'General Duty' || d.currentShift === 'Active Shift') {
-      d.currentShift = s.shiftName || ''
-    }
+    if (s.blockName === 'Campus Wide') s.blockName = ''
+    if (d.currentBlock === 'Campus Wide') d.currentBlock = ''
     if (!sal.salaryDate || sal.salaryDate === '5th of every month' || sal.salaryDate === '—') sal.salaryDate = ''
     if (!sal.nextSalaryCredit || sal.nextSalaryCredit === '—') sal.nextSalaryCredit = ''
     if (Number(sal.attendancePresent) === 26 && Number(sal.attendanceTotal) === 28) {
@@ -2698,6 +2810,186 @@
     data.duty = d
     data.salary = sal
     return data
+  }
+
+  window.staffRoundAreas = {
+    cleaning: [
+      ['lobby', 'Lobby and entrance'],
+      ['stairs', 'Staircases'],
+      ['parking', 'Parking'],
+      ['garbage', 'Garbage point'],
+      ['washrooms', 'Common washrooms'],
+    ],
+    garden: [
+      ['lawn', 'Main lawn'],
+      ['gate', 'Planters at the gate'],
+      ['park', 'Children’s park'],
+      ['terrace', 'Terrace pots'],
+      ['hedge', 'Boundary hedge'],
+    ],
+  }
+
+  window.paintStaffRound = function(kind) {
+    const host = document.getElementById(kind === 'garden' ? 'staffGardenList' : 'staffCleaningList')
+    if (!host) return
+    const data = window.__staffPortalData || {}
+    const saved = (data.rounds && data.rounds[kind]) || {}
+    const today = new Date().toISOString().slice(0, 10)
+    const done = saved.date === today && Array.isArray(saved.done) ? saved.done : []
+    host.innerHTML = window.staffRoundAreas[kind].map(function(area) {
+      const on = done.indexOf(area[0]) !== -1
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:14px;padding:8px 10px;border:1px solid #E4E4E7;border-radius:2px;">' +
+        '<input type="checkbox" class="staff-round-' + kind + '" value="' + area[0] + '"' + (on ? ' checked' : '') + ' />' +
+        '<span>' + area[1] + '</span></label>'
+    }).join('')
+  }
+
+  window.saveStaffRound = async function(kind) {
+    const data = window.__staffPortalData || {}
+    const dutyId = data.staff && data.staff.id
+    if (!dutyId) return
+    const done = Array.prototype.map.call(document.querySelectorAll('.staff-round-' + kind + ':checked'), function(el) { return el.value })
+    const res = await (window.apiFetch || fetch)('/api/staff/portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save_round', dutyId: dutyId, kind: kind, done: done }),
+    })
+    const body = await res.json().catch(function() { return {} })
+    if (!res.ok || !body.success) {
+      if (typeof showToast === 'function') showToast(body.error || 'Could not save this round', 'error')
+      return
+    }
+    data.rounds = body.rounds || data.rounds
+    if (typeof showToast === 'function') showToast(kind === 'garden' ? 'Garden round saved' : 'Cleaning round saved', 'success')
+  }
+
+  window.staffJobMatches = function(ticket, category) {
+    const blob = ((ticket.category || '') + ' ' + (ticket.title || '') + ' ' + (ticket.description || '')).toLowerCase()
+    const name = ((window.__staffPortalData && window.__staffPortalData.staff && window.__staffPortalData.staff.name) || '').toLowerCase()
+    if (ticket.assignedTo && name && String(ticket.assignedTo).toLowerCase() === name) return true
+    if (category === 'OFFICE') return true
+    if (category === 'HOUSEKEEPING') return /clean|waste|garbage|sanit|housekeep|sweep|pest/.test(blob)
+    if (category === 'GARDENING') return /garden|plant|lawn|horti|tree|grass/.test(blob)
+    if (category === 'MAINTENANCE') return /maint|electric|plumb|lift|water|sewage|pump|light|repair|amc/.test(blob) || !(ticket.category)
+    return /maint|repair|electric|plumb/.test(blob)
+  }
+
+  window.paintStaffJobs = function(tickets, hostId) {
+    const host = document.getElementById(hostId)
+    if (!host) return
+    const open = (tickets || []).filter(function(ticket) { return ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' })
+    if (!open.length) {
+      host.innerHTML = '<div style="font-size:13px;color:#64748B;">No open work for this department.</div>'
+      return
+    }
+    host.innerHTML = open.slice(0, 12).map(function(ticket) {
+      const title = String(ticket.title || 'Complaint').replace(/</g, '')
+      const flat = ticket.unit && ticket.unit.unitNumber ? ticket.unit.unitNumber : (ticket.unitNumber || 'Common area')
+      const status = ticket.status === 'IN_PROGRESS' ? 'In progress' : 'Open'
+      return '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border:1px solid #E4E4E7;border-radius:2px;flex-wrap:wrap;">' +
+        '<div><div style="font-weight:700;">' + title + '</div><div style="font-size:12px;color:#64748B;">' + flat + ' · ' + status + '</div></div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="window.updateStaffJob(\'' + ticket.id + '\', \'IN_PROGRESS\')">Start</button>' +
+          '<button type="button" class="btn btn-primary btn-sm" style="background:#18181B;border:none;" onclick="window.updateStaffJob(\'' + ticket.id + '\', \'RESOLVED\')">Done</button>' +
+        '</div></div>'
+    }).join('')
+  }
+
+  window.loadStaffWork = async function() {
+    const data = window.__staffPortalData || {}
+    const access = (data.staff && data.staff.portalAccess) || []
+    if (access.indexOf('jobs') === -1 && access.indexOf('office') === -1) return
+    const res = await (window.apiFetch || fetch)('/api/complaints').catch(function() { return null })
+    const body = res && res.ok ? await res.json().catch(function() { return {} }) : {}
+    const category = (data.staff && data.staff.category) || ''
+    const mine = (body.complaints || []).filter(function(ticket) {
+      return window.staffJobMatches(ticket, access.indexOf('office') !== -1 && category === 'OFFICE' ? 'OFFICE' : category)
+    })
+    if (access.indexOf('jobs') !== -1) window.paintStaffJobs(category === 'OFFICE' ? (body.complaints || []) : mine, 'staffJobsList')
+    if (access.indexOf('office') !== -1) {
+      window.paintStaffJobs(body.complaints || [], 'staffOfficeJobs')
+      const noticeRes = await (window.apiFetch || fetch)('/api/notices').catch(function() { return null })
+      const noticeBody = noticeRes && noticeRes.ok ? await noticeRes.json().catch(function() { return {} }) : {}
+      const host = document.getElementById('staffOfficeNotices')
+      const notices = (noticeBody.notices || []).filter(function(notice) { return !notice.status || notice.status === 'PUBLISHED' }).slice(0, 8)
+      if (host) {
+        host.innerHTML = notices.length
+          ? notices.map(function(notice) {
+              return '<div style="padding:10px;border:1px solid #E4E4E7;border-radius:2px;"><div style="font-weight:700;">' + String(notice.title || 'Notice').replace(/</g, '') + '</div><div style="font-size:12px;color:#64748B;margin-top:4px;">' + String(notice.content || '').replace(/</g, '').slice(0, 180) + '</div></div>'
+            }).join('')
+          : '<div style="font-size:13px;color:#64748B;">No published notices.</div>'
+      }
+    }
+  }
+
+  window.updateStaffJob = async function(complaintId, status) {
+    const data = window.__staffPortalData || {}
+    const dutyId = data.staff && data.staff.id
+    const res = await (window.apiFetch || fetch)('/api/staff/portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_job', dutyId: dutyId, complaintId: complaintId, status: status }),
+    })
+    const body = await res.json().catch(function() { return {} })
+    if (!res.ok || !body.success) {
+      if (typeof showToast === 'function') showToast(body.error || 'Could not update this ticket', 'error')
+      return
+    }
+    if (typeof showToast === 'function') showToast(status === 'RESOLVED' ? 'Ticket marked done' : 'Ticket started', 'success')
+    window.loadStaffWork()
+  }
+
+  window.applyStaffPortalAccess = function(data) {
+    const access = (data && data.staff && data.staff.portalAccess && data.staff.portalAccess.length)
+      ? data.staff.portalAccess
+      : ['gate', 'visitors', 'shift', 'salary', 'intercom']
+    const has = function(id) { return access.indexOf(id) !== -1 }
+    const scanner = document.querySelector('.staff-scanner')
+    if (scanner) scanner.style.display = has('gate') ? '' : 'none'
+    const spot = document.getElementById('staffSpotEntryBtn')
+    if (spot) spot.style.display = has('gate') ? 'inline-flex' : 'none'
+    const refresh = document.getElementById('staffRefreshLabel')
+    if (refresh) refresh.textContent = has('gate') ? 'Refresh Gate' : 'Refresh'
+    const mark = document.getElementById('staffHeroMark')
+    const category = (data.staff && data.staff.category) || ''
+    if (mark) mark.textContent = category === 'HOUSEKEEPING' ? '🧹' : (category === 'GARDENING' ? '🌱' : (category === 'OFFICE' ? '🏢' : (category === 'MAINTENANCE' ? '🔧' : '👮')))
+    const tabs = [
+      { id: 'passes', key: 'visitors', label: 'Gate Visitors Today' },
+      { id: 'cleaning', key: 'cleaning', label: 'Cleaning Round' },
+      { id: 'garden', key: 'garden', label: 'Garden Round' },
+      { id: 'jobs', key: 'jobs', label: 'Work Orders' },
+      { id: 'office', key: 'office', label: 'Office Desk' },
+      { id: 'duty', key: 'shift', label: 'My Shift & Post' },
+      { id: 'salary', key: 'salary', label: 'Salary & Payouts' },
+      { id: 'emergency', key: 'intercom', label: 'Intercom & SOS' },
+    ].filter(function(tab) { return has(tab.key) })
+    const bar = document.getElementById('staffPortalTabs')
+    if (bar) {
+      bar.innerHTML = tabs.map(function(tab, index) {
+        return '<button type="button" class="btn btn-sm ' + (index === 0 ? 'btn-primary' : 'btn-secondary') + '" data-staff-tab="' + tab.id + '" style="font-weight:700;border-radius:8px;padding:8px 16px;"><span>' + tab.label + '</span></button>'
+      }).join('')
+      Array.prototype.forEach.call(bar.querySelectorAll('button'), function(button) {
+        button.onclick = function() { window.switchStaffTab(button.getAttribute('data-staff-tab'), button) }
+      })
+      document.querySelectorAll('.staff-tab-view').forEach(function(view) { view.style.display = 'none' })
+      if (tabs[0]) window.switchStaffTab(tabs[0].id, bar.querySelector('button'))
+    }
+    const dash = document.querySelector('[data-nav-id="staff-dashboard"]')
+    if (dash) {
+      const label = dash.querySelector('span:last-child')
+      if (label) label.textContent = has('gate') ? 'Gate Scanner & Passes' : 'My Work'
+    }
+    const passesNav = document.querySelector('[data-nav-id="staff-passes"]')
+    if (passesNav) passesNav.style.display = has('visitors') || has('gate') ? '' : 'none'
+    const intercomNav = document.querySelector('[data-nav-id="staff-intercom"]')
+    if (intercomNav) intercomNav.style.display = has('intercom') ? '' : 'none'
+    document.querySelectorAll('.mobile-nav-label').forEach(function(label) {
+      if (label.textContent === 'Gate' || label.textContent === 'Work') label.textContent = has('gate') ? 'Gate' : 'Work'
+    })
+    if (has('cleaning')) window.paintStaffRound('cleaning')
+    if (has('garden')) window.paintStaffRound('garden')
+    if (has('intercom') && typeof window.loadStaffIntercom === 'function') window.loadStaffIntercom()
+    if (has('jobs') || has('office')) window.loadStaffWork()
   }
 
   // ---- Main loader: fetches /api/staff/portal ----------------
@@ -2812,10 +3104,10 @@
       setTxt('slipDeduction', '₹0')
       setTxt('slipGross', hasPay ? fmt(sal.monthlySalary) : 'Not set')
       setTxt('slipNet', hasPay ? fmt(sal.monthlySalary) : 'Not set')
-      window.loadStaffIntercom()
 
       // --- Render passes table ----
       window.renderStaffPassesTable(window.__staffPassesAll)
+      window.applyStaffPortalAccess(data)
 
     } catch (err) {
       console.error('loadLiveStaffPortal error:', err)

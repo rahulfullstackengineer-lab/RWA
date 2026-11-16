@@ -31,7 +31,7 @@ Screens['staff-dashboard'] = function() {
       </button>`}
       <button class="btn btn-primary btn-sm" onclick="window.loadLiveStaffPortal()" style="font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;background:#18181B;border:none;">
         <span>🔄</span>
-        <span>Refresh Gate</span>
+        <span id="staffRefreshLabel">Refresh</span>
       </button>
     </div>
   `;
@@ -42,7 +42,7 @@ Screens['staff-dashboard'] = function() {
       <!-- Top Guard Duty Identity Strip -->
       <div class="staff-hero" style="background:linear-gradient(135deg, #064E3B 0%, #0F172A 100%);color:#fff;border-radius:18px;padding:22px 26px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;box-shadow:0 12px 30px -5px rgba(6,78,59,0.25);border:1px solid rgba(52,211,153,0.25);">
         <div class="staff-hero-main" style="display:flex;align-items:center;gap:18px;">
-          <div style="width:60px;height:60px;border-radius:16px;background:rgba(52,211,153,0.18);border:2px solid #34D399;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">
+          <div id="staffHeroMark" style="width:60px;height:60px;border-radius:16px;background:rgba(52,211,153,0.18);border:2px solid #34D399;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">
             👮
           </div>
           <div>
@@ -53,7 +53,7 @@ Screens['staff-dashboard'] = function() {
               <span id="staffHeroStatusBadge" style="background:#10B981;color:#fff;font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px;">🟢 ON DUTY</span>
             </div>
             <div class="staff-hero-meta" style="display:flex;align-items:center;gap:16px;margin-top:6px;font-size:13px;color:#D1FAE5;flex-wrap:wrap;">
-              <div>📍 <strong>Gate:</strong> <span id="staffHeroPost">Gate 1 Desk</span></div>
+              <div>📍 <strong>Post:</strong> <span id="staffHeroPost">Not assigned</span></div>
               <div>⏰ <strong>Shift:</strong> <span id="staffHeroShift">Active Shift</span></div>
               <div>📞 <strong>Phone:</strong> <span id="staffHeroPhone">—</span></div>
             </div>
@@ -61,7 +61,7 @@ Screens['staff-dashboard'] = function() {
         </div>
 
         <div class="staff-hero-action" style="display:flex;align-items:center;gap:12px;">
-          <button class="btn btn-sm" onclick="window.openSpotEntryModal()" style="background:#10B981;color:#fff;border:none;border-radius:10px;font-weight:800;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);">
+          <button id="staffSpotEntryBtn" class="btn btn-sm" onclick="window.openSpotEntryModal()" style="background:#10B981;color:#fff;border:none;border-radius:10px;font-weight:800;padding:10px 18px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(16,185,129,0.35);">
             <span>+</span>
             <span>Spot Visitor Entry</span>
           </button>
@@ -329,6 +329,43 @@ Screens['staff-dashboard'] = function() {
       <div id="staffTabContentEmergency" class="staff-tab-view" style="display:none;flex-direction:column;gap:18px;">
         <div id="staffIntercomList" class="staff-intercom" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px;">
           <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:18px;font-size:13px;color:#3F3F46;">Loading society contacts…</div>
+        </div>
+      </div>
+
+      <div id="staffTabContentCleaning" class="staff-tab-view" style="display:none;flex-direction:column;gap:14px;">
+        <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
+          <h3 style="margin:0 0 6px;font-size:16px;">Cleaning round</h3>
+          <div style="font-size:12px;color:#64748B;margin-bottom:12px;">Mark the areas finished on this shift. The list is saved on this staff record.</div>
+          <div id="staffCleaningList" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-top:12px;background:#18181B;border:none;" onclick="window.saveStaffRound('cleaning')">Save cleaning round</button>
+        </div>
+      </div>
+
+      <div id="staffTabContentGarden" class="staff-tab-view" style="display:none;flex-direction:column;gap:14px;">
+        <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
+          <h3 style="margin:0 0 6px;font-size:16px;">Garden round</h3>
+          <div style="font-size:12px;color:#64748B;margin-bottom:12px;">Mark the garden areas covered today.</div>
+          <div id="staffGardenList" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-top:12px;background:#18181B;border:none;" onclick="window.saveStaffRound('garden')">Save garden round</button>
+        </div>
+      </div>
+
+      <div id="staffTabContentJobs" class="staff-tab-view" style="display:none;flex-direction:column;gap:14px;">
+        <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
+          <h3 style="margin:0 0 6px;font-size:16px;">Work orders</h3>
+          <div style="font-size:12px;color:#64748B;margin-bottom:12px;">Open complaints for this department. Start a job or mark it done.</div>
+          <div id="staffJobsList" style="display:flex;flex-direction:column;gap:8px;">Loading work orders…</div>
+        </div>
+      </div>
+
+      <div id="staffTabContentOffice" class="staff-tab-view" style="display:none;flex-direction:column;gap:14px;">
+        <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
+          <h3 style="margin:0 0 6px;font-size:16px;">Society notices</h3>
+          <div id="staffOfficeNotices" style="display:flex;flex-direction:column;gap:8px;">Loading notices…</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
+          <h3 style="margin:0 0 6px;font-size:16px;">Open tickets</h3>
+          <div id="staffOfficeJobs" style="display:flex;flex-direction:column;gap:8px;">Loading tickets…</div>
         </div>
       </div>
 

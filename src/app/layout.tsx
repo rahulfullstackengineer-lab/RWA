@@ -29,7 +29,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <link rel="icon" href="/brand/rwa-logo.svg" type="image/svg+xml" />
-        <link rel="stylesheet" href="/styles.css?v=144" />
+        <link rel="stylesheet" href="/styles.css?v=146" />
         <link
           href="https://db.onlinewebfonts.com/c/9d4d074c9335825a23cce178ee03b498?family=P22+Mackinac+W01+Book"
           rel="stylesheet"

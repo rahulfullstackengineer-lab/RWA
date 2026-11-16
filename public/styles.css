@@ -3390,6 +3390,10 @@ body.mobile-frame-view .responsive-banner .banner-action {
   justify-content: center !important;
   min-height: 38px !important;
 }
+.responsive-banner.is-hidden,
+body.mobile-frame-view .responsive-banner.is-hidden {
+  display: none !important;
+}
 
 body.mobile-frame-view .table-wrap {
   width: 100% !important;
@@ -4171,6 +4175,26 @@ body.mobile-frame-view #headerNotifDropdown.notif-dropdown {
   min-height: 0;
   height: 100%;
   padding: 10px 12px;
+  overflow: hidden;
+}
+.bento-metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+.bento-mini-chart {
+  width: 56px;
+  height: 28px;
+  flex: 0 0 56px;
+  overflow: hidden;
+  line-height: 0;
+}
+.bento-mini-chart.bento-mini-donut {
+  width: 28px;
+  flex-basis: 28px;
 }
 .dash-hero-split .res-bento-dark-title {
   color: #18181B;

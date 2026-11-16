@@ -1118,6 +1118,48 @@ function openStaffModal(title, contentHtml, submitLabel, onSubmit, maxWidth) {
   }
 }
 
+window.staffPortalSectionCatalog = function(department) {
+  var all = [
+    { id: 'gate', label: 'Gate scanner and spot visitor entry' },
+    { id: 'visitors', label: 'Today’s visitor passes' },
+    { id: 'cleaning', label: 'Cleaning round' },
+    { id: 'garden', label: 'Garden round' },
+    { id: 'jobs', label: 'Complaints and work orders' },
+    { id: 'office', label: 'Office desk: notices and open tickets' },
+    { id: 'shift', label: 'My shift and post' },
+    { id: 'salary', label: 'Salary and payouts' },
+    { id: 'intercom', label: 'Intercom and SOS' },
+  ];
+  var dept = department || 'Security';
+  var suggested = {
+    Security: ['gate', 'visitors', 'shift', 'salary', 'intercom'],
+    Housekeeping: ['cleaning', 'jobs', 'shift', 'salary', 'intercom'],
+    Gardening: ['garden', 'jobs', 'shift', 'salary', 'intercom'],
+    Maintenance: ['jobs', 'shift', 'salary', 'intercom'],
+    Administration: ['office', 'jobs', 'shift', 'salary', 'intercom'],
+  };
+  return { all: all, suggested: suggested[dept] || suggested.Maintenance };
+};
+
+window.fillStaffAccessChecks = function(prefix, department, selected) {
+  var deptEl = document.getElementById(prefix + 'Dept');
+  var dept = department || (deptEl ? deptEl.value : 'Security');
+  var catalog = window.staffPortalSectionCatalog(dept);
+  var chosen = Array.isArray(selected) && selected.length ? selected : catalog.suggested;
+  var box = document.getElementById(prefix + 'AccessList');
+  if (!box) return;
+  box.innerHTML = catalog.all.map(function(section) {
+    var on = chosen.indexOf(section.id) !== -1;
+    return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:6px 0;cursor:pointer;">' +
+      '<input type="checkbox" class="' + prefix + 'Access" value="' + section.id + '"' + (on ? ' checked' : '') + ' style="margin-top:2px;" />' +
+      '<span>' + section.label + (catalog.suggested.indexOf(section.id) !== -1 ? '' : '') + '</span></label>';
+  }).join('');
+};
+
+window.readStaffAccessChecks = function(prefix) {
+  return Array.prototype.map.call(document.querySelectorAll('.' + prefix + 'Access:checked'), function(el) { return el.value; });
+};
+
 // Add Staff Modal
 window.openAddStaffModal = function() {
   var html = `
@@ -1133,7 +1175,7 @@ window.openAddStaffModal = function() {
       </div>
       <div style="flex:1;">
         <label class="form-label">Department *</label>
-        <select id="stfDept" class="form-select" style="width:100%;">
+        <select id="stfDept" class="form-select" style="width:100%;" onchange="window.fillStaffAccessChecks('stf')">
           <option value="Security">🛡️ Security</option>
           <option value="Housekeeping">🧹 Housekeeping &amp; Sanitation</option>
           <option value="Gardening">🌱 Gardening &amp; Horticulture</option>
@@ -1181,6 +1223,12 @@ window.openAddStaffModal = function() {
       </div>
     </div>
 
+    <div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">
+      <div style="font-size:13px;font-weight:800;color:#0F172A;">Portal sections</div>
+      <div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Confirm what this person can open after they sign in. The list starts from their department. Security gets the gate. Other departments get their own work sections.</div>
+      <div id="stfAccessList"></div>
+    </div>
+
     <div style="padding:12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <label class="form-label" style="color:#166534;font-weight:700;margin-bottom:0;">🔑 Portal Login PIN * (4-6 digits)</label>
@@ -1215,21 +1263,26 @@ window.openAddStaffModal = function() {
     var aadhaarNumber = document.getElementById('stfAadhaar').value.trim();
     var accountNumber = document.getElementById('stfAccount').value.trim();
     var ifscCode = document.getElementById('stfIfsc').value.trim();
+    var portalAccess = window.readStaffAccessChecks('stf');
 
     if (!name || !role || !phone || !salary) {
       if (typeof window.showToast === 'function') window.showToast('Please fill all required staff fields', 'error');
-      return;
+      throw new Error('Required fields missing');
+    }
+    if (!portalAccess.length) {
+      if (typeof window.showToast === 'function') window.showToast('Choose at least one portal section', 'error');
+      throw new Error('Portal access required');
     }
 
     try {
       var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess }),
       }) : fetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess }),
       }));
 
       if (res.ok) {
@@ -1243,6 +1296,7 @@ window.openAddStaffModal = function() {
       if (typeof window.showToast === 'function') window.showToast(e.message || 'Error creating staff', 'error');
     }
   }, '640px');
+  window.fillStaffAccessChecks('stf');
 };
 
 // Pay Salary Modal
@@ -1250,7 +1304,7 @@ window.openPaySalaryModal = function(staffId) {
   var staff = (window.__cachedStaffList || []).find(s => s.id === staffId);
   if (!staff) return;
 
-  var currentMonth = 'Oct 2026';
+  var currentMonth = (window.__cachedStaffMetrics && window.__cachedStaffMetrics.currentMonth) || new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
   var isAlreadyPaid = staff.lastPaidMonth === currentMonth;
 
   var html = `
@@ -1284,9 +1338,7 @@ window.openPaySalaryModal = function(staffId) {
       <div style="flex:1;">
         <label class="form-label">Salary Month *</label>
         <select id="payMonth" class="form-select" style="width:100%;font-weight:600;">
-          <option value="Oct 2026" selected>October 2026 (Current Month)</option>
-          <option value="Nov 2026">November 2026 (Advance)</option>
-          <option value="Sep 2026">September 2026 (Arrears)</option>
+          <option value="${currentMonth}" selected>${currentMonth} (Current Month)</option>
         </select>
       </div>
       <div style="flex:1;">
@@ -1382,7 +1434,7 @@ window.openEditStaffModal = function(staffId) {
       </div>
       <div style="flex:1;">
         <label class="form-label">Department *</label>
-        <select id="estfDept" class="form-select" style="width:100%;">
+        <select id="estfDept" class="form-select" style="width:100%;" onchange="window.fillStaffAccessChecks('estf')">
           <option value="Security" ${staff.department==='Security'?'selected':''}>🛡️ Security</option>
           <option value="Housekeeping" ${staff.department==='Housekeeping'?'selected':''}>🧹 Housekeeping</option>
           <option value="Gardening" ${staff.department==='Gardening'?'selected':''}>🌱 Gardening</option>
@@ -1434,6 +1486,12 @@ window.openEditStaffModal = function(staffId) {
       </div>
     </div>
 
+    <div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">
+      <div style="font-size:13px;font-weight:800;color:#0F172A;">Portal sections</div>
+      <div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Confirm the sections this person can open. Changing the department resets the suggested sections.</div>
+      <div id="estfAccessList"></div>
+    </div>
+
     <div style="padding:12px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;margin-top:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <label class="form-label" style="color:#166534;font-weight:700;margin-bottom:0;">🔑 Portal Login PIN (Staff & Guard Auth)</label>
@@ -1455,8 +1513,13 @@ window.openEditStaffModal = function(staffId) {
     var upiId = document.getElementById('estfUpi').value.trim();
     var aadhaarNumber = document.getElementById('estfAadhaar').value.trim();
     var pin = (document.getElementById('estfPin')?.value || '').trim();
+    var portalAccess = window.readStaffAccessChecks('estf');
+    if (!portalAccess.length) {
+      if (typeof window.showToast === 'function') window.showToast('Choose at least one portal section', 'error');
+      throw new Error('Portal access required');
+    }
 
-    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber };
+    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, upiId, aadhaarNumber, portalAccess };
     if (pin && pin.length >= 4) {
       updatePayload.pin = pin;
     }
@@ -1483,6 +1546,7 @@ window.openEditStaffModal = function(staffId) {
       if (typeof window.showToast === 'function') window.showToast(e.message || 'Error updating staff', 'error');
     }
   }, '600px');
+  window.fillStaffAccessChecks('estf', staff.department, staff.portalAccess);
 };
 
 // Quick PIN Update Modal
@@ -1624,6 +1688,17 @@ window.loadLiveStaffScreen = async function() {
   var elPayroll = document.getElementById('staffMetricPayroll');
   if (elPayroll) elPayroll.textContent = '₹' + (metrics.monthlyPayroll || 0).toLocaleString('en-IN') + '/mo';
 
+  var payMonth = metrics.currentMonth || '';
+  var paidLabel = document.getElementById('staffMetricPaidLabel');
+  var pendingLabel = document.getElementById('staffMetricPendingLabel');
+  if (paidLabel && payMonth) paidLabel.textContent = 'Salary Paid (' + payMonth + ')';
+  if (pendingLabel && payMonth) pendingLabel.textContent = 'Pending Payout (' + payMonth + ')';
+  document.querySelectorAll('.spay-pill').forEach(function(btn) {
+    var kind = btn.getAttribute('data-pay');
+    if (kind === 'PAID_OCT' && payMonth) btn.textContent = 'Paid ' + payMonth;
+    if (kind === 'PENDING_OCT' && payMonth) btn.textContent = 'Due ' + payMonth;
+  });
+
   var elPaid = document.getElementById('staffMetricPaid');
   if (elPaid) elPaid.textContent = (metrics.paidThisMonthCount || 0) + ' of ' + (metrics.activeStaff || staff.length) + ' Paid';
 
@@ -1647,10 +1722,11 @@ window.renderStaffTable = function() {
     staff = staff.filter(s => s.department === deptFilter || (deptFilter === 'Security' && s.role.includes('Security')));
   }
 
+  var payMonth = (window.__cachedStaffMetrics && window.__cachedStaffMetrics.currentMonth) || '';
   if (payFilter === 'PAID_OCT') {
-    staff = staff.filter(s => s.lastPaidMonth === 'Oct 2026');
+    staff = staff.filter(s => s.lastPaidMonth === payMonth);
   } else if (payFilter === 'PENDING_OCT') {
-    staff = staff.filter(s => s.lastPaidMonth !== 'Oct 2026');
+    staff = staff.filter(s => s.lastPaidMonth !== payMonth);
   } else if (payFilter === 'ON_LEAVE') {
     staff = staff.filter(s => s.status === 'ON_LEAVE');
   }
@@ -1682,10 +1758,11 @@ window.renderStaffTable = function() {
   }
 
   tbody.innerHTML = staff.map(function(s) {
-    var isPaidOct = s.lastPaidMonth === 'Oct 2026';
+    var payMonth = (window.__cachedStaffMetrics && window.__cachedStaffMetrics.currentMonth) || '';
+    var isPaidOct = payMonth && s.lastPaidMonth === payMonth;
     var payStatusBadge = isPaidOct
-      ? '<span class="badge badge-green" style="font-size:11px;font-weight:700;">✅ Paid Oct 2026</span>'
-      : '<span class="badge badge-amber" style="font-size:11px;font-weight:700;">⏳ Due Oct 2026</span>';
+      ? '<span class="badge badge-green" style="font-size:11px;font-weight:700;">✅ Paid ' + (payMonth || 'this month') + '</span>'
+      : '<span class="badge badge-amber" style="font-size:11px;font-weight:700;">⏳ Due ' + (payMonth || 'this month') + '</span>';
 
     var shiftLabel = s.shift === 'NIGHT' ? '🌙 Night' : (s.shift === 'ROTATIONAL' ? '🔄 Rotational' : '☀️ Day');
     var statusBadge = s.status === 'ACTIVE' 
@@ -1781,12 +1858,12 @@ Screens['admin-staff'] = function() {
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Total monthly staff wage commitment</div>
         </div>
         <div class="card card-sm" style="padding:14px;border-left:4px solid var(--green);cursor:pointer;" onclick="window.filterStaffByPaymentStatus('PAID_OCT')">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Salary Paid (Oct 2026)</div>
+          <div id="staffMetricPaidLabel" style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Salary Paid</div>
           <div style="font-size:22px;font-weight:800;color:var(--green);margin-top:4px;" id="staffMetricPaid">Loading...</div>
           <div style="font-size:11.5px;color:var(--green);margin-top:2px;">Disbursed for current calendar month</div>
         </div>
         <div class="card card-sm" style="padding:14px;border-left:4px solid var(--amber);cursor:pointer;" onclick="window.filterStaffByPaymentStatus('PENDING_OCT')">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Pending Payout (Oct 2026)</div>
+          <div id="staffMetricPendingLabel" style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Pending Payout</div>
           <div style="font-size:22px;font-weight:800;color:var(--amber);margin-top:4px;" id="staffMetricPending">Loading...</div>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Staff due for monthly disbursement</div>
         </div>

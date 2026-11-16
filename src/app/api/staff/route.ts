@@ -29,8 +29,49 @@ export interface StaffRecord {
   ifscCode?: string
   aadhaarNumber?: string
   emergencyContact?: string
+  portalAccess?: string[]
   createdAt: string
   updatedAt?: string
+}
+
+const PORTAL_SECTION_IDS = ['gate', 'visitors', 'cleaning', 'garden', 'jobs', 'office', 'shift', 'salary', 'intercom']
+
+function departmentCategory(department?: string) {
+  const value = (department || '').toUpperCase()
+  if (value.includes('SEC')) return 'SECURITY'
+  if (value.includes('HOUSE')) return 'HOUSEKEEPING'
+  if (value.includes('GARDEN')) return 'GARDENING'
+  if (value.includes('ADMIN') || value.includes('OFFICE')) return 'OFFICE'
+  return 'MAINTENANCE'
+}
+
+function defaultPortalAccess(department?: string) {
+  const category = departmentCategory(department)
+  if (category === 'SECURITY') return ['gate', 'visitors', 'shift', 'salary', 'intercom']
+  if (category === 'HOUSEKEEPING') return ['cleaning', 'jobs', 'shift', 'salary', 'intercom']
+  if (category === 'GARDENING') return ['garden', 'jobs', 'shift', 'salary', 'intercom']
+  if (category === 'OFFICE') return ['office', 'jobs', 'shift', 'salary', 'intercom']
+  return ['jobs', 'shift', 'salary', 'intercom']
+}
+
+function cleanPortalAccess(value: unknown, department?: string) {
+  const allowed = new Set(PORTAL_SECTION_IDS)
+  const picked = Array.isArray(value)
+    ? value.map((item) => String(item)).filter((item) => allowed.has(item))
+    : []
+  return picked.length ? Array.from(new Set(picked)) : defaultPortalAccess(department)
+}
+
+function notesWithAccess(existingNotes: string | null | undefined, portalAccess: string[]) {
+  let base: Record<string, unknown> = {}
+  try {
+    if (existingNotes && existingNotes.trim().startsWith('{')) base = JSON.parse(existingNotes)
+    else if (existingNotes) base = { note: existingNotes }
+  } catch {
+    base = existingNotes ? { note: existingNotes } : {}
+  }
+  base.portalAccess = portalAccess
+  return JSON.stringify(base)
 }
 
 export interface StaffSalaryPayment {
@@ -69,7 +110,7 @@ function dutyFieldsFromStaff(staff: { name: string; role: string; department: st
   const inventedPost = !existing?.locationPost
     || INVENTED_DUTY_POSTS.has(existing.locationPost)
     || existing.locationPost === `${staff.department} Station`
-  const defaultHours = !existing || (existing.startTime === '06:00 AM' && existing.endTime === '02:00 PM')
+  const defaultHours = !existing?.startTime || !existing?.endTime
   const defaultPayDate = !existing?.salaryDate || existing.salaryDate === '5th of every month'
   const defaultAttendance = !existing || (existing.attendancePresent === 26 && existing.attendanceTotal === 28)
   return {
@@ -122,6 +163,162 @@ function getStoredStaffData(orgId: string): OrgStaffStore {
   return { staff: [], payments: [] }
 }
 
+export function payrollMonthLabel(when = new Date()) {
+  return when.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+}
+
+function phoneTail(value?: string | null) {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits.length >= 10 ? digits.slice(-10) : ''
+}
+
+export function applyPayrollFromExpense(orgId: string, match: { phone?: string | null; name?: string | null }, payment: { amount: number; when: Date; paidBy: string; expenseId: string }) {
+  const data = getStoredStaffData(orgId)
+  const tail = phoneTail(match.phone)
+  const wanted = String(match.name || '').trim().toLowerCase()
+  const staffMember = data.staff.find((row) => tail && phoneTail(row.phone) === tail)
+    || data.staff.find((row) => wanted && row.name.trim().toLowerCase() === wanted)
+  if (!staffMember) return null
+  const month = payrollMonthLabel(payment.when)
+  const already = data.payments.some((row) => row.transactionRef === payment.expenseId || (row.notes || '').includes(payment.expenseId))
+  if (!already) {
+    data.payments.unshift({
+      id: `PAY-STF-${Math.floor(100 + Math.random() * 900)}`,
+      staffId: staffMember.id,
+      staffName: staffMember.name,
+      role: staffMember.role,
+      month,
+      amount: payment.amount,
+      paymentMethod: 'CASH',
+      transactionRef: payment.expenseId,
+      paidAt: payment.when.toISOString(),
+      paidBy: payment.paidBy,
+      notes: `Recorded from expense ${payment.expenseId}`,
+    })
+  }
+  staffMember.lastPaidMonth = month
+  staffMember.lastPaidDate = payment.when.toISOString()
+  staffMember.updatedAt = new Date().toISOString()
+  saveStoredStaffData(orgId, data)
+  return { staffId: staffMember.id, name: staffMember.name, month }
+}
+
+export async function ensureStaffAccount(orgId: string, input: { name: string; phone: string; department?: string; salary?: number; role?: string }) {
+  const name = String(input.name || '').trim()
+  const phone = String(input.phone || '').trim()
+  const cleanPhone = normalizePhone(phone)
+  if (!name) return { error: 'Enter the person\'s name' }
+  if (!cleanPhone) return { error: 'Enter a valid 10-digit phone number' }
+  const existingUser = await findUserByPhone(cleanPhone)
+  if (existingUser && existingUser.role !== 'STAFF') {
+    return { error: 'This phone number already belongs to another account' }
+  }
+
+  const department = input.department || 'Security'
+  const role = input.role || 'Staff'
+  const salary = Number(input.salary) || 0
+  const data = getStoredStaffData(orgId)
+  const tail = phoneTail(cleanPhone)
+  let stored = data.staff.find((row) => phoneTail(row.phone) === tail)
+  const createdStore = !stored
+  let duty = await prisma.staffDuty.findFirst({
+    where: {
+      organizationId: orgId,
+      OR: [{ phone }, { phone: cleanPhone }, { phone: tail }],
+    },
+  })
+
+  if (stored && duty) {
+    return { dutyId: duty.id, name: stored.name || duty.staffName, phone: duty.phone, created: false }
+  }
+
+  if (!stored) {
+    stored = {
+      id: `STF-${Math.floor(100 + Math.random() * 900)}`,
+      name,
+      role,
+      department,
+      phone,
+      salary,
+      salaryType: 'MONTHLY',
+      joiningDate: new Date().toISOString().split('T')[0],
+      status: 'ACTIVE',
+      shift: 'GENERAL',
+      pin: '1234',
+      lastPaidMonth: '',
+      upiId: '',
+      accountNumber: '',
+      ifscCode: '',
+      aadhaarNumber: '',
+      emergencyContact: '',
+      portalAccess: defaultPortalAccess(department),
+      createdAt: new Date().toISOString(),
+    }
+    data.staff.unshift(stored)
+    saveStoredStaffData(orgId, data)
+  }
+
+  const salaryForDuty = Number(input.salary) || Number(duty?.salaryAmount) || Number(stored.salary) || 0
+  const dutyFields = dutyFieldsFromStaff({ name, role, department, phone, salary: salaryForDuty, shift: 'GENERAL', status: 'ACTIVE' }, duty || undefined)
+  const dutyNotes = notesWithAccess(duty?.notes, stored.portalAccess || defaultPortalAccess(department))
+  if (duty) {
+    duty = await prisma.staffDuty.update({
+      where: { id: duty.id },
+      data: { ...dutyFields, category: departmentCategory(department), notes: dutyNotes },
+    })
+  } else {
+    duty = await prisma.staffDuty.create({
+      data: {
+        organizationId: orgId,
+        ...dutyFields,
+        category: departmentCategory(department),
+        notes: dutyNotes,
+      },
+    })
+  }
+
+  const passwordHash = existingUser?.passwordHash ? undefined : await hashPassword('1234')
+  if (existingUser) {
+    await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        name,
+        role: 'STAFF',
+        status: 'ACTIVE',
+        organizationId: orgId,
+        ...(passwordHash ? { passwordHash } : {}),
+      },
+    })
+  } else {
+    await prisma.user.create({
+      data: {
+        phone: cleanPhone,
+        name,
+        role: 'STAFF',
+        status: 'ACTIVE',
+        passwordHash: passwordHash || await hashPassword('1234'),
+        organizationId: orgId,
+      },
+    })
+  }
+
+  return { dutyId: duty.id, name: duty.staffName, phone: duty.phone, created: createdStore }
+}
+
+export function undoPayrollFromExpense(orgId: string, expenseId: string) {
+  const data = getStoredStaffData(orgId)
+  const payment = data.payments.find((row) => row.transactionRef === expenseId || (row.notes || '').includes(expenseId))
+  if (!payment) return
+  data.payments = data.payments.filter((row) => row.id !== payment.id)
+  const staffMember = data.staff.find((row) => row.id === payment.staffId)
+  if (staffMember && staffMember.lastPaidMonth === payment.month) {
+    const earlier = data.payments.find((row) => row.staffId === staffMember.id)
+    staffMember.lastPaidMonth = earlier?.month || ''
+    staffMember.lastPaidDate = earlier?.paidAt || ''
+  }
+  saveStoredStaffData(orgId, data)
+}
+
 function saveStoredStaffData(orgId: string, data: OrgStaffStore) {
   try {
     let allData: any = {}
@@ -165,7 +362,7 @@ export async function GET(request: Request) {
     if (!user.organizationId) return NextResponse.json({ staff: [], payments: [], metrics: {} })
     const orgId = user.organizationId
     const data = getStoredStaffData(orgId)
-    const metrics = calculateStaffMetrics(data.staff, 'Oct 2026')
+    const metrics = calculateStaffMetrics(data.staff, payrollMonthLabel())
     const staff = data.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => rest)
 
     return NextResponse.json({
@@ -233,6 +430,49 @@ export async function POST(request: Request) {
       data.payments.unshift(paymentRecord)
       saveStoredStaffData(orgId, data)
 
+      const salaryExpense = await prisma.expense.create({
+        data: {
+          organizationId: orgId,
+          title: `Salary for ${month}: ${staffMember.name}`,
+          amount: payAmount,
+          totalAmount: payAmount,
+          category: 'Staff Salary',
+          vendorName: staffMember.name,
+          description: notes.trim() || `Salary disbursed for ${month}`,
+          billDate: new Date(),
+          paidDate: new Date(),
+          paidBy: user.name || 'Admin',
+          status: 'PAID',
+          notes: JSON.stringify({
+            staffName: staffMember.name,
+            staffPhone: staffMember.phone,
+            salaryPayment: true,
+            credited: true,
+            payrollPaymentId: paymentRecord.id,
+          }),
+          createdBy: user.name || 'Admin',
+        },
+      })
+      paymentRecord.notes = `${paymentRecord.notes || ''} Expense ${salaryExpense.id}`.trim()
+      saveStoredStaffData(orgId, data)
+
+      const tail = phoneTail(staffMember.phone)
+      const dutyRows = await prisma.staffDuty.findMany({ where: { organizationId: orgId } })
+      const duty = dutyRows.find((row) => phoneTail(row.phone) === tail)
+        || dutyRows.find((row) => row.staffName.trim().toLowerCase() === staffMember.name.trim().toLowerCase())
+      if (duty) {
+        const paidOn = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        await prisma.staffDuty.update({
+          where: { id: duty.id },
+          data: {
+            salaryAmount: payAmount > 0 ? payAmount : duty.salaryAmount,
+            paymentStatus: 'PAID',
+            lastPaidDate: paidOn,
+            salaryDate: paidOn,
+          },
+        })
+      }
+
       const paidStaff = await findUserByPhone(staffMember.phone)
       await notifyUsers({
         orgId,
@@ -275,6 +515,7 @@ export async function POST(request: Request) {
       joiningDate = '2026-10-01',
       shift = 'DAY',
       pin = '',
+      portalAccess,
       upiId = '',
       accountNumber = '',
       ifscCode = '',
@@ -319,6 +560,7 @@ export async function POST(request: Request) {
       ifscCode: ifscCode.trim().toUpperCase(),
       aadhaarNumber: aadhaarNumber.trim(),
       emergencyContact: emergencyContact.trim(),
+      portalAccess: cleanPortalAccess(portalAccess, department),
       createdAt: new Date().toISOString(),
     }
 
@@ -327,7 +569,7 @@ export async function POST(request: Request) {
 
     // Sync to Prisma: StaffDuty & User (for guard/staff login)
     try {
-      const cat = department?.toUpperCase().includes('SEC') ? 'SECURITY' : (department?.toUpperCase().includes('HOUSE') ? 'HOUSEKEEPING' : (department?.toUpperCase().includes('GARDEN') ? 'GARDENING' : 'MAINTENANCE'))
+      const cat = departmentCategory(department)
       const existingDuty = await prisma.staffDuty.findFirst({
         where: {
           organizationId: orgId,
@@ -336,10 +578,11 @@ export async function POST(request: Request) {
       })
 
       const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE' }, existingDuty || undefined)
+      const dutyNotes = notesWithAccess(existingDuty?.notes, newStaff.portalAccess || defaultPortalAccess(department))
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: { ...dutyFields, category: cat },
+          data: { ...dutyFields, category: cat, notes: dutyNotes },
         })
       } else {
         await prisma.staffDuty.create({
@@ -347,6 +590,7 @@ export async function POST(request: Request) {
             organizationId: orgId,
             ...dutyFields,
             category: cat,
+            notes: dutyNotes,
           },
         })
       }
@@ -424,7 +668,7 @@ export async function PATCH(request: Request) {
 
     const orgId = user.organizationId!
     const body = await request.json()
-    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact } = body
+    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact, portalAccess } = body
 
     if (!id) return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 })
 
@@ -447,6 +691,7 @@ export async function PATCH(request: Request) {
     if (ifscCode !== undefined) staffMember.ifscCode = ifscCode.trim().toUpperCase()
     if (aadhaarNumber !== undefined) staffMember.aadhaarNumber = aadhaarNumber.trim()
     if (emergencyContact !== undefined) staffMember.emergencyContact = emergencyContact.trim()
+    if (portalAccess !== undefined) staffMember.portalAccess = cleanPortalAccess(portalAccess, staffMember.department)
     staffMember.updatedAt = new Date().toISOString()
 
     saveStoredStaffData(orgId, data)
@@ -457,9 +702,7 @@ export async function PATCH(request: Request) {
       const cleanTarget = targetPhone.replace(/\D/g, '')
       const tenDigitTarget = cleanTarget.slice(-10)
 
-      const cat = (staffMember.department || '').toUpperCase().includes('SEC')
-        ? 'SECURITY'
-        : ((staffMember.department || '').toUpperCase().includes('HOUSE') ? 'HOUSEKEEPING' : 'MAINTENANCE')
+      const cat = departmentCategory(staffMember.department)
 
       // Update StaffDuty
       const existingDuty = await prisma.staffDuty.findFirst({
@@ -477,10 +720,14 @@ export async function PATCH(request: Request) {
       })
 
       const dutyFields = dutyFieldsFromStaff(staffMember, existingDuty || undefined)
+      const access = staffMember.portalAccess && staffMember.portalAccess.length
+        ? staffMember.portalAccess
+        : defaultPortalAccess(staffMember.department)
+      const dutyNotes = notesWithAccess(existingDuty?.notes, access)
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: { ...dutyFields, phone: targetPhone, category: cat },
+          data: { ...dutyFields, phone: targetPhone, category: cat, notes: dutyNotes },
         })
       } else {
         await prisma.staffDuty.create({
@@ -489,6 +736,7 @@ export async function PATCH(request: Request) {
             ...dutyFields,
             phone: targetPhone,
             category: cat,
+            notes: dutyNotes,
           },
         })
       }

@@ -15,6 +15,17 @@ var EXPENSE_CATEGORIES = [
   'Water Supply', 'Repairs', 'Event', 'Other',
 ];
 
+function expenseStaffName(expense) {
+  try {
+    var notes = expense && expense.notes;
+    if (notes && String(notes).trim().charAt(0) === '{') {
+      var parsed = JSON.parse(notes);
+      return parsed && parsed.staffName ? parsed.staffName : '';
+    }
+  } catch (err) {}
+  return '';
+}
+
 var EXPENSE_STATUS_MAP = {
   PENDING_APPROVAL: { color: 'amber', label: 'Pending Approval' },
   APPROVED:         { color: 'blue',  label: 'Approved' },
@@ -426,6 +437,7 @@ window.applyExpenseFilters = function() {
   if (catF    !== 'ALL') list = list.filter(function(e) { return (e.category || '') === catF; });
   if (query) list = list.filter(function(e) {
     return (e.title       || '').toLowerCase().includes(query) ||
+           expenseStaffName(e).toLowerCase().includes(query) ||
            (e.vendorName  || '').toLowerCase().includes(query) ||
            (e.category    || '').toLowerCase().includes(query) ||
            (e.description || '').toLowerCase().includes(query);
@@ -513,6 +525,7 @@ window.renderExpensesTable = function(list) {
           (e.isRecurring ? '<span class="badge badge-purple" style="font-size:9px;padding:1px 5px;" title="Recurring Monthly Commitment (Day ' + (e.recurringDay || 1) + ')">🔁 Monthly</span>' : '') +
         '</div>' +
         (e.title && e.vendorName && e.title !== e.vendorName ? '<div style="font-size:11px;color:var(--text-muted);">' + e.title + '</div>' : '') +
+        (expenseStaffName(e) ? '<div style="font-size:11px;color:#166534;font-weight:700;">For ' + expenseStaffName(e) + '</div>' : '') +
       '</td>' +
       '<td style="font-size:12px;color:var(--text-muted);white-space:nowrap;">' + fmtDate(e.expenseDate || e.createdAt) + '</td>' +
       '<td style="text-align:right;font-weight:700;font-size:13px;color:var(--text-primary);">₹' + amt.toLocaleString('en-IN') + '</td>' +
@@ -546,7 +559,7 @@ window.renderExpensesTable = function(list) {
               '<div style="font-weight:700;font-size:14px;">' + (e.vendorName || e.title || '—') + '</div>' +
               (e.isRecurring ? '<span class="badge badge-purple" style="font-size:9px;padding:1px 5px;">🔁 Monthly</span>' : '') +
             '</div>' +
-            '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + (e.category || 'Other') + (e.title ? ' · ' + e.title : '') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">' + (e.category || 'Other') + (e.title ? ' · ' + e.title : '') + (expenseStaffName(e) ? ' · For ' + expenseStaffName(e) : '') + '</div>' +
           '</div>' +
           '<div style="font-size:17px;font-weight:900;color:var(--red);">₹' + amt.toLocaleString('en-IN') + '</div>' +
         '</div>' +
@@ -711,7 +724,7 @@ window.viewExpenseDetail = function(expenseId) {
       '</div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">' +
-      '<div style="background:var(--bg-elevated);padding:12px;border-radius:var(--r-md);"><div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Vendor / Payee</div><div style="font-weight:600;">' + (e.vendorName || '—') + '</div></div>' +
+      '<div style="background:var(--bg-elevated);padding:12px;border-radius:var(--r-md);"><div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Vendor / Payee</div><div style="font-weight:600;">' + (e.vendorName || '—') + (expenseStaffName(e) ? '<div style="font-size:12px;color:#166534;margin-top:4px;">Related to ' + expenseStaffName(e) + '</div>' : '') + '</div></div>' +
       '<div style="background:var(--bg-elevated);padding:12px;border-radius:var(--r-md);"><div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Date</div><div style="font-weight:600;">' + fmtDate(e.expenseDate || e.createdAt) + '</div></div>' +
       '<div style="background:var(--bg-elevated);padding:12px;border-radius:var(--r-md);"><div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Approved By</div><div style="font-weight:600;">' + (e.approvedBy || '—') + '</div></div>' +
       '<div style="background:var(--bg-elevated);padding:12px;border-radius:var(--r-md);"><div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:4px;">Recorded By</div><div style="font-weight:600;">' + (e.createdBy || 'Admin') + '</div></div>' +

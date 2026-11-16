@@ -300,6 +300,24 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Duty record not found' }, { status: 404 })
     }
 
+    let handoverNotes = existing.notes
+    if (updates.supervisorName !== undefined || updates.reliefName !== undefined) {
+      let previous: Record<string, string> = {}
+      try {
+        if (existing.notes && existing.notes.trim().startsWith('{')) previous = JSON.parse(existing.notes)
+        else if (existing.notes) previous = { note: existing.notes }
+      } catch {
+        previous = existing.notes ? { note: existing.notes } : {}
+      }
+      handoverNotes = JSON.stringify({
+        ...previous,
+        supervisorName: updates.supervisorName ? String(updates.supervisorName).trim() : '',
+        supervisorPhone: updates.supervisorPhone ? String(updates.supervisorPhone).trim() : '',
+        reliefName: updates.reliefName ? String(updates.reliefName).trim() : '',
+        reliefPhone: updates.reliefPhone ? String(updates.reliefPhone).trim() : '',
+      })
+    }
+
     const updated = await prisma.staffDuty.update({
       where: { id },
       data: {
@@ -315,6 +333,7 @@ export async function PUT(request: Request) {
         ...(updates.endTime && { endTime: updates.endTime.trim() }),
         ...(updates.status && { status: updates.status }),
         ...(updates.salaryAmount !== undefined && { salaryAmount: Number(updates.salaryAmount) }),
+        ...((updates.supervisorName !== undefined || updates.reliefName !== undefined) && { notes: handoverNotes }),
         ...(updates.salaryDate && { salaryDate: updates.salaryDate.trim() }),
         ...(updates.isEmergencyContact !== undefined && { isEmergencyContact: Boolean(updates.isEmergencyContact) }),
         ...(updates.notes !== undefined && { notes: updates.notes ? updates.notes.trim() : null }),

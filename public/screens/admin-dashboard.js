@@ -259,11 +259,14 @@ Screens['admin-dashboard'] = function() {
               <span style="font-size:12px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:0.04em;">Total Collections</span>
               <div class="bento-circle-arrow">↗</div>
             </div>
-            <div>
-              <div id="dashCollectionsVal" style="font-size:28px;font-weight:800;letter-spacing:-0.03em;color:#0F172A;line-height:1.1;">₹0</div>
-              <div id="dashCollectionsChange" style="font-size:11.5px;font-weight:700;color:#15803D;margin-top:4px;">
-                0% collection this month
+            <div class="bento-metric-row">
+              <div style="min-width:0;">
+                <div id="dashCollectionsVal" style="font-size:28px;font-weight:800;letter-spacing:-0.03em;color:#0F172A;line-height:1.1;">₹0</div>
+                <div id="dashCollectionsChange" style="font-size:11.5px;font-weight:700;color:#15803D;margin-top:4px;">
+                  0% collection this month
+                </div>
               </div>
+              <div class="bento-mini-chart" id="dashMiniCollections" aria-hidden="true"></div>
             </div>
             <div style="margin-top:6px;">
               <button class="btn btn-primary btn-xs w-full" style="font-size:11px;padding:4px 8px;font-weight:700;background:#0F172A;color:#FFFFFF;border:none;border-radius:8px;" onclick="event.stopPropagation();openRecordPaymentModal()">
@@ -278,9 +281,12 @@ Screens['admin-dashboard'] = function() {
               <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Pending Dues</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
-            <div>
-              <div id="dashPendingDuesVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">₹0</div>
-              <div id="dashPendingDuesSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">All accounts settled</div>
+            <div class="bento-metric-row">
+              <div style="min-width:0;">
+                <div id="dashPendingDuesVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">₹0</div>
+                <div id="dashPendingDuesSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">All accounts settled</div>
+              </div>
+              <div class="bento-mini-chart" id="dashMiniDues" aria-hidden="true"></div>
             </div>
             <div style="font-size:10.5px;color:#B91C1C;font-weight:600;">Official society overdue ledger</div>
           </div>
@@ -291,9 +297,12 @@ Screens['admin-dashboard'] = function() {
               <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Active Occupancy</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
-            <div>
-              <div id="dashActiveMembersVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0 / 0</div>
-              <div id="dashUnitsOccupancySubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 of 0 Units Occupied</div>
+            <div class="bento-metric-row">
+              <div style="min-width:0;">
+                <div id="dashActiveMembersVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0 / 0</div>
+                <div id="dashUnitsOccupancySubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 of 0 Units Occupied</div>
+              </div>
+              <div class="bento-mini-chart bento-mini-donut" id="dashMiniOccupancy" aria-hidden="true"></div>
             </div>
             <div id="dashOccupancyRateBadge" style="font-size:10.5px;color:#15803D;font-weight:600;">0% Occupied</div>
           </div>
@@ -304,9 +313,12 @@ Screens['admin-dashboard'] = function() {
               <span style="font-size:12px;font-weight:600;color:#52525B;text-transform:uppercase;letter-spacing:0.04em;">Complaint Resolution</span>
               <div class="bento-circle-arrow-dark">↗</div>
             </div>
-            <div>
-              <div id="dashOpenComplaintsVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0%</div>
-              <div id="dashUrgentComplaintsSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 open · 0 resolved</div>
+            <div class="bento-metric-row">
+              <div style="min-width:0;">
+                <div id="dashOpenComplaintsVal" style="font-size:20px;font-weight:800;color:#18181B;line-height:1.2;">0%</div>
+                <div id="dashUrgentComplaintsSubtext" style="font-size:11px;color:#52525B;margin-top:4px;">0 open · 0 resolved</div>
+              </div>
+              <div class="bento-mini-chart bento-mini-donut" id="dashMiniComplaints" aria-hidden="true"></div>
             </div>
             <div style="font-size:10.5px;color:#1D4ED8;font-weight:600;">24/7 SLA Facility Monitoring</div>
           </div>
@@ -346,7 +358,6 @@ Screens['admin-dashboard'] = function() {
                 <div class="chart-type-toggle">
                   <button class="chart-type-btn" id="btnChartBar" onclick="window.switchDashChartType('bar')">Bar</button>
                   <button class="chart-type-btn active" id="btnChartLine" onclick="window.switchDashChartType('line')">Line</button>
-                  <button class="chart-type-btn" id="btnChartDonut" onclick="window.switchDashChartType('donut')">Donut</button>
                 </div>
                 <select class="dash-select-pill" id="dashChartPeriod" onchange="window.switchDashPeriod(this.value)">
                   <option value="year" selected>This year</option>
@@ -428,22 +439,20 @@ Screens['admin-dashboard'] = function() {
         <!-- Right Column: Society Location Google Map & Admin Broadcasts -->
         <div class="dash-col-right">
 
-          <!-- Card 1: Society Location & Interactive Google Map -->
           <div class="dash-society-map-card">
             <div class="dash-panel-head">
               <div>
-                <div class="dash-panel-title">Location</div>
-                <div class="dash-panel-sub">Campus entrance and map pin</div>
+                <div class="dash-panel-title">Expenses</div>
+                <div class="dash-panel-sub">Society spending by category</div>
               </div>
-              <button class="dash-tool-btn" id="btnUpdateSocietyMap" onclick="window.openSocietyLocationModal()">Edit pin</button>
+              <select class="dash-select-pill" id="dashExpensePeriod" onchange="window.renderDashChart(null, 'donut', 'dashExpenseChartWrap')">
+                <option value="year" selected>This year</option>
+                <option value="6m">Last 6 months</option>
+                <option value="month">This month</option>
+              </select>
             </div>
-            <span id="dashMapStatusBadge" hidden>Pinned</span>
-
-            <!-- Dynamic Society Google Map Container -->
-            <div id="dashSocietyMapContainer">
-              <div style="padding:40px 16px;text-align:center;color:var(--text-muted);font-size:12px;">
-                Loading society map...
-              </div>
+            <div id="dashExpenseChartWrap">
+              <div style="padding:40px 16px;text-align:center;color:var(--text-muted);font-size:12px;">Loading expenses...</div>
             </div>
           </div>
 
@@ -549,6 +558,10 @@ Screens['admin-dashboard'] = function() {
 // =============================================
 
 window.switchDashChartType = function(type) {
+  if (type === 'donut') {
+    window.renderDashChart(null, 'donut', 'dashExpenseChartWrap');
+    return;
+  }
   window.__dashChartType = type;
   const btnBar = document.getElementById('btnChartBar');
   const btnLine = document.getElementById('btnChartLine');
@@ -610,12 +623,57 @@ window.hideDashTooltip = function() {
   }
 };
 
-window.renderDashChart = function(data, type) {
-  const wrap = document.getElementById('dashChartCanvasWrap');
+window.paintDashMiniCharts = function(stats) {
+  stats = stats || {};
+  const spark = function(values, color) {
+    const nums = (values && values.length) ? values.map(function(n) { return Number(n) || 0; }) : [0, 0, 0, 0];
+    const w = 56, h = 28, pad = 2;
+    const max = Math.max.apply(null, nums.concat([1]));
+    const min = Math.min.apply(null, nums.concat([0]));
+    const span = max - min || 1;
+    const pts = nums.map(function(v, i) {
+      const x = pad + (i / (nums.length - 1 || 1)) * (w - pad * 2);
+      const y = h - pad - ((v - min) / span) * (h - pad * 2);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    return '<svg viewBox="0 0 56 28" width="56" height="28"><polyline fill="none" stroke="' + color + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" points="' + pts + '"/></svg>';
+  };
+  const donut = function(pct, color) {
+    const r = 9;
+    const circ = 2 * Math.PI * r;
+    const safe = Math.max(0, Math.min(100, Number(pct) || 0));
+    const dash = (safe / 100) * circ;
+    return '<svg viewBox="0 0 28 28" width="28" height="28"><circle cx="14" cy="14" r="' + r + '" fill="none" stroke="#E4E4E7" stroke-width="4"/><circle cx="14" cy="14" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="4" stroke-dasharray="' + dash.toFixed(2) + ' ' + (circ - dash).toFixed(2) + '" stroke-linecap="round" transform="rotate(-90 14 14)"/></svg>';
+  };
+  const months = (window.__dashTrendTrends && window.__dashTrendTrends.year) || window.__dashTrendData || [];
+  const collected = months.map(function(m) { return m.collected || 0; });
+  const demand = months.map(function(m) { return m.demand || 0; });
+  const dues = months.map(function(m) { return Math.max(0, (m.demand || 0) - (m.collected || 0)); });
+  const colEl = document.getElementById('dashMiniCollections');
+  const duesEl = document.getElementById('dashMiniDues');
+  const occEl = document.getElementById('dashMiniOccupancy');
+  const compEl = document.getElementById('dashMiniComplaints');
+  if (colEl) colEl.innerHTML = spark(collected, '#15803D');
+  if (duesEl) duesEl.innerHTML = spark(dues.length ? dues : demand, '#B91C1C');
+  const totalU = Number(stats.totalUnits) || 0;
+  const occU = Number(stats.occupiedUnits) || 0;
+  const occPct = totalU ? Math.round((occU / totalU) * 100) : (Number(stats.occupancyRate) || 0);
+  if (occEl) occEl.innerHTML = donut(occPct, '#18181B');
+  const openC = Number(stats.openComplaints) || 0;
+  const resolvedC = Number(stats.resolvedComplaints) || 0;
+  const compPct = (openC + resolvedC) ? Math.round((resolvedC / (openC + resolvedC)) * 100) : 0;
+  if (compEl) compEl.innerHTML = donut(compPct, '#1D4ED8');
+};
+
+window.renderDashChart = function(data, type, targetId) {
+  const wrap = document.getElementById(targetId || 'dashChartCanvasWrap');
   if (!wrap) return;
 
-  type = type || window.__dashChartType || 'line';
-  const period = window.__dashSelectedPeriod || (document.getElementById('dashChartPeriod')?.value) || 'year';
+  const expensePanel = targetId === 'dashExpenseChartWrap';
+  type = expensePanel ? 'donut' : (type || window.__dashChartType || 'line');
+  const period = expensePanel
+    ? ((document.getElementById('dashExpensePeriod') || {}).value || 'year')
+    : (window.__dashSelectedPeriod || (document.getElementById('dashChartPeriod')?.value) || 'year');
 
   if (type === 'donut') {
     // -------------------------------------------------------------
@@ -1481,6 +1539,7 @@ window.loadLiveAdminDashboard = async function() {
       window.__dashTrendData = monthlyTrend;
       window.__dashTrendTrends = trends;
       window.__dashExpenses = expenses || [];
+      window.renderDashChart(null, 'donut', 'dashExpenseChartWrap');
 
       // Update KPI Cards
       const colEl = document.getElementById('dashCollectionsVal');
@@ -1599,6 +1658,7 @@ window.loadLiveAdminDashboard = async function() {
 
       // Render Charts & Society Location Map
       window.renderDashChart(null, window.__dashChartType || 'line');
+      window.paintDashMiniCharts(stats);
       window.renderSocietyMap(organization, organization?.location);
 
       // Update Priority Counts
