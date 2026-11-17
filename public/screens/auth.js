@@ -184,6 +184,7 @@ Screens['auth-login'] = function() {
             <button id="loginPinSubmitBtn" class="cutora-login-btn" onclick="window.handlePinLogin()">
               <span>🔒 Sign In with Security PIN →</span>
             </button>
+            <button type="button" onclick="window.openLostPinForm()" style="margin-top:10px;background:none;border:none;color:#B45309;font-weight:700;font-size:13px;cursor:pointer;width:100%;">Lost your PIN?</button>
           </div>
 
           <!-- Footer Line with Amber Link -->
@@ -686,67 +687,92 @@ window.handleRegisterUser = async function(phoneArg) {
   }
 };
 
-// Reset PIN modal / prompt handler (100% Free, no SMS/WhatsApp required)
-window.handleResetPinModal = async function() {
+window.openLostPinForm = function() {
+  const existing = document.getElementById('lostPinOverlay');
+  if (existing) existing.remove();
   const phoneEl = document.getElementById('loginPhoneInput') || document.getElementById('resPhoneInput');
   const phone = phoneEl ? phoneEl.value.trim().replace(/\s+/g, '') : '';
-
-  if (!phone || phone.length < 10) {
-    showToast('Please enter your 10-digit mobile number above first', 'warning');
-    if (phoneEl) phoneEl.focus();
-    return;
-  }
-
-  const proof = prompt(`Enter your current PIN for +91 ${phone}. If you forgot it, type FORGOT to receive an OTP.`, '');
-  if (!proof) return;
-
-  let currentPin = '';
-  let otp = '';
-  if (proof.trim().toUpperCase() === 'FORGOT') {
+  const overlay = document.createElement('div');
+  overlay.id = 'lostPinOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;max-width:420px;width:100%;padding:18px;">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px;">Set a new sign-in PIN</div>
+      <div style="font-size:12px;color:#52525B;margin-bottom:12px;">The old PIN cannot be shown. A code is sent to this mobile number, then you choose a new PIN.</div>
+      <label style="font-size:12px;font-weight:700;">Mobile number</label>
+      <input id="lostPinPhone" value="${phone}" maxlength="10" style="width:100%;margin:4px 0 10px;padding:10px;border:1px solid #E4E4E7;border-radius:2px;" />
+      <button type="button" id="lostPinSend" style="background:#18181B;color:#fff;border:none;border-radius:2px;padding:10px 12px;font-weight:700;cursor:pointer;">Send code</button>
+      <div id="lostPinCodeNote" style="font-size:12px;color:#3F3F46;margin-top:10px;"></div>
+      <div id="lostPinNext" style="display:none;margin-top:12px;">
+        <label style="font-size:12px;font-weight:700;">Code</label>
+        <input id="lostPinOtp" maxlength="6" style="width:100%;margin:4px 0 10px;padding:10px;border:1px solid #E4E4E7;border-radius:2px;" />
+        <label style="font-size:12px;font-weight:700;">New PIN</label>
+        <input id="lostPinNew" type="password" maxlength="6" style="width:100%;margin:4px 0 10px;padding:10px;border:1px solid #E4E4E7;border-radius:2px;" />
+        <label style="font-size:12px;font-weight:700;">Confirm new PIN</label>
+        <input id="lostPinConfirm" type="password" maxlength="6" style="width:100%;margin:4px 0 10px;padding:10px;border:1px solid #E4E4E7;border-radius:2px;" />
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+          <button type="button" id="lostPinClose" style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:10px 12px;cursor:pointer;">Close</button>
+          <button type="button" id="lostPinSave" style="background:#18181B;color:#fff;border:none;border-radius:2px;padding:10px 12px;font-weight:700;cursor:pointer;">Save new PIN</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#lostPinClose')?.addEventListener('click', function() { overlay.remove(); });
+  overlay.querySelector('#lostPinSend')?.addEventListener('click', async function() {
+    const mobile = (document.getElementById('lostPinPhone')?.value || '').replace(/\D/g, '').slice(-10);
+    if (mobile.length !== 10) {
+      showToast('Enter the 10-digit mobile number first.', 'warning');
+      return;
+    }
     const sent = await fetch('/api/auth/otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, action: 'send' }),
+      body: JSON.stringify({ phone: mobile, action: 'send' }),
     });
-    const sentData = await sent.json().catch(() => ({}));
+    const sentData = await sent.json().catch(function() { return {}; });
     if (!sent.ok) {
-      showToast(sentData.error || 'Could not send an OTP', 'warning');
+      showToast(sentData.error || 'The code could not be sent.', 'warning');
       return;
     }
-    otp = (prompt('Enter the OTP sent to this mobile number:', '') || '').trim();
-    if (!otp) return;
-  } else {
-    currentPin = proof.trim();
-  }
-
-  const newPin = prompt(`Set your new 4-to-6 digit Security PIN for +91 ${phone}:`, '');
-  if (!newPin) return;
-
-  const cleanPin = newPin.trim();
-  if (cleanPin.length < 4 || cleanPin.length > 6) {
-    showToast('PIN must be 4 to 6 digits long', 'warning');
-    return;
-  }
-
-  try {
+    const note = document.getElementById('lostPinCodeNote');
+    if (note) {
+      note.textContent = sentData.devCode
+        ? 'WhatsApp is not connected on this server. Your code is ' + sentData.devCode + '.'
+        : 'Enter the code sent to this mobile number.';
+    }
+    const next = document.getElementById('lostPinNext');
+    if (next) next.style.display = 'block';
+  });
+  overlay.querySelector('#lostPinSave')?.addEventListener('click', async function() {
+    const mobile = (document.getElementById('lostPinPhone')?.value || '').replace(/\D/g, '').slice(-10);
+    const otp = (document.getElementById('lostPinOtp')?.value || '').trim();
+    const newPin = (document.getElementById('lostPinNew')?.value || '').trim();
+    const confirmPin = (document.getElementById('lostPinConfirm')?.value || '').trim();
+    if (!/^\d{4,6}$/.test(newPin) || newPin !== confirmPin) {
+      showToast('Enter the same 4-to-6 digit PIN in both fields.', 'warning');
+      return;
+    }
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, pin: cleanPin, action: 'reset_pin', currentPin, otp })
+      body: JSON.stringify({ phone: mobile, pin: newPin, confirmPin, otp, action: 'reset_pin' }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(function() { return {}; });
     if (!res.ok || !data.success) {
-      showToast(data.error || 'Failed to update PIN', 'warning');
+      showToast(data.error || 'The PIN was not changed.', 'warning');
       return;
     }
-
-    showToast('✓ Security PIN set successfully! Signing you in...', 'success');
+    overlay.remove();
     const pinEl = document.getElementById('loginPinInput') || document.getElementById('resPinInput');
-    if (pinEl) pinEl.value = cleanPin;
+    if (phoneEl) phoneEl.value = mobile;
+    if (pinEl) pinEl.value = newPin;
+    showToast('New PIN saved. Signing in.', 'success');
     window.handlePinLogin();
-  } catch (e) {
-    showToast('Network error setting PIN', 'warning');
-  }
+  });
+};
+
+window.handleResetPinModal = async function() {
+  window.openLostPinForm();
 };
 
 window.handlePinLogin = async function() {

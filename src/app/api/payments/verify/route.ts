@@ -18,22 +18,10 @@ export async function POST(request: Request) {
       method = 'ONLINE',
     } = body
 
-    if (!razorpayOrderId) {
-      return NextResponse.json({ error: 'Missing Razorpay order ID' }, { status: 400 })
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return NextResponse.json({ error: 'Missing Razorpay payment details' }, { status: 400 })
     }
 
-    // Verify signature
-    const isValid = verifyPaymentSignature({
-      orderId: razorpayOrderId,
-      paymentId: razorpayPaymentId || `pay_mock_${Date.now()}`,
-      signature: razorpaySignature || 'dev_mock_signature',
-    })
-
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid payment signature. Verification failed.' }, { status: 400 })
-    }
-
-    // Find pending payment
     const payment = await prisma.payment.findFirst({
       where: { razorpayOrderId },
       include: {
@@ -44,6 +32,37 @@ export async function POST(request: Request) {
     })
 
     const finalInvoiceId = payment?.invoiceId || invoiceId
+
+    if (payment && !finalInvoiceId) {
+      const society = await prisma.organization.findUnique({
+        where: { id: payment.organizationId },
+        select: { razorpayKeySecret: true },
+      })
+      const isValid = verifyPaymentSignature({
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+        keySecret: society?.razorpayKeySecret || '',
+      })
+      if (!isValid) {
+        return NextResponse.json({ error: 'Razorpay did not confirm this payment.' }, { status: 400 })
+      }
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'SUCCESS',
+          razorpayPaymentId,
+          razorpaySignature,
+          method,
+          paidAt: new Date(),
+        },
+      })
+      return NextResponse.json({
+        success: true,
+        message: 'Payment verified',
+        paymentId: razorpayPaymentId,
+      })
+    }
 
     const invoice = finalInvoiceId
       ? await prisma.invoice.findFirst({
@@ -66,7 +85,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    const finalPaymentId = razorpayPaymentId || `pay_mock_${Date.now()}`
+    const society = await prisma.organization.findUnique({
+      where: { id: invoice.organizationId },
+      select: { razorpayKeySecret: true },
+    })
+    const isValid = verifyPaymentSignature({
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      signature: razorpaySignature,
+      keySecret: society?.razorpayKeySecret || '',
+    })
+    if (!isValid) {
+      return NextResponse.json({ error: 'Razorpay did not confirm this payment. The bill is still unpaid.' }, { status: 400 })
+    }
+
+    const finalPaymentId = razorpayPaymentId
 
     // 1. Update or create Payment record as SUCCESS
     if (payment) {
@@ -75,7 +108,7 @@ export async function POST(request: Request) {
         data: {
           status: 'SUCCESS',
           razorpayPaymentId: finalPaymentId,
-          razorpaySignature: razorpaySignature || 'mock_sig',
+          razorpaySignature,
           method,
           paidAt: new Date(),
         },
@@ -92,7 +125,7 @@ export async function POST(request: Request) {
           status: 'SUCCESS',
           razorpayOrderId,
           razorpayPaymentId: finalPaymentId,
-          razorpaySignature: razorpaySignature || 'mock_sig',
+          razorpaySignature,
           method,
           paidAt: new Date(),
         },

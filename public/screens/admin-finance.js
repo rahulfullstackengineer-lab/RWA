@@ -2932,11 +2932,15 @@ window.viewInvoiceDetail = function(invoiceId) {
 // =============================================
 // 4. Razorpay Payment Trigger & Verification
 // =============================================
-window.triggerRazorpayPayment = async function(invoiceId) {
+window.triggerRazorpayPayment = async function(invoiceId, amount, unitNumber) {
+  if (typeof window.collectWithSocietyRazorpay === 'function') {
+    return window.collectWithSocietyRazorpay({ invoiceId: invoiceId, reloadBills: true });
+  }
+  showToast('Payment checkout is still loading. Reload the page and try again.', 'warning');
+  return;
   try {
     showToast('Initializing secure Razorpay gateway...', 'info');
 
-    // 1. Call Create Order API
     const orderRes = await (window.apiFetch || fetch)('/api/payments/create-order', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

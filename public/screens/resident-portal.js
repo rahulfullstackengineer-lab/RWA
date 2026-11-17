@@ -6173,10 +6173,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--green);font-weight:600;">
-          <input type="radio" name="resPayMode" value="UPI" checked style="accent-color:var(--green);" />
-          <span>⚡ Instant UPI Payment (Google Pay / PhonePe / Paytm / BHIM)</span>
-        </label>
+        <div style="color:var(--text-secondary);">If this booking has a fee, payment opens Razorpay for the account connected in Settings → My Bank Account.</div>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-secondary);">
           <input type="checkbox" id="resSyncGcal" checked style="width:15px;height:15px;" />
           <span>📅 Add reservation to my Google Calendar</span>
@@ -6221,6 +6218,22 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
     const syncGcal = document.getElementById('resSyncGcal')?.checked;
 
     const unitNumber = window.__residentActiveUnit || 'A-1';
+    const payable = (Number(feeNum) || 0) + (Number(depositNum) || 0);
+    if (payable > 0) {
+      if (typeof window.collectWithSocietyRazorpay !== 'function') {
+        showToast('Payment checkout is still loading. Reload the page and try again.', 'warning');
+        return;
+      }
+      const paid = await window.collectWithSocietyRazorpay({
+        amount: payable,
+        description: 'Amenity booking ' + amenityName,
+        reloadBills: false,
+      });
+      if (!paid || !paid.ok) {
+        showToast('The booking was not saved because the payment was not completed.', 'warning');
+        return;
+      }
+    }
 
     let createdBooking = null;
 
@@ -6262,7 +6275,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
     const finalBookingObj = createdBooking ? {
       ...createdBooking,
       icon: matchedAmenity?.icon || '🏛️',
-      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} via UPI` : 'Free entry',
+      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : 'Free entry',
       deposit: depositNum > 0 ? `Deposit ₹${depositNum.toLocaleString('en-IN')}` : 'No deposit',
       canCancel: true,
       isPast: false
@@ -6276,7 +6289,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
       dateDisplay: bookingDate,
       slot: slot,
       purpose: purpose,
-      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} via UPI` : 'Free entry',
+      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : 'Free entry',
       deposit: depositNum > 0 ? `Deposit ₹${depositNum.toLocaleString('en-IN')}` : 'No deposit',
       status: 'CONFIRMED',
       canCancel: true,

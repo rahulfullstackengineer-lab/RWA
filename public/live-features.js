@@ -1532,209 +1532,140 @@
   // ------------------------------------------------------------
   // 10. Live Razorpay Payment Engine
   // ------------------------------------------------------------
-  window.triggerRazorpayPayment = async function (invoiceId, amount, unitNumber) {
+  window.loadRazorpayCheckoutScript = function () {
+    if (window.Razorpay) return Promise.resolve()
+    return new Promise(function (resolve, reject) {
+      const existing = document.querySelector('script[data-razorpay-checkout="1"]')
+      if (existing) {
+        existing.addEventListener('load', function () { resolve() })
+        existing.addEventListener('error', function () { reject() })
+        return
+      }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.async = true
+      script.dataset.razorpayCheckout = '1'
+      script.onload = function () { resolve() }
+      script.onerror = function () { reject() }
+      document.body.appendChild(script)
+    })
+  }
+
+  window.collectWithSocietyRazorpay = function (options) {
+    options = options || {}
+    return new Promise(function (resolve) {
+      ;(async function () {
+        let orderData = null
+        try {
+          const orderRes = await (window.apiFetch || fetch)('/api/payments/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invoiceId: options.invoiceId || undefined,
+              amount: options.amount,
+              description: options.description,
+            }),
+          })
+          orderData = await orderRes.json()
+          if (!orderRes.ok || !orderData.success) {
+            showToast(orderData.error || 'Could not start this payment', 'error')
+            resolve({ ok: false })
+            return
+          }
+        } catch (err) {
+          showToast('Could not start this payment', 'error')
+          resolve({ ok: false })
+          return
+        }
+        if (!orderData.razorpayKeyId || !orderData.order || orderData.order.isMock) {
+          showToast('This society has not connected a Razorpay account.', 'error')
+          resolve({ ok: false })
+          return
+        }
+        try {
+          await window.loadRazorpayCheckoutScript()
+        } catch (err) {
+          showToast('Razorpay checkout could not be loaded. Check the internet connection and try again.', 'error')
+          resolve({ ok: false })
+          return
+        }
+        let settled = false
+        const finish = function (result) {
+          if (settled) return
+          settled = true
+          resolve(result)
+        }
+        const rzp = new window.Razorpay({
+          key: orderData.razorpayKeyId,
+          amount: orderData.order.amount,
+          currency: orderData.order.currency || 'INR',
+          name: (orderData.invoice && orderData.invoice.societyName) || 'Society',
+          description: (orderData.invoice && orderData.invoice.invoiceNumber) || options.description || 'Society payment',
+          order_id: orderData.order.id,
+          handler: async function (response) {
+            try {
+              const verifyRes = await (window.apiFetch || fetch)('/api/payments/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpayOrderId: response.razorpay_order_id,
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpaySignature: response.razorpay_signature,
+                  invoiceId: orderData.invoice && orderData.invoice.id,
+                  method: 'ONLINE',
+                }),
+              })
+              const data = await verifyRes.json().catch(function () { return {} })
+              if (!verifyRes.ok || !data.success) {
+                showToast(data.error || 'Payment was not recorded. Nothing was marked paid.', 'error')
+                finish({ ok: false })
+                return
+              }
+              if (options.reloadBills !== false && options.invoiceId) {
+                showToast('Payment recorded. This bill is now paid.', 'success')
+                if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen()
+                if (typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
+                if (typeof window.loadLiveResidentBills === 'function') window.loadLiveResidentBills()
+                if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
+                if (typeof window.loadLiveResidentPayments === 'function') window.loadLiveResidentPayments()
+                if (typeof window.restoreOpenUnit === 'function' && typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail') {
+                  window.restoreOpenUnit(window.readScreenRecord ? window.readScreenRecord('unit') : '')
+                } else if (typeof Router !== 'undefined' && Router.current) {
+                  Router.go(Router.current())
+                }
+              }
+              finish({ ok: true, paymentId: response.razorpay_payment_id })
+            } catch (err) {
+              showToast('Payment was not recorded. Nothing was marked paid.', 'error')
+              finish({ ok: false })
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              showToast('Payment was closed. Nothing was marked paid.', 'warning')
+              finish({ ok: false })
+            },
+          },
+          theme: { color: '#18181B' },
+        })
+        rzp.on('payment.failed', function () {
+          showToast('Razorpay did not complete this payment. Nothing was marked paid.', 'error')
+          finish({ ok: false })
+        })
+        rzp.open()
+      })()
+    })
+  }
+
+  window.triggerRazorpayPayment = async function (invoiceId) {
     if (!invoiceId) {
       showToast('Choose a bill to pay', 'warning')
       return
     }
-    let orderData = null
-    try {
-      const orderRes = await (window.apiFetch || fetch)('/api/payments/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ invoiceId }),
-      })
-      orderData = await orderRes.json()
-      if (!orderRes.ok || !orderData.success) {
-        showToast(orderData.error || 'Could not start this payment', 'error')
-        return
-      }
-    } catch (err) {
-      showToast('Could not start this payment', 'error')
-      return
-    }
-    window.__rzpCheckout = orderData
-    amount = orderData.invoice.amount
-    unitNumber = 'Flat ' + (orderData.invoice.unitNumber || '')
-    let modal = document.getElementById('rwaRazorpayModal')
-    if (!modal) {
-      modal = document.createElement('div')
-      modal.id = 'rwaRazorpayModal'
-      modal.style.cssText = `
-        position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65);
-        backdrop-filter: blur(4px); z-index: 99999; display: flex;
-        align-items: center; justify-content: center; padding: 16px;
-      `
-      document.body.appendChild(modal)
-    }
-
-    modal.innerHTML = `
-      <div style="background:#fff; border-radius:16px; max-width:440px; width:100%; overflow:hidden; box-shadow:0 25px 50px -12px rgba(15,23,42,0.25); border:1px solid #E2E8F0; animation: scaleUp 0.18s ease;">
-        <div style="background: linear-gradient(135deg, #0C2340 0%, #1D4ED8 100%); padding: 20px 24px; color: #fff;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div>
-              <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; opacity:0.9; margin-bottom:4px;">
-                <span>⚡</span> RAZORPAY SECURE GATEWAY
-              </div>
-              <div style="font-size:18px; font-weight:800;">Greenfield Heights RWA</div>
-              <div style="font-size:12px; opacity:0.8; margin-top:2px;">Maintenance Bill · ${unitNumber}</div>
-            </div>
-            <button type="button" onclick="document.getElementById('rwaRazorpayModal').style.display='none'" style="background:rgba(255,255,255,0.15); border:none; color:#fff; width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:16px;">✕</button>
-          </div>
-          <div style="margin-top:16px; background:rgba(255,255,255,0.12); border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:12px; opacity:0.9;">Total Payable</span>
-            <span style="font-size:24px; font-weight:800;">₹${Number(amount).toLocaleString('en-IN')}</span>
-          </div>
-        </div>
-
-        <div style="padding: 20px 24px;">
-          <div style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; margin-bottom:12px;">Select Payment Method</div>
-          
-          <div style="display:flex; gap:8px; margin-bottom:16px;">
-            <button type="button" class="rzp-tab active" id="tabUpi" onclick="switchRzpTab('upi')" style="flex:1; padding:9px; border-radius:8px; border:2px solid #2563EB; background:#EFF6FF; color:#1D4ED8; font-weight:700; font-size:12px; cursor:pointer;">📱 UPI / QR</button>
-            <button type="button" class="rzp-tab" id="tabCard" onclick="switchRzpTab('card')" style="flex:1; padding:9px; border-radius:8px; border:1px solid #E2E8F0; background:#F8FAFC; color:#475569; font-weight:500; font-size:12px; cursor:pointer;">💳 Cards</button>
-            <button type="button" class="rzp-tab" id="tabNb" onclick="switchRzpTab('nb')" style="flex:1; padding:9px; border-radius:8px; border:1px solid #E2E8F0; background:#F8FAFC; color:#475569; font-weight:500; font-size:12px; cursor:pointer;">🏛️ NetBanking</button>
-          </div>
-
-          <div id="rzpTabContent">
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
-              <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Google Pay</button>
-              <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">PhonePe</button>
-              <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Paytm UPI</button>
-            </div>
-            <div>
-              <label style="font-size:11px; color:#64748B; display:block; margin-bottom:4px;">UPI ID / VPA</label>
-              <input type="text" id="rzpUpiInput" value="resident@okhdfcbank" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;" />
-            </div>
-          </div>
-
-          <button id="rzpSubmitBtn" onclick="processRzpPayment()" style="margin-top:20px; width:100%; padding:13px; border-radius:8px; background:#18181B; color:#fff; border:none; font-size:14px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
-            🔒 Pay ₹${Number(amount).toLocaleString('en-IN')} via Razorpay
-          </button>
-
-          <div style="text-align:center; font-size:11px; color:#94A3B8; margin-top:12px;">
-            🛡️ 256-bit SSL Encryption · Razorpay Verified Partner
-          </div>
-        </div>
-      </div>
-    `
-    modal.style.display = 'flex'
+    return window.collectWithSocietyRazorpay({ invoiceId: invoiceId, reloadBills: true })
   }
 
-  window.switchRzpTab = function (tab) {
-    const c = document.getElementById('rzpTabContent')
-    const tUpi = document.getElementById('tabUpi')
-    const tCard = document.getElementById('tabCard')
-    const tNb = document.getElementById('tabNb')
-
-    ;[tUpi, tCard, tNb].forEach((t) => {
-      if (t) {
-        t.style.border = '1px solid #E2E8F0'
-        t.style.background = '#F8FAFC'
-        t.style.color = '#475569'
-      }
-    })
-
-    if (tab === 'upi') {
-      tUpi.style.border = '2px solid #2563EB'
-      tUpi.style.background = '#EFF6FF'
-      tUpi.style.color = '#1D4ED8'
-      c.innerHTML = `
-        <div style="display:flex; gap:8px; margin-bottom:12px;">
-          <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Google Pay</button>
-          <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">PhonePe</button>
-          <button type="button" style="flex:1; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">Paytm</button>
-        </div>
-        <div>
-          <label style="font-size:11px; color:#64748B; display:block; margin-bottom:4px;">UPI ID / VPA</label>
-          <input type="text" value="resident@okhdfcbank" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;" />
-        </div>
-      `
-    } else if (tab === 'card') {
-      tCard.style.border = '2px solid #2563EB'
-      tCard.style.background = '#EFF6FF'
-      tCard.style.color = '#1D4ED8'
-      c.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <div>
-            <label style="font-size:11px; color:#64748B; display:block; margin-bottom:4px;">Card Number</label>
-            <input type="text" value="4532 •••• •••• 8910" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;" />
-          </div>
-          <div style="display:flex; gap:8px;">
-            <input type="text" value="12/28" placeholder="MM/YY" style="flex:1; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;" />
-            <input type="password" value="888" placeholder="CVV" style="width:80px; padding:10px; border-radius:8px; border:1px solid #CBD5E1; font-size:13px;" />
-          </div>
-        </div>
-      `
-    } else {
-      tNb.style.border = '2px solid #2563EB'
-      tNb.style.background = '#EFF6FF'
-      tNb.style.color = '#1D4ED8'
-      c.innerHTML = `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          <button type="button" style="padding:10px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">🏛️ HDFC Bank</button>
-          <button type="button" style="padding:10px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">🏛️ State Bank of India</button>
-          <button type="button" style="padding:10px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">🏛️ ICICI Bank</button>
-          <button type="button" style="padding:10px; border-radius:6px; border:1px solid #CBD5E1; background:#fff; font-size:11px; font-weight:600; cursor:pointer;">🏛️ Axis Bank</button>
-        </div>
-      `
-    }
-  }
-
-  window.processRzpPayment = async function () {
-    const checkout = window.__rzpCheckout
-    const btn = document.getElementById('rzpSubmitBtn')
-    if (!checkout || !checkout.order || !checkout.invoice) {
-      showToast('Start the payment again', 'warning')
-      return
-    }
-    if (btn) {
-      btn.textContent = 'Recording payment...'
-      btn.disabled = true
-    }
-
-    try {
-      const verifyRes = await (window.apiFetch || fetch)('/api/payments/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          razorpayOrderId: checkout.order.id,
-          razorpayPaymentId: 'pay_mock_' + Date.now(),
-          razorpaySignature: 'dev_mock_signature',
-          invoiceId: checkout.invoice.id,
-          method: 'UPI',
-        }),
-      })
-      const data = await verifyRes.json().catch(function () { return {} })
-      if (!verifyRes.ok || !data.success) {
-        showToast(data.error || 'Payment was not recorded. The bill is still pending.', 'error')
-        if (btn) {
-          btn.disabled = false
-          btn.textContent = 'Try payment again'
-        }
-        return
-      }
-    } catch (err) {
-      showToast('Payment was not recorded. The bill is still pending.', 'error')
-      if (btn) btn.disabled = false
-      return
-    }
-
-    const modal = document.getElementById('rwaRazorpayModal')
-    if (modal) modal.style.display = 'none'
-    window.__rzpCheckout = null
-    showToast('Payment recorded. This bill is now paid.', 'success')
-    if (typeof window.loadLiveInvoicesScreen === 'function') window.loadLiveInvoicesScreen()
-    if (typeof window.loadLivePaymentsScreen === 'function') window.loadLivePaymentsScreen()
-    if (typeof window.loadLiveResidentBills === 'function') window.loadLiveResidentBills()
-    if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
-    if (typeof window.loadLiveResidentPayments === 'function') window.loadLiveResidentPayments()
-    if (typeof window.restoreOpenUnit === 'function' && typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail') {
-      window.restoreOpenUnit(window.readScreenRecord ? window.readScreenRecord('unit') : '')
-      return
-    }
-    if (typeof Router !== 'undefined' && Router.current) Router.go(Router.current())
-  }
+  window.triggerRazorpayPayment._societyCheckout = true
 
   // ------------------------------------------------------------
   // 11. Interactive Monthly Bill Generator & Bulk Update Engine

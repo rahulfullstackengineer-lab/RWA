@@ -11,6 +11,50 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { invoiceId } = body
 
+    if (!invoiceId && Number(body.amount) > 0 && user.organizationId) {
+      const amount = Number(body.amount)
+      const description = String(body.description || 'Society payment').slice(0, 120)
+      const organization = await prisma.organization.findUnique({ where: { id: user.organizationId } })
+      const keyId = organization?.razorpayKeyId || ''
+      const keySecret = organization?.razorpayKeySecret || ''
+      if (!organization || !keyId || !keySecret) {
+        return NextResponse.json({
+          error: 'This society has not connected a Razorpay account. The office can add it in Settings under My Bank Account.',
+        }, { status: 400 })
+      }
+      const order = await createPaymentOrder({
+        amount,
+        currency: 'INR',
+        receipt: `pay_${Date.now()}`.slice(0, 40),
+        notes: { description, organizationId: organization.id, userId: user.id },
+      }, { keyId, keySecret })
+      const payment = await prisma.payment.create({
+        data: {
+          organizationId: organization.id,
+          userId: user.id,
+          amount,
+          currency: 'INR',
+          source: 'ONLINE_GATEWAY',
+          status: 'PENDING',
+          notes: description,
+          razorpayOrderId: order.orderId,
+        },
+      })
+      return NextResponse.json({
+        success: true,
+        order: { id: order.orderId, amount: order.amount, currency: order.currency, isMock: false },
+        invoice: {
+          id: null,
+          invoiceNumber: description,
+          amount,
+          unitNumber: '',
+          societyName: organization.name,
+        },
+        paymentId: payment.id,
+        razorpayKeyId: keyId,
+      })
+    }
+
     if (!invoiceId) {
       return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 })
     }
@@ -44,12 +88,18 @@ export async function POST(request: Request) {
     }
 
     const payableAmount = invoice.balanceAmount > 0 ? invoice.balanceAmount : invoice.totalAmount
+    const keyId = invoice.organization.razorpayKeyId || ''
+    const keySecret = invoice.organization.razorpayKeySecret || ''
+    if (!keyId || !keySecret) {
+      return NextResponse.json({
+        error: 'This society has not connected a Razorpay account. The office can add it in Settings under My Bank Account.',
+      }, { status: 400 })
+    }
 
-    // Call Razorpay
     const order = await createPaymentOrder({
       amount: payableAmount,
       currency: 'INR',
-      receipt: `rcpt_${invoice.invoiceNumber}`,
+      receipt: `rcpt_${invoice.invoiceNumber}`.slice(0, 40),
       notes: {
         invoiceId: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
@@ -57,7 +107,7 @@ export async function POST(request: Request) {
         organizationId: invoice.organizationId,
         userId: user.id,
       },
-    })
+    }, { keyId, keySecret })
 
     // Create a pending payment record
     const payment = await prisma.payment.create({
@@ -89,7 +139,7 @@ export async function POST(request: Request) {
         societyName: invoice.organization.name,
       },
       paymentId: payment.id,
-      razorpayKeyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+      razorpayKeyId: keyId,
     })
   } catch (err: unknown) {
     console.error('Create order error:', err)

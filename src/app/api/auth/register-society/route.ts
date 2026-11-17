@@ -77,6 +77,9 @@ export async function POST(request: Request) {
         pincode: society.pincode || '',
         phone: cleanPhone,
         email: validAdminEmail,
+        registeringAuthority: society.authority ? String(society.authority).trim() : null,
+        housingType: society.housingType ? String(society.housingType).trim() : null,
+        adminDesignation: admin.designation ? String(admin.designation).trim() : null,
         status: 'ACTIVE',
         plan: 'GROWTH',
       }

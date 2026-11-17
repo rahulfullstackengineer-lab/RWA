@@ -53,13 +53,17 @@ export function RazorpayModal({ isOpen, onClose, onSuccess, invoice }: RazorpayM
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).Razorpay
 
+      if (!hasRealKey) {
+        throw new Error('This society has not connected a Razorpay account. The office can add it in Settings under My Bank Account.')
+      }
+
       if (hasRealKey) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const rzp = new (window as any).Razorpay({
           key: orderData.razorpayKeyId,
           amount: orderData.order.amount,
           currency: orderData.order.currency,
-          name: 'Greenfield Heights RWA',
+          name: orderData.invoice?.societyName || 'Society',
           description: `Maintenance Bill ${invoice.invoiceNumber} (${invoice.unitNumber})`,
           order_id: orderData.order.id,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,16 +85,6 @@ export function RazorpayModal({ isOpen, onClose, onSuccess, invoice }: RazorpayM
         setIsProcessing(false)
         return
       }
-
-      // Local Simulated Razorpay Gateway Processing
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-
-      const mockPaymentId = `pay_rzp_${Date.now()}`
-      await verifyPayment({
-        razorpayOrderId: orderData.order.id,
-        razorpayPaymentId: mockPaymentId,
-        razorpaySignature: 'mock_signature_valid',
-      })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Payment failed')
       setIsProcessing(false)

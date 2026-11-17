@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireAuth, requireAdmin } from '@/lib/auth'
+import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
+import { findUserByPhone, normalizePhone } from '@/lib/phone'
 import { logAudit } from '@/lib/audit'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { razorpayClient } from '@/lib/razorpay'
 import fs from 'fs'
 import path from 'path'
 
@@ -170,6 +172,15 @@ function saveStoredSettings(orgId: string, settings: OrganizationSettingsPayload
   }
 }
 
+function organizationForClient<T extends { razorpayKeyId?: string | null; razorpayKeySecret?: string | null }>(organization: T | null) {
+  if (!organization) return null
+  const { razorpayKeySecret, ...rest } = organization
+  return {
+    ...rest,
+    razorpayConnected: Boolean(organization.razorpayKeyId && razorpayKeySecret),
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { user, error } = await requireAuth(request)
@@ -206,6 +217,14 @@ export async function GET(request: Request) {
       }
     }
 
+    const adminUser = organization
+      ? await prisma.user.findFirst({
+          where: { organizationId: orgId, role: 'RWA_ADMIN' },
+          select: { id: true, name: true, phone: true, email: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : null
+
     const officeRoles = ['RWA_ADMIN', 'TREASURER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
     if (!officeRoles.includes(user.role)) {
       storedSettings.payment = {
@@ -219,8 +238,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      organization: organization ? { ...organization, totalUnits: unitCount } : null,
+      organization: organizationForClient(organization ? { ...organization, totalUnits: unitCount } : null),
       unitCount,
+      admin: adminUser
+        ? { ...adminUser, designation: organization?.adminDesignation || '' }
+        : null,
       settings: storedSettings,
     })
   } catch (err: unknown) {
@@ -243,20 +265,36 @@ export async function POST(request: Request) {
     // 1. UPDATE ORGANIZATION PROFILE
     if (section === 'profile' || body.organization) {
       const orgData = body.organization || body
-      const { name, registrationNo, address, city, pincode, phone, email } = orgData
+      const { name, registrationNo, address, city, pincode, phone, email, registeringAuthority, housingType, adminDesignation, adminName, mapLocation } = orgData
 
       const updatedOrg = await prisma.organization.update({
         where: { id: orgId },
         data: {
           name: name ? name.trim() : undefined,
           registrationNo: registrationNo ? registrationNo.trim() : undefined,
-          address: address ? address.trim() : undefined,
-          city: city ? city.trim() : undefined,
-          pincode: pincode ? pincode.trim() : undefined,
-          phone: phone ? phone.trim() : undefined,
-          email: email ? email.trim() : undefined,
+          address: address !== undefined ? String(address).trim() : undefined,
+          city: city !== undefined ? String(city).trim() : undefined,
+          pincode: pincode !== undefined ? String(pincode).trim() : undefined,
+          phone: phone !== undefined ? String(phone).trim() : undefined,
+          email: email !== undefined ? String(email).trim() : undefined,
+          registeringAuthority: registeringAuthority !== undefined ? String(registeringAuthority).trim() : undefined,
+          housingType: housingType !== undefined ? String(housingType).trim() : undefined,
+          adminDesignation: adminDesignation !== undefined ? String(adminDesignation).trim() : undefined,
         },
       })
+
+      if (adminName && String(adminName).trim()) {
+        const adminUser = await prisma.user.findFirst({
+          where: { organizationId: orgId, role: 'RWA_ADMIN' },
+          orderBy: { createdAt: 'asc' },
+        })
+        if (adminUser) {
+          await prisma.user.update({
+            where: { id: adminUser.id },
+            data: { name: String(adminName).trim() },
+          })
+        }
+      }
 
       currentSettings.payment.accountHolder = updatedOrg.name
       if (address || city || pincode) {
@@ -276,8 +314,25 @@ export async function POST(request: Request) {
         const q = [currentSettings.location.landmark, currentSettings.location.address, currentSettings.location.city, currentSettings.location.pincode].filter(Boolean).join(', ')
         currentSettings.location.mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(q)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
       }
+      if (mapLocation !== undefined) {
+        currentSettings.location = currentSettings.location || {
+          googleMapsUrl: '',
+          mapEmbedUrl: '',
+          address: '',
+          city: '',
+          pincode: '',
+          isConfigured: false,
+        }
+        const mapLoc = String(mapLocation).trim()
+        currentSettings.location.googleMapsUrl = mapLoc
+        if (mapLoc) {
+          currentSettings.location.mapEmbedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(mapLoc)}&t=&z=15&ie=UTF8&iwloc=&output=embed`
+          currentSettings.location.isConfigured = true
+        }
+      }
       saveStoredSettings(orgId, currentSettings)
 
+      const publicOrg = organizationForClient(updatedOrg)
       await logAudit({
         organizationId: orgId,
         userId: user.id,
@@ -285,16 +340,109 @@ export async function POST(request: Request) {
         entityType: 'ORGANIZATION',
         entityId: orgId,
         details: `Updated society profile: "${updatedOrg.name}" (${updatedOrg.registrationNo || 'No Reg No'})`,
-        newValues: updatedOrg,
+        newValues: publicOrg,
       })
-
-      emitLiveSocketEvent('organization-updated', { organization: updatedOrg }, { orgId })
+      emitLiveSocketEvent('organization-updated', { organization: publicOrg }, { orgId })
 
       return NextResponse.json({
         success: true,
         message: 'Organization profile updated successfully',
-        organization: updatedOrg,
+        organization: publicOrg,
         settings: currentSettings,
+      })
+    }
+
+    if (section === 'reset_pin') {
+      const cleanPhone = normalizePhone(body.phone)
+      const newPin = String(body.newPin || '').trim()
+      const confirmPin = String(body.confirmPin || '').trim()
+      if (!cleanPhone) {
+        return NextResponse.json({ error: 'Enter the 10-digit mobile number for this person.' }, { status: 400 })
+      }
+      if (!/^\d{4,6}$/.test(newPin) || newPin !== confirmPin) {
+        return NextResponse.json({ error: 'Enter the same 4-to-6 digit PIN in both fields.' }, { status: 400 })
+      }
+      const account = await findUserByPhone(cleanPhone)
+      if (!account || account.organizationId !== orgId) {
+        return NextResponse.json({ error: 'That mobile number is not a member of this society.' }, { status: 404 })
+      }
+      await prisma.user.update({
+        where: { id: account.id },
+        data: { passwordHash: await hashPassword(newPin) },
+      })
+      await logAudit({
+        organizationId: orgId,
+        userId: user.id,
+        action: 'RESET_SIGNIN_PIN',
+        entityType: 'USER',
+        entityId: account.id,
+        details: `Set a new sign-in PIN for ${account.name} (+91 ${cleanPhone}).`,
+      })
+      return NextResponse.json({
+        success: true,
+        message: `A new sign-in PIN is saved for ${account.name}. They can sign in with this PIN.`,
+        name: account.name,
+      })
+    }
+
+    if (section === 'razorpay') {
+      const keyId = String(body.keyId || '').trim()
+      const keySecret = String(body.keySecret || '').trim()
+      if (!/^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId) || keySecret.length < 8) {
+        return NextResponse.json({
+          error: 'Enter the Key ID and Key Secret from the Razorpay dashboard. The Key ID starts with rzp_test_ or rzp_live_.',
+        }, { status: 400 })
+      }
+
+      try {
+        await razorpayClient({ keyId, keySecret }).orders.create({
+          amount: 100,
+          currency: 'INR',
+          receipt: `connect_${Date.now()}`.slice(0, 40),
+          notes: { purpose: 'society_account_check', organizationId: orgId },
+        })
+      } catch {
+        return NextResponse.json({
+          error: 'Razorpay rejected these keys. Check the Key ID and Key Secret, then try again.',
+        }, { status: 400 })
+      }
+
+      const updatedOrg = await prisma.organization.update({
+        where: { id: orgId },
+        data: { razorpayKeyId: keyId, razorpayKeySecret: keySecret, razorpayConnectedAt: new Date() },
+      })
+      const publicOrg = organizationForClient(updatedOrg)
+      await logAudit({
+        organizationId: orgId,
+        userId: user.id,
+        action: 'CONNECT_RAZORPAY',
+        entityType: 'ORGANIZATION',
+        entityId: orgId,
+        details: `Connected Razorpay account ${keyId}. Bill payments will be collected in this account.`,
+      })
+      return NextResponse.json({
+        success: true,
+        message: 'Razorpay account connected. Bill payments will go to this account.',
+        organization: publicOrg,
+      })
+    }
+
+    if (section === 'razorpay_disconnect') {
+      const updatedOrg = await prisma.organization.update({
+        where: { id: orgId },
+        data: { razorpayKeyId: null, razorpayKeySecret: null, razorpayConnectedAt: null },
+      })
+      await logAudit({
+        organizationId: orgId,
+        userId: user.id,
+        action: 'DISCONNECT_RAZORPAY',
+        entityType: 'ORGANIZATION',
+        entityId: orgId,
+        details: 'Disconnected the society Razorpay account. Online bill payments are paused.',
+      })
+      return NextResponse.json({
+        success: true,
+        organization: organizationForClient(updatedOrg),
       })
     }
 

@@ -83,10 +83,16 @@ model Organization {
   pincode         String?
   phone           String?
   email           String?
+  registeringAuthority String?
+  housingType     String?
+  adminDesignation String?
   logoUrl         String?
   status          String   @default("ACTIVE")
   plan            String   @default("STARTER")
   totalUnits      Int      @default(0)
+  razorpayKeyId   String?
+  razorpayKeySecret String?
+  razorpayConnectedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

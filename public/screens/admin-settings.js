@@ -41,12 +41,103 @@ window.toggleRuleSwitch = function(ruleKey) {
   Router.go('admin-settings');
 };
 
+window.saveSocietyRazorpay = async function() {
+  const keyId = document.getElementById('setRazorpayKeyId')?.value.trim();
+  const keySecret = document.getElementById('setRazorpayKeySecret')?.value.trim();
+  if (!keyId || !keySecret) {
+    alert('Enter both the Razorpay Key ID and Key Secret.');
+    return;
+  }
+  try {
+    const fetchFn = window.apiFetch || fetch;
+    const res = await fetchFn('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: 'razorpay', keyId, keySecret }),
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok) {
+      showToast(data.error || 'Razorpay could not be connected.', 'error');
+      return;
+    }
+    if (data.organization) {
+      window._settingsData = window._settingsData || {};
+      window._settingsData.organization = data.organization;
+    }
+    showToast('Razorpay account connected. Bill payments will go to this account.', 'success');
+    window._settingsActiveTab = 'bank';
+    await window.loadLiveSettings(true);
+    Router.go('admin-settings');
+  } catch (e) {
+    showToast('Razorpay could not be connected.', 'error');
+  }
+};
+
+window.disconnectSocietyRazorpay = async function() {
+  if (!confirm('Disconnect this Razorpay account? Residents will not be able to pay bills online until another account is connected.')) return;
+  try {
+    const fetchFn = window.apiFetch || fetch;
+    const res = await fetchFn('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: 'razorpay_disconnect' }),
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok) {
+      showToast(data.error || 'The account could not be disconnected.', 'error');
+      return;
+    }
+    if (data.organization && window._settingsData) window._settingsData.organization = data.organization;
+    showToast('Razorpay account disconnected.', 'success');
+    window._settingsActiveTab = 'bank';
+    await window.loadLiveSettings(true);
+    Router.go('admin-settings');
+  } catch (e) {
+    showToast('The account could not be disconnected.', 'error');
+  }
+};
+
+window.resetMemberSignInPin = async function() {
+  const phone = document.getElementById('setResetPinPhone')?.value.trim();
+  const newPin = document.getElementById('setResetPinNew')?.value.trim();
+  const confirmPin = document.getElementById('setResetPinConfirm')?.value.trim();
+  if (!phone || !newPin) {
+    alert('Enter the mobile number and the new PIN.');
+    return;
+  }
+  try {
+    const fetchFn = window.apiFetch || fetch;
+    const res = await fetchFn('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section: 'reset_pin', phone, newPin, confirmPin }),
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok) {
+      showToast(data.error || 'The PIN was not changed.', 'error');
+      return;
+    }
+    const pinNew = document.getElementById('setResetPinNew');
+    const pinConfirm = document.getElementById('setResetPinConfirm');
+    if (pinNew) pinNew.value = '';
+    if (pinConfirm) pinConfirm.value = '';
+    showToast(data.message || 'A new sign-in PIN is saved.', 'success');
+  } catch (e) {
+    showToast('The PIN was not changed.', 'error');
+  }
+};
+
 window.saveOrganizationProfile = async function() {
   const name = document.getElementById('setOrgName')?.value.trim();
   const registrationNo = document.getElementById('setOrgRegNo')?.value.trim();
+  const registeringAuthority = document.getElementById('setOrgAuthority')?.value.trim();
+  const housingType = document.getElementById('setOrgHousing')?.value.trim();
   const address = document.getElementById('setOrgAddress')?.value.trim();
   const city = document.getElementById('setOrgCity')?.value.trim();
   const pincode = document.getElementById('setOrgPincode')?.value.trim();
+  const mapLocation = document.getElementById('setOrgMap')?.value.trim();
+  const adminName = document.getElementById('setAdminName')?.value.trim();
+  const adminDesignation = document.getElementById('setAdminRole')?.value.trim();
   const phone = document.getElementById('setOrgPhone')?.value.trim();
   const email = document.getElementById('setOrgEmail')?.value.trim();
 
@@ -64,9 +155,14 @@ window.saveOrganizationProfile = async function() {
         section: 'profile',
         name,
         registrationNo,
+        registeringAuthority,
+        housingType,
         address,
         city,
         pincode,
+        mapLocation,
+        adminName,
+        adminDesignation,
         phone,
         email,
       }),
@@ -309,11 +405,46 @@ Screens['admin-settings'] = function() {
     },
   };
 
-  window._settingsActiveTab = 'profile';
-  const activeTab = 'profile';
+  const activeTab = window._settingsActiveTab === 'bank' ? 'bank' : 'profile';
+  const esc = function(value) {
+    return String(value || '').replace(/[&<>"]/g, function(ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch];
+    });
+  };
+  const housingChoices = [
+    'Cooperative Group Housing (CGHS)',
+    'Multi-Tower Apartments',
+    'Plotted / Villa Colony',
+    'CHB Housing Complex',
+    'Builder Floors',
+    'Commercial / Mixed-Use Complex',
+  ];
+  const roleChoices = [
+    'President & Admin',
+    'General Secretary',
+    'Treasurer',
+    'Vice President',
+    'Joint Secretary',
+    'Managing Director',
+    'Executive Committee Member',
+  ];
+  const housingValue = org.housingType || '';
+  const roleValue = org.adminDesignation || (sData.admin && sData.admin.designation) || '';
+  const adminNameValue = (sData.admin && sData.admin.name) || '';
+  const mapValue = (settings.location && settings.location.googleMapsUrl) || '';
+  const choiceOptions = function(choices, current) {
+    const known = choices.indexOf(current) !== -1;
+    const extra = current && !known ? `<option value="${esc(current)}" selected>${esc(current)}</option>` : '';
+    return `<option value="">Not saved yet</option>` + extra + choices.map(function(choice) {
+      return `<option value="${esc(choice)}" ${current === choice ? 'selected' : ''}>${esc(choice)}</option>`;
+    }).join('');
+  };
+  const razorpayKey = String(org.razorpayKeyId || '').replace(/[&<>"]/g, '');
+  const razorpayOn = Boolean(org.razorpayConnected);
 
   const tabs = [
     { key: 'profile', icon: '🏛️', label: 'Organization Profile' },
+    { key: 'bank', icon: '🏦', label: 'My Bank Account' },
     { key: 'audit', icon: '📋', label: 'Audit Trail' },
   ];
 
@@ -325,7 +456,7 @@ Screens['admin-settings'] = function() {
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-title">Organization Settings</div>
-          <div class="page-subtitle">Society name, registration, address, and contact details</div>
+          <div class="page-subtitle">Society details and the Razorpay account that collects bill payments</div>
         </div>
       </div>
 
@@ -359,39 +490,122 @@ Screens['admin-settings'] = function() {
               <div class="form-row form-row-2">
                 <div class="form-group">
                   <label class="form-label">Society / RWA Name *</label>
-                  <input class="form-input" id="setOrgName" type="text" value="${org.name || ''}" placeholder="Not saved yet" />
+                  <input class="form-input" id="setOrgName" type="text" value="${esc(org.name)}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Registration Number</label>
-                  <input class="form-input" id="setOrgRegNo" type="text" value="${org.registrationNo || ''}" placeholder="Not saved yet" />
+                  <input class="form-input" id="setOrgRegNo" type="text" value="${esc(org.registrationNo)}" placeholder="Not saved yet" />
                 </div>
               </div>
               <div class="form-row form-row-2">
                 <div class="form-group">
-                  <label class="form-label">Address</label>
-                  <input class="form-input" id="setOrgAddress" value="${org.address || ''}" placeholder="Not saved yet" />
+                  <label class="form-label">Registering Authority</label>
+                  <input class="form-input" id="setOrgAuthority" type="text" value="${esc(org.registeringAuthority)}" placeholder="Not saved yet" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Housing Layout Type</label>
+                  <select class="form-select" id="setOrgHousing">${choiceOptions(housingChoices, housingValue)}</select>
+                </div>
+              </div>
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Registered Address</label>
+                  <input class="form-input" id="setOrgAddress" value="${esc(org.address)}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">City</label>
-                  <input class="form-input" id="setOrgCity" value="${org.city || ''}" placeholder="Not saved yet" />
+                  <input class="form-input" id="setOrgCity" value="${esc(org.city)}" placeholder="Not saved yet" />
                 </div>
               </div>
-              <div class="form-row form-row-3">
+              <div class="form-row form-row-2">
                 <div class="form-group">
                   <label class="form-label">Pincode</label>
-                  <input class="form-input" id="setOrgPincode" value="${org.pincode || ''}" placeholder="Not saved yet" />
+                  <input class="form-input" id="setOrgPincode" value="${esc(org.pincode)}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Contact Phone</label>
-                  <input class="form-input" id="setOrgPhone" type="tel" value="${org.phone || ''}" />
+                  <label class="form-label">Google Maps location</label>
+                  <input class="form-input" id="setOrgMap" type="text" value="${esc(mapValue)}" placeholder="Maps link or coordinates" />
+                </div>
+              </div>
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Admin full name</label>
+                  <input class="form-input" id="setAdminName" type="text" value="${esc(adminNameValue)}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
-                  <label class="form-label">Official Email</label>
-                  <input class="form-input" id="setOrgEmail" type="email" value="${org.email || ''}" />
+                  <label class="form-label">Admin role / title</label>
+                  <select class="form-select" id="setAdminRole">${choiceOptions(roleChoices, roleValue)}</select>
+                </div>
+              </div>
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Admin mobile</label>
+                  <input class="form-input" id="setOrgPhone" type="tel" value="${esc(org.phone)}" placeholder="Not saved yet" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Admin email</label>
+                  <input class="form-input" id="setOrgEmail" type="email" value="${esc(org.email)}" placeholder="Not saved yet" />
                 </div>
               </div>
               <div style="display:flex;justify-content:flex-end;margin-top:10px;">
                 <button class="btn btn-primary" onclick="saveOrganizationProfile()">Save Changes</button>
+              </div>
+            </div>
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-title" style="margin-bottom:8px;">Reset a sign-in PIN</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Use this when a resident, staff member, or admin has lost their PIN. The old PIN cannot be shown. They sign in with the new one.</div>
+              <div class="form-row form-row-3">
+                <div class="form-group">
+                  <label class="form-label">Mobile number</label>
+                  <input class="form-input" id="setResetPinPhone" type="tel" value="${esc(org.phone)}" placeholder="10-digit mobile" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">New PIN</label>
+                  <input class="form-input" id="setResetPinNew" type="password" maxlength="6" autocomplete="new-password" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Confirm new PIN</label>
+                  <input class="form-input" id="setResetPinConfirm" type="password" maxlength="6" autocomplete="new-password" />
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;">
+                <button class="btn btn-primary" type="button" onclick="resetMemberSignInPin()">Save new PIN</button>
+              </div>
+            </div>
+          ` : ''}
+
+          ${activeTab === 'bank' ? `
+            <div class="card" style="margin-bottom:16px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
+                <div class="card-title">My Bank Account</div>
+                <span class="badge ${razorpayOn ? 'badge-green' : ''}">${razorpayOn ? 'Connected' : 'Not connected'}</span>
+              </div>
+              <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">
+                Maintenance bills are collected in the society’s own Razorpay account. Razorpay settles that money into the bank account saved on the Razorpay dashboard.
+              </div>
+              <ol style="margin:0 0 14px 18px;font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px;">
+                <li>Create a Razorpay account and finish KYC. Razorpay’s video walks through signup and KYC.</li>
+                <li>In the Razorpay dashboard, open Account & Settings and generate the API keys.</li>
+                <li>Paste the Key ID and Key Secret here. Bill payments then open Razorpay Checkout for this account.</li>
+              </ol>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <a class="btn btn-secondary btn-sm" href="https://razorpay.com/docs/payments/set-up" target="_blank" rel="noopener noreferrer">Watch: create a Razorpay account</a>
+                <a class="btn btn-secondary btn-sm" href="https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/" target="_blank" rel="noopener noreferrer">How to generate API keys</a>
+              </div>
+              ${razorpayOn ? `<div style="font-size:13px;margin-bottom:12px;">Connected key: <strong>${razorpayKey}</strong></div>` : ''}
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Razorpay Key ID</label>
+                  <input class="form-input" id="setRazorpayKeyId" type="text" value="${razorpayOn ? razorpayKey : ''}" placeholder="rzp_live_ or rzp_test_" autocomplete="off" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Razorpay Key Secret</label>
+                  <input class="form-input" id="setRazorpayKeySecret" type="password" value="" placeholder="${razorpayOn ? 'Enter the secret again to replace the keys' : 'From the Razorpay dashboard'}" autocomplete="new-password" />
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+                ${razorpayOn ? '<button class="btn btn-secondary" type="button" onclick="disconnectSocietyRazorpay()">Disconnect</button>' : ''}
+                <button class="btn btn-primary" type="button" onclick="saveSocietyRazorpay()">Connect Razorpay</button>
               </div>
             </div>
           ` : ''}

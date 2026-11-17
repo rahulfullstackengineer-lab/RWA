@@ -1,22 +1,10 @@
 import Razorpay from 'razorpay'
 import crypto from 'crypto'
 
-const keyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder'
-const keySecret = process.env.RAZORPAY_KEY_SECRET || 'secret_placeholder'
-
-// Check if valid keys are configured
-export const isRazorpayConfigured =
-  process.env.RAZORPAY_KEY_ID &&
-  !process.env.RAZORPAY_KEY_ID.includes('REPLACE_WITH') &&
-  process.env.RAZORPAY_KEY_SECRET &&
-  !process.env.RAZORPAY_KEY_SECRET.includes('REPLACE_WITH')
-
-export const razorpayInstance = isRazorpayConfigured
-  ? new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
-    })
-  : null
+export interface RazorpayCredentials {
+  keyId: string
+  keySecret: string
+}
 
 export interface CreateOrderParams {
   amount: number // in INR (will be converted to paise)
@@ -30,64 +18,50 @@ export interface RazorpayOrderResult {
   amount: number // in paise
   currency: string
   isMock: boolean
+  keyId: string
 }
 
-/**
- * Creates an order in Razorpay (or a simulated mock order for local dev testing)
- */
-export async function createPaymentOrder(params: CreateOrderParams): Promise<RazorpayOrderResult> {
+export function razorpayClient(credentials: RazorpayCredentials) {
+  return new Razorpay({
+    key_id: credentials.keyId,
+    key_secret: credentials.keySecret,
+  })
+}
+
+export async function createPaymentOrder(
+  params: CreateOrderParams,
+  credentials: RazorpayCredentials,
+): Promise<RazorpayOrderResult> {
   const amountInPaise = Math.round(params.amount * 100)
-
-  if (razorpayInstance) {
-    try {
-      const order = await razorpayInstance.orders.create({
-        amount: amountInPaise,
-        currency: params.currency || 'INR',
-        receipt: params.receipt,
-        notes: params.notes || {},
-      })
-
-      return {
-        orderId: order.id,
-        amount: Number(order.amount),
-        currency: order.currency,
-        isMock: false,
-      }
-    } catch (err: unknown) {
-      console.warn('Razorpay live order creation failed, falling back to simulated order for dev:', err)
-    }
-  }
-
-  // Fallback mock order for local development
-  const mockOrderId = `order_mock_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
-  return {
-    orderId: mockOrderId,
+  const order = await razorpayClient(credentials).orders.create({
     amount: amountInPaise,
     currency: params.currency || 'INR',
-    isMock: true,
+    receipt: params.receipt.slice(0, 40),
+    notes: params.notes || {},
+  })
+
+  return {
+    orderId: order.id,
+    amount: Number(order.amount),
+    currency: order.currency,
+    isMock: false,
+    keyId: credentials.keyId,
   }
 }
 
-/**
- * Verifies Razorpay payment signature
- */
 export function verifyPaymentSignature(params: {
   orderId: string
   paymentId: string
   signature: string
+  keySecret: string
 }): boolean {
-  if (process.env.NODE_ENV !== 'production' && (params.orderId.startsWith('order_mock_') || params.signature === 'dev_mock_signature')) {
-    return true
-  }
-
-  if (!isRazorpayConfigured) {
-    return false
-  }
+  if (!params.keySecret || !params.paymentId || !params.signature) return false
+  if (params.orderId.startsWith('order_mock_') || params.signature === 'dev_mock_signature') return false
 
   try {
     const text = `${params.orderId}|${params.paymentId}`
     const expectedSignature = crypto
-      .createHmac('sha256', keySecret)
+      .createHmac('sha256', params.keySecret)
       .update(text)
       .digest('hex')
 
