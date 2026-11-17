@@ -257,6 +257,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'You can only cancel a pass for your own flat' }, { status: 403 })
     }
 
+    if (action === 'check_in' && pass.status === 'CHECKED_IN') {
+      return NextResponse.json({
+        success: true,
+        alreadyCheckedIn: true,
+        pass,
+        message: `${pass.visitorName} is already checked in.`,
+      })
+    }
+
     if (action === 'check_in') {
       const now = new Date()
       updateData = {

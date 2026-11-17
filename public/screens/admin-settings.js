@@ -584,13 +584,25 @@ Screens['admin-settings'] = function() {
                 Maintenance bills are collected in the society’s own Razorpay account. Razorpay settles that money into the bank account saved on the Razorpay dashboard.
               </div>
               <ol style="margin:0 0 14px 18px;font-size:13px;color:var(--text-secondary);display:flex;flex-direction:column;gap:6px;">
-                <li>Create a Razorpay account and finish KYC. Razorpay’s video walks through signup and KYC.</li>
-                <li>In the Razorpay dashboard, open Account & Settings and generate the API keys.</li>
-                <li>Paste the Key ID and Key Secret here. Bill payments then open Razorpay Checkout for this account.</li>
+                <li>Create a Razorpay account and finish KYC.</li>
+                <li>Watch the Hindi or English video below. It shows where to generate the Key ID and Key Secret.</li>
+                <li>Paste both keys here. Bill payments then open Razorpay Checkout for this account.</li>
               </ol>
-              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-                <a class="btn btn-secondary btn-sm" href="https://razorpay.com/docs/payments/set-up" target="_blank" rel="noopener noreferrer">Watch: create a Razorpay account</a>
-                <a class="btn btn-secondary btn-sm" href="https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/" target="_blank" rel="noopener noreferrer">How to generate API keys</a>
+              <div class="razorpay-help-videos">
+                <div>
+                  <div class="razorpay-help-label">Hindi</div>
+                  <div class="razorpay-help-frame">
+                    <iframe src="https://www.youtube.com/embed/Q8mSjr18deM" title="How to get Razorpay API keys in Hindi" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                  </div>
+                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=Q8mSjr18deM" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=Q8mSjr18deM</a>
+                </div>
+                <div>
+                  <div class="razorpay-help-label">English</div>
+                  <div class="razorpay-help-frame">
+                    <iframe src="https://www.youtube.com/embed/WdYGKhOP4J4" title="How to get Razorpay API keys in English" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                  </div>
+                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=WdYGKhOP4J4" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=WdYGKhOP4J4</a>
+                </div>
               </div>
               ${razorpayOn ? `<div style="font-size:13px;margin-bottom:12px;">Connected key: <strong>${razorpayKey}</strong></div>` : ''}
               <div class="form-row form-row-2">

@@ -154,11 +154,10 @@
         const data = await res.json();
         const unreadCount = data.unreadCount || 0;
         updateNotificationBellBadge(unreadCount > 0);
-        const newest = (data.notifications || []).find(function(note) { return !note.isRead && noticeFitsSurface(note); });
         hideMismatchedLiveBar();
-        if (newest && typeof window.pinLiveBroadcast === 'function') {
-          const line = newest.title ? (newest.title + (newest.message ? '. ' + newest.message : '')) : newest.message;
-          window.pinLiveBroadcast({ id: 'note:' + newest.id, text: line, kind: 'info', fromInbox: true, createdAt: newest.createdAt });
+        if (window.__liveBroadcast && window.__liveBroadcast.fromInbox) {
+          window.__liveBroadcast = null;
+          if (typeof window.mountLiveBroadcast === 'function') window.mountLiveBroadcast();
         }
         const badge = document.getElementById('notifDropdownBadge');
         if (badge) {
