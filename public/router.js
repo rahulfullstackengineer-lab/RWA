@@ -56,6 +56,7 @@ var Router = (() => {
         'admin-amenities': 'resident-amenities',
         'admin-ledger': 'resident-ledger',
         'admin-settings': 'resident-profile',
+        'admin-committee': 'resident-elections',
         'staff-settings': 'resident-profile',
       };
       screen = residentScreens[screenName] || 'resident-dashboard';
@@ -316,6 +317,7 @@ var Shell = (() => {
           { id: 'resident-notices', icon: 'inbox', label: 'Inbox', badge: '9+', hasDot: true },
           { id: 'resident-complaints', icon: 'tickets', label: 'Tickets & Complaints' },
           { id: 'resident-polls', icon: 'polls', label: 'Community Polls' },
+          { id: 'resident-elections', icon: 'committee', label: 'Society Election' },
           { id: 'resident-meetings', icon: 'meetings', label: 'Society Meetings' },
           { id: 'resident-payments', icon: 'payments', label: 'Payment Receipts' },
         ]
@@ -1202,6 +1204,7 @@ window.handleNotificationItemClick = async function(notifId, type, portal) {
   if (role === 'RESIDENT') {
     if (type === 'BILL' || type === 'PAYMENT') Router.go('resident-bills');
     else if (type === 'COMPLAINT') Router.go('resident-complaints');
+    else if (type === 'ELECTION') Router.go('resident-elections');
     else if (type === 'NOTICE') Router.go('resident-notices');
     else if (type === 'RESIDENT_ONBOARDED') Router.go('resident-profile');
     else Router.go('resident-notifications');
@@ -1220,6 +1223,8 @@ window.handleNotificationItemClick = async function(notifId, type, portal) {
     Router.go(portal === 'admin' ? 'admin-members' : 'resident-profile');
   } else if (type === 'COMPLAINT') {
     Router.go(portal === 'admin' ? 'admin-complaints' : 'resident-complaints');
+  } else if (type === 'ELECTION') {
+    Router.go(portal === 'admin' ? 'admin-committee' : 'resident-elections');
   } else if (type === 'NOTICE') {
     Router.go(portal === 'admin' ? 'admin-notices' : 'resident-notices');
   } else if (type === 'ENTRY_PASS') {

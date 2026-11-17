@@ -231,7 +231,8 @@ window.saveReportFile = function(filename, content, mime) {
         if (role === 'RESIDENT') {
           const screen = /bill|invoice|payment due/i.test(text) ? 'resident-bills'
             : (/complaint|ticket/i.test(text) ? 'resident-complaints'
-            : (/notice/i.test(text) ? 'resident-notices' : 'resident-notifications'));
+            : (/election|nomination|voting|ballot/i.test(text) ? 'resident-elections'
+            : (/notice/i.test(text) ? 'resident-notices' : 'resident-notifications')));
           if (typeof Router !== 'undefined') Router.go(screen);
           return;
         }

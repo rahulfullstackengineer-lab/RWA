@@ -96,6 +96,9 @@ Screens['resident-dashboard'] = function() {
           <button class="res-action-pill-btn" onclick="Router.go('resident-notices')">
             📢 Society Notices
           </button>
+          <button class="res-action-pill-btn" onclick="Router.go('resident-elections')">
+            Society Election
+          </button>
           <button class="res-action-pill-btn" onclick="window.openResidentStaffDutyModal()">
             🛡️ Staff On Duty
           </button>
@@ -7447,5 +7450,174 @@ window.openDigitalPassModal = function(p) {
       body: modalHtml,
     });
   }
+};
+
+Screens['resident-elections'] = function() {
+  setTimeout(function() {
+    if (typeof window.loadResidentElection === 'function') window.loadResidentElection();
+  }, 10);
+
+  return Shell.render('resident-elections', {
+    title: 'Society Election',
+    portal: 'resident',
+    breadcrumb: 'Governance',
+    actions: '<button class="btn btn-secondary btn-sm" onclick="window.loadResidentElection()">Refresh</button>',
+    content: `
+      <div class="page-header">
+        <div class="page-header-left">
+          <div class="page-title">Society Election</div>
+          <div class="page-subtitle">Nominate yourself for an open post. The office reviews it before your name goes on the ballot.</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary" onclick="window.loadResidentElection()">Refresh</button>
+        </div>
+      </div>
+      <div id="residentElectionBody">
+        <div style="padding:24px;color:var(--text-muted);font-size:13px;">Loading the election...</div>
+      </div>
+    `,
+  });
+};
+
+window.loadResidentElection = async function() {
+  const box = document.getElementById('residentElectionBody');
+  if (!box) return;
+  const esc = function(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+  try {
+    const res = await (window.apiFetch || fetch)('/api/committee');
+    const data = await res.json();
+    if (!res.ok) {
+      box.innerHTML = '<div class="card" style="padding:20px;">' + esc(data.error || 'Could not load the election') + '</div>';
+      return;
+    }
+    const elec = data.election;
+    if (!elec) {
+      box.innerHTML = '<div class="card" style="padding:28px;text-align:center;"><div style="font-size:16px;font-weight:700;">No election is set up yet</div><div style="margin-top:6px;color:var(--text-muted);font-size:13px;">The society office has not started a committee election.</div></div>';
+      return;
+    }
+    const statusLabel = {
+      DRAFT: 'Not open yet',
+      NOMINATIONS_OPEN: 'Nominations open',
+      NOMINATIONS_CLOSED: 'Nominations closed',
+      VOTING_ACTIVE: 'Voting is open',
+      RESULTS_DECLARED: 'Results declared',
+      COMPLETED: 'Completed',
+    }[elec.status] || elec.status;
+    const myVotes = elec.myVotes || [];
+    const positions = (elec.positions || []).map(function(p) {
+      const mine = (p.nominations || []).find(function(n) { return n.mine; });
+      const voted = myVotes.find(function(v) { return v.positionId === p.id; });
+      const approved = (p.nominations || []).filter(function(n) { return n.status === 'APPROVED'; });
+      let action = '';
+      if (elec.status === 'NOMINATIONS_OPEN') {
+        if (!mine || mine.status === 'REJECTED' || mine.status === 'WITHDRAWN') {
+          action = '<button class="btn btn-primary btn-sm" onclick="window.openSelfNomination(\'' + esc(p.id) + '\', \'' + esc(p.title) + '\')">Nominate myself</button>';
+        } else if (mine.status === 'PENDING_REVIEW') {
+          action = '<span class="badge badge-amber">Waiting for the office</span>';
+        } else if (mine.status === 'APPROVED') {
+          action = '<span class="badge badge-green">Your name is on this post</span>';
+        }
+      } else if (elec.status === 'VOTING_ACTIVE') {
+        if (voted) {
+          action = '<span class="badge badge-green">Vote recorded</span>';
+        } else if (approved.length === 0) {
+          action = '<span style="font-size:12px;color:var(--text-muted);">No approved names yet</span>';
+        } else {
+          action = approved.map(function(n) {
+            return '<button class="btn btn-primary btn-sm" style="margin:0 6px 6px 0;" onclick="window.castResidentVote(\'' + esc(p.id) + '\', \'' + esc(n.id) + '\', \'' + esc(n.candidateName) + '\')">Vote for ' + esc(n.candidateName) + '</button>';
+          }).join('');
+        }
+      }
+      const names = (p.nominations || []).filter(function(n) { return n.status === 'APPROVED' || n.mine; }).map(function(n) {
+        const state = n.status === 'APPROVED' ? 'Approved' : n.status === 'PENDING_REVIEW' ? 'With the office' : n.status === 'REJECTED' ? 'Not accepted' : n.status;
+        return '<div style="font-size:13px;margin-top:6px;"><strong>' + esc(n.candidateName) + '</strong> · Flat ' + esc(n.unit) + ' · ' + esc(state) + (n.manifesto ? '<div style="color:var(--text-muted);font-size:12px;margin-top:2px;">' + esc(n.manifesto) + '</div>' : '') + '</div>';
+      }).join('');
+      return `
+        <div class="card" style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:16px;font-weight:700;">${esc(p.title)} <span class="badge badge-blue">${esc(p.seats)} seat${Number(p.seats) > 1 ? 's' : ''}</span></div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">${esc(p.eligibility || 'Flat owners of this society')}</div>
+              ${names || '<div style="font-size:12px;color:var(--text-muted);margin-top:8px;">No names filed yet.</div>'}
+            </div>
+            <div>${action}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    box.innerHTML = `
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:18px;font-weight:700;">${esc(elec.title)}</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:4px;">Term ${esc(elec.term)} · ${esc(statusLabel)}</div>
+          </div>
+          <span class="badge ${elec.status === 'NOMINATIONS_OPEN' || elec.status === 'VOTING_ACTIVE' ? 'badge-green' : 'badge-amber'}">${esc(statusLabel)}</span>
+        </div>
+        <div class="metric-pair" style="margin-top:14px;">
+          <div style="padding:12px;border:1px solid var(--border-light);border-radius:2px;background:#fff;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-muted);">NOMINATIONS</div>
+            <div style="margin-top:4px;font-weight:700;">${esc(elec.nominationOpen)} to ${esc(elec.nominationClose)}</div>
+          </div>
+          <div style="padding:12px;border:1px solid var(--border-light);border-radius:2px;background:#fff;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-muted);">VOTING</div>
+            <div style="margin-top:4px;font-weight:700;">${esc(elec.votingStart)} to ${esc(elec.votingEnd)}</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:13px;color:var(--text-secondary);">Open a post and choose Nominate myself. Your name and flat are taken from your account. The office approves it before other residents can vote for you.</div>
+      </div>
+      ${positions}
+    `;
+  } catch (err) {
+    box.innerHTML = '<div class="card" style="padding:20px;">Could not load the election.</div>';
+  }
+};
+
+window.openSelfNomination = function(positionId, title) {
+  const html = `
+    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">You are nominating yourself for <strong>${title}</strong>. The office will review this before your name is published.</div>
+    <label class="form-label">Why you are standing (optional)</label>
+    <textarea id="selfNomNote" rows="3" class="form-input" style="width:100%;" placeholder="A short note for the society"></textarea>
+  `;
+  if (typeof window.showModal !== 'function') return;
+  window.showModal('Nominate myself', html, 'Send nomination', async function() {
+    const note = document.getElementById('selfNomNote');
+    const res = await (window.apiFetch || fetch)('/api/committee', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'SELF_NOMINATE',
+        positionId: positionId,
+        manifesto: note ? note.value : '',
+      }),
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (!res.ok) throw new Error(data.error || 'Could not send the nomination');
+    if (typeof showToast === 'function') showToast('Nomination sent to the society office', 'success');
+    await window.loadResidentElection();
+  });
+};
+
+window.castResidentVote = async function(positionId, nominationId, name) {
+  if (!confirm('Cast your vote for ' + name + '? This stays private.')) return;
+  const res = await (window.apiFetch || fetch)('/api/committee', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'CAST_VOTE', positionId: positionId, nominationId: nominationId }),
+  });
+  const data = await res.json().catch(function() { return {}; });
+  if (!res.ok) {
+    if (typeof showToast === 'function') showToast(data.error || 'Vote was not recorded', 'error');
+    return;
+  }
+  if (typeof showToast === 'function') showToast('Your vote was recorded', 'success');
+  await window.loadResidentElection();
 };
 

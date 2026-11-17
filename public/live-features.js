@@ -232,6 +232,9 @@
       })
 
       socket.on('new-notice', (data) => {
+        if (data && Array.isArray(data.audience) && data.audience.length && !onlyFor(data.audience)) return
+        const electionNotice = data && (data.type === 'ELECTION' || /election|nomination|voting|ballot/i.test(String((data.title || '') + ' ' + (data.message || ''))))
+        if (onStaffSurface() && electionNotice) return
         showToast(`📢 New Notice: ${data.title}`, 'info')
         updateNotificationBellBadge(true)
         if (typeof playNotificationSound === 'function') {
@@ -239,6 +242,9 @@
         }
         if (typeof window.loadLiveResidentNotices === 'function' && window.location.hash.includes('resident-notices')) {
           window.loadLiveResidentNotices()
+        }
+        if (typeof window.loadLiveNotifications === 'function' && window.location.hash.includes('resident-notifications')) {
+          window.loadLiveNotifications('resident')
         }
       })
 

@@ -65,6 +65,7 @@ export interface Nomination {
   status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
   manifesto?: string
   votes: number
+  userId?: string
   submittedAt: string
 }
 
@@ -91,6 +92,7 @@ export interface ElectionCycle {
   totalEligibleVoters: number
   totalVotesCast: number
   positions: ContestedPosition[]
+  ballots?: { userId: string; positionId: string; nominationId: string }[]
   createdAt: string
   updatedAt: string
 }
@@ -350,6 +352,49 @@ async function getStoredCommitteeData(orgId: string): Promise<CommitteeStoreData
   }
 }
 
+function electionForMember(election: ElectionCycle | null, userId: string, phone?: string | null) {
+  if (!election) return null
+  const showCounts = election.status === 'RESULTS_DECLARED' || election.status === 'COMPLETED'
+  const myVotes = (election.ballots || [])
+    .filter((b) => b.userId === userId)
+    .map((b) => ({ positionId: b.positionId, nominationId: b.nominationId }))
+  return {
+    id: election.id,
+    title: election.title,
+    term: election.term,
+    status: election.status,
+    nominationOpen: election.nominationOpen,
+    nominationClose: election.nominationClose,
+    votingStart: election.votingStart,
+    votingEnd: election.votingEnd,
+    secretBallot: election.secretBallot,
+    totalEligibleVoters: election.totalEligibleVoters,
+    totalVotesCast: showCounts ? election.totalVotesCast : undefined,
+    myVotes,
+    positions: (election.positions || []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      seats: p.seats,
+      eligibility: p.eligibility,
+      nominations: (p.nominations || [])
+        .filter((n) => {
+          const mine = n.userId === userId || (!!phone && !!n.phone && n.phone === phone)
+          if (mine) return true
+          return n.status === 'APPROVED'
+        })
+        .map((n) => ({
+          id: n.id,
+          candidateName: n.candidateName,
+          unit: n.unit,
+          status: n.status,
+          manifesto: n.manifesto || '',
+          votes: showCounts ? n.votes || 0 : undefined,
+          mine: n.userId === userId || (!!phone && !!n.phone && n.phone === phone),
+        })),
+    })),
+  }
+}
+
 function saveCommitteeData(orgId: string, data: CommitteeStoreData) {
   try {
     let allData: any = {}
@@ -404,6 +449,24 @@ export async function GET(request: Request) {
       orderBy: { unitNumber: 'asc' },
     })
 
+    const officeRoles = ['RWA_ADMIN', 'ADMIN', 'TREASURER', 'SECRETARY', 'PRESIDENT', 'COMMITTEE_MEMBER', 'MANAGER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
+    if (!officeRoles.includes(user.role)) {
+      return NextResponse.json({
+        members: (committeeData.members || []).filter((m) => m.status === 'CURRENT').map((m) => ({
+          id: m.id,
+          name: m.name,
+          role: m.role,
+          unit: m.unit,
+          termStart: m.termStart,
+          termEnd: m.termEnd,
+          status: m.status,
+        })),
+        election: electionForMember(committeeData.election, user.id, user.phone),
+        availableResidents: [],
+        availableUnits: [],
+      })
+    }
+
     return NextResponse.json({
       members: committeeData.members,
       election: committeeData.election,
@@ -418,14 +481,84 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { user, error } = await requireAdmin(request)
-    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
-
-    const orgId = user.organizationId!
     const body = await request.json()
     const { action } = body
+    const auth = action === 'SELF_NOMINATE' ? await requireAuth(request) : await requireAdmin(request)
+    if (auth.error || !auth.user) {
+      return NextResponse.json({ error: auth.error || 'Forbidden' }, { status: action === 'SELF_NOMINATE' ? 401 : 403 })
+    }
+    const user = auth.user
 
+    const orgId = user.organizationId!
     const data = await getStoredCommitteeData(orgId)
+
+    if (action === 'SELF_NOMINATE') {
+      if (user.role !== 'RESIDENT') {
+        return NextResponse.json({ error: 'Only a resident can nominate themselves from this screen' }, { status: 403 })
+      }
+      if (!data.election || data.election.status !== 'NOMINATIONS_OPEN') {
+        return NextResponse.json({ error: 'Nominations are not open' }, { status: 400 })
+      }
+      const { positionId, manifesto } = body
+      const pos = data.election.positions.find((p) => p.id === positionId)
+      if (!pos) return NextResponse.json({ error: 'Position not found' }, { status: 404 })
+
+      const resident = await prisma.user.findUnique({
+        where: { id: user.id },
+        include: { unit: true },
+      })
+      const unitNumber = resident?.unit?.unitNumber || ''
+      if (!resident || !unitNumber) {
+        return NextResponse.json({ error: 'Your flat is not linked yet. Ask the office to connect your flat before you nominate yourself.' }, { status: 400 })
+      }
+
+      const already = pos.nominations.find((n) => n.userId === user.id || (resident.phone && n.phone === resident.phone))
+      if (already && already.status !== 'REJECTED' && already.status !== 'WITHDRAWN') {
+        return NextResponse.json({ error: `You already have a nomination for ${pos.title}` }, { status: 400 })
+      }
+
+      const newNom: Nomination = {
+        id: `NOM-${Date.now()}`,
+        candidateName: resident.name,
+        unit: unitNumber,
+        phone: resident.phone || '',
+        email: resident.email || '',
+        proposer: 'Self nomination',
+        seconder: '',
+        status: 'PENDING_REVIEW',
+        manifesto: manifesto ? String(manifesto).trim() : '',
+        votes: 0,
+        userId: user.id,
+        submittedAt: new Date().toISOString(),
+      }
+      pos.nominations.push(newNom)
+      saveCommitteeData(orgId, data)
+
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        excludeUserId: user.id,
+        title: `Self nomination: ${resident.name} for ${pos.title}`,
+        message: `${resident.name} (Flat ${unitNumber}) nominated themselves for ${pos.title}. Review it under Committee & Elections.`,
+        type: 'ELECTION',
+        event: 'new-notice',
+        referenceType: 'Election',
+        referenceId: data.election.id,
+      }).catch(() => {})
+
+      await notifyUsers({
+        orgId,
+        userIds: [user.id],
+        title: `Nomination sent for ${pos.title}`,
+        message: `Your nomination for ${pos.title} is with the society office. You will be told when it is approved or rejected.`,
+        type: 'ELECTION',
+        event: 'new-notice',
+        referenceType: 'Election',
+        referenceId: data.election.id,
+      }).catch(() => {})
+
+      return NextResponse.json({ success: true, nomination: { id: newNom.id, status: newNom.status }, message: 'Nomination sent to the office' })
+    }
 
     // 1. Add / Appoint Committee Member
     if (action === 'ADD_MEMBER') {
@@ -514,17 +647,13 @@ export async function POST(request: Request) {
       pos.nominations.push(newNom)
       saveCommitteeData(orgId, data)
 
-      await notifyUsers({
+      await publishElectionNotice(
         orgId,
-        roles: ['admin'],
-        excludeUserId: user.id,
-        title: `Nomination filed: ${candidateName}`,
-        message: `${candidateName} (${newNom.unit}) was nominated for ${pos.title}.`,
-        type: 'ELECTION',
-        event: 'new-notice',
-        referenceType: 'Election',
-        referenceId: data.election.id,
-      }).catch(() => {})
+        user.id,
+        user.name,
+        `Nomination filed: ${candidateName}`,
+        `${candidateName} (${newNom.unit}) was nominated for ${pos.title} in ${data.election.title}.`
+      ).catch((err) => console.error('Nomination notice error:', err))
 
       return NextResponse.json({ success: true, nomination: newNom, message: `Nomination filed for ${candidateName}` })
     }
@@ -562,6 +691,14 @@ export async function POST(request: Request) {
       data.election = newElec
       saveCommitteeData(orgId, data)
 
+      await publishElectionNotice(
+        orgId,
+        user.id,
+        user.name,
+        `New election: ${newElec.title}`,
+        `${newElec.title} (${newElec.term}) has been created. Nominations: ${newElec.nominationOpen} to ${newElec.nominationClose}. Voting: ${newElec.votingStart} to ${newElec.votingEnd}.`
+      ).catch((err) => console.error('New election notice error:', err))
+
       return NextResponse.json({ success: true, election: newElec, message: 'New election cycle initialized' })
     }
 
@@ -574,12 +711,17 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { user, error } = await requireAdmin(request)
-    if (error || !user) return NextResponse.json({ error: error || 'Forbidden' }, { status: 403 })
-
-    const orgId = user.organizationId!
     const body = await request.json()
     const { action } = body
+    const residentVote = action === 'CAST_VOTE'
+    const auth = residentVote ? await requireAuth(request) : await requireAdmin(request)
+    if (auth.error || !auth.user) return NextResponse.json({ error: auth.error || 'Forbidden' }, { status: 403 })
+    const user = auth.user
+    if (residentVote && user.role === 'STAFF') {
+      return NextResponse.json({ error: 'Guards do not vote in society elections' }, { status: 403 })
+    }
+
+    const orgId = user.organizationId!
 
     const data = await getStoredCommitteeData(orgId)
 
@@ -596,6 +738,16 @@ export async function PATCH(request: Request) {
       data.election.updatedAt = new Date().toISOString()
 
       saveCommitteeData(orgId, data)
+
+      const electionTitle = data.election.title || 'Society election'
+      await publishElectionNotice(
+        orgId,
+        user.id,
+        user.name,
+        `Election calendar updated: ${electionTitle}`,
+        `Nominations (${data.election.nominationOpen} to ${data.election.nominationClose}), Voting (${data.election.votingStart} to ${data.election.votingEnd}).`
+      ).catch((err) => console.error('Election calendar notice error:', err))
+
       return NextResponse.json({ success: true, election: data.election, message: 'Election calendar timeline updated' })
     }
 
@@ -681,24 +833,13 @@ export async function PATCH(request: Request) {
       nom.status = status
       saveCommitteeData(orgId, data)
 
-      const candidate = nom.unit
-        ? await prisma.user.findFirst({
-            where: { organizationId: orgId, unit: { unitNumber: nom.unit } },
-            select: { id: true },
-          })
-        : null
-      await notifyUsers({
+      await publishElectionNotice(
         orgId,
-        roles: ['admin'],
-        userIds: candidate ? [candidate.id] : [],
-        excludeUserId: user.id,
-        title: `Nomination ${status.toLowerCase().replace('_', ' ')}: ${nom.candidateName}`,
-        message: `${nom.candidateName} (${nom.unit}) for ${pos.title} is now ${status}.`,
-        type: 'ELECTION',
-        event: 'new-notice',
-        referenceType: 'Election',
-        referenceId: data.election.id,
-      }).catch(() => {})
+        user.id,
+        user.name,
+        `Nomination ${String(status).toLowerCase().replace(/_/g, ' ')}: ${nom.candidateName}`,
+        `${nom.candidateName} (${nom.unit}) for ${pos.title} is now ${status}.`
+      ).catch((err) => console.error('Nomination status notice error:', err))
 
       return NextResponse.json({ success: true, nomination: nom, message: `Nomination marked as ${status}` })
     }
@@ -711,11 +852,22 @@ export async function PATCH(request: Request) {
 
       const nom = pos.nominations.find((n) => n.id === nominationId)
       if (!nom) return NextResponse.json({ error: 'Nomination not found' }, { status: 404 })
+      if (data.election.status !== 'VOTING_ACTIVE') {
+        return NextResponse.json({ error: 'Voting is not open' }, { status: 400 })
+      }
+      if (nom.status !== 'APPROVED') {
+        return NextResponse.json({ error: 'This nomination is not on the ballot' }, { status: 400 })
+      }
+      const ballots = data.election.ballots || []
+      if (ballots.some((b) => b.userId === user.id && b.positionId === positionId)) {
+        return NextResponse.json({ error: 'You have already voted for this post' }, { status: 400 })
+      }
 
       nom.votes = (nom.votes || 0) + 1
       data.election.totalVotesCast = (data.election.totalVotesCast || 0) + 1
+      data.election.ballots = [...ballots, { userId: user.id, positionId, nominationId }]
       saveCommitteeData(orgId, data)
-      return NextResponse.json({ success: true, nomination: nom, totalVotesCast: data.election.totalVotesCast })
+      return NextResponse.json({ success: true, totalVotesCast: data.election.totalVotesCast })
     }
 
     // 7. Update Committee Member
