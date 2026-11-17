@@ -288,6 +288,9 @@ window.saveReportFile = function(filename, content, mime) {
       if (em) em.style.display = 'none';
     }
   };
+  window.closeModal = function() {
+    if (window.Modal && typeof window.Modal.close === 'function') window.Modal.close();
+  };
 
   // Keyboard escape handler for overlays
   window.addEventListener('keydown', (e) => {

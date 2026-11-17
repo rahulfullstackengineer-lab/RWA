@@ -1,12 +1,44 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
 
 const COMMITTEE_DATA_PATH = path.join(process.cwd(), 'committee_store.json')
+
+async function publishElectionNotice(orgId: string, actorId: string, actorName: string, title: string, content: string) {
+  const notice = await prisma.notice.create({
+    data: {
+      organizationId: orgId,
+      title,
+      content,
+      type: 'ELECTION',
+      channels: 'IN_APP',
+      status: 'PUBLISHED',
+      publishedAt: new Date(),
+      publishedBy: `${actorName} (Election Officer)`,
+    },
+  })
+  await notifyUsers({
+    orgId,
+    roles: ['admin', 'resident'],
+    excludeUserId: actorId,
+    title: `Election notice: ${title}`,
+    message: content,
+    type: 'NOTICE',
+    event: 'new-notice',
+    referenceType: 'NOTICE',
+    referenceId: notice.id,
+    data: {
+      id: notice.id,
+      title: notice.title,
+      type: notice.type,
+      publishedBy: notice.publishedBy,
+    },
+  })
+}
 
 export interface CommitteeMember {
   id: string
@@ -482,6 +514,18 @@ export async function POST(request: Request) {
       pos.nominations.push(newNom)
       saveCommitteeData(orgId, data)
 
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        excludeUserId: user.id,
+        title: `Nomination filed: ${candidateName}`,
+        message: `${candidateName} (${newNom.unit}) was nominated for ${pos.title}.`,
+        type: 'ELECTION',
+        event: 'new-notice',
+        referenceType: 'Election',
+        referenceId: data.election.id,
+      }).catch(() => {})
+
       return NextResponse.json({ success: true, nomination: newNom, message: `Nomination filed for ${candidateName}` })
     }
 
@@ -560,30 +604,10 @@ export async function PATCH(request: Request) {
       data.election.status = 'NOMINATIONS_OPEN'
       data.election.updatedAt = new Date().toISOString()
 
-      // Automatically publish official broadcast notice to Society Notice Board
       try {
-        const noticeTitle = `🗳️ Official Notice: ${data.election.title} — Nominations Now Open!`
-        const noticeContent = `Notice is hereby given to all eligible members of the society that nominations for ${data.election.title} are officially OPEN.\n\nContested Positions:\n${data.election.positions.map((p) => `• ${p.title} (${p.seats} seat${p.seats > 1 ? 's' : ''})`).join('\n')}\n\nKey Milestones:\n• Nomination Close: ${data.election.nominationClose}\n• Voting Window: ${data.election.votingStart} to ${data.election.votingEnd}\n• Mode: ${data.election.votingMode.replace('_', ' ')}\n\nInterested candidates may submit their nomination forms at the RWA office or through the portal.`
-
-        const notice = await prisma.notice.create({
-          data: {
-            organizationId: orgId,
-            title: noticeTitle,
-            content: noticeContent,
-            type: 'ELECTION',
-            channels: 'IN_APP',
-            status: 'PUBLISHED',
-            publishedAt: new Date(),
-            publishedBy: `${user.name} (Election Officer)`,
-          },
-        })
-
-        emitLiveSocketEvent('new-notice', {
-          id: notice.id,
-          title: notice.title,
-          type: notice.type,
-          publishedBy: notice.publishedBy,
-        }, { orgId })
+        const noticeTitle = `Official Notice: ${data.election.title} — Nominations Now Open!`
+        const noticeContent = `Nominations for ${data.election.title} are open.\n\nPositions:\n${data.election.positions.map((p) => `• ${p.title} (${p.seats} seat${p.seats > 1 ? 's' : ''})`).join('\n')}\n\nNomination close: ${data.election.nominationClose}\nVoting: ${data.election.votingStart} to ${data.election.votingEnd}`
+        await publishElectionNotice(orgId, user.id, user.name, noticeTitle, noticeContent)
       } catch (eNotice) {
         console.error('Notice creation for election error:', eNotice)
       }
@@ -609,22 +633,16 @@ export async function PATCH(request: Request) {
       data.election.updatedAt = new Date().toISOString()
 
       try {
-        const noticeTitle = `🗳️ Voting is NOW LIVE: ${data.election.title}`
-        const noticeContent = `Voting for the ${data.election.title} is now active. All verified flat owners are requested to cast their secret ballot before ${data.election.votingEnd}.`
-
-        await prisma.notice.create({
-          data: {
-            organizationId: orgId,
-            title: noticeTitle,
-            content: noticeContent,
-            type: 'ELECTION',
-            channels: 'IN_APP',
-            status: 'PUBLISHED',
-            publishedAt: new Date(),
-            publishedBy: `${user.name} (Election Returning Officer)`,
-          },
-        })
-      } catch (e) {}
+        await publishElectionNotice(
+          orgId,
+          user.id,
+          user.name,
+          `Voting is now live: ${data.election.title}`,
+          `Voting for ${data.election.title} is open. Cast your ballot before ${data.election.votingEnd}.`
+        )
+      } catch (e) {
+        console.error('Voting notice error:', e)
+      }
 
       saveCommitteeData(orgId, data)
       return NextResponse.json({ success: true, election: data.election, message: 'Voting is now live for all eligible voters!' })
@@ -634,6 +652,18 @@ export async function PATCH(request: Request) {
     if (action === 'DECLARE_RESULTS') {
       data.election.status = 'RESULTS_DECLARED'
       data.election.updatedAt = new Date().toISOString()
+
+      try {
+        await publishElectionNotice(
+          orgId,
+          user.id,
+          user.name,
+          `Results declared: ${data.election.title}`,
+          `The results for ${data.election.title} have been declared. Open Committee to see the outcome.`
+        )
+      } catch (e) {
+        console.error('Results notice error:', e)
+      }
 
       saveCommitteeData(orgId, data)
       return NextResponse.json({ success: true, election: data.election, message: 'Election results declared and archived!' })
@@ -650,6 +680,26 @@ export async function PATCH(request: Request) {
 
       nom.status = status
       saveCommitteeData(orgId, data)
+
+      const candidate = nom.unit
+        ? await prisma.user.findFirst({
+            where: { organizationId: orgId, unit: { unitNumber: nom.unit } },
+            select: { id: true },
+          })
+        : null
+      await notifyUsers({
+        orgId,
+        roles: ['admin'],
+        userIds: candidate ? [candidate.id] : [],
+        excludeUserId: user.id,
+        title: `Nomination ${status.toLowerCase().replace('_', ' ')}: ${nom.candidateName}`,
+        message: `${nom.candidateName} (${nom.unit}) for ${pos.title} is now ${status}.`,
+        type: 'ELECTION',
+        event: 'new-notice',
+        referenceType: 'Election',
+        referenceId: data.election.id,
+      }).catch(() => {})
+
       return NextResponse.json({ success: true, nomination: nom, message: `Nomination marked as ${status}` })
     }
 
