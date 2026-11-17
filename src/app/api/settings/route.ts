@@ -83,28 +83,28 @@ function getDefaultSettings(): OrganizationSettingsPayload {
       gracePeriodDays: 10,
     },
     payment: {
-      bankName: 'HDFC Bank Ltd.',
-      accountHolder: 'Greenwood Heights RWA',
-      accountNumber: '50200088991122',
-      ifscCode: 'HDFC0001234',
-      branch: 'Sector 22 Branch, Chandigarh',
-      upiId: 'test2.rwa@hdfcbank',
-      qrCodeEnabled: true,
-      razorpayKeyId: 'rzp_test_179118382',
-      autoReceipts: true,
+      bankName: '',
+      accountHolder: '',
+      accountNumber: '',
+      ifscCode: '',
+      branch: '',
+      upiId: '',
+      qrCodeEnabled: false,
+      razorpayKeyId: '',
+      autoReceipts: false,
     },
     notifications: {
-      smsBroadcastEnabled: true,
-      whatsappBroadcastEnabled: true,
-      emailAlertsEnabled: true,
+      smsBroadcastEnabled: false,
+      whatsappBroadcastEnabled: false,
+      emailAlertsEnabled: false,
       overduePaymentReminders: true,
-      urgentNoticeSms: true,
+      urgentNoticeSms: false,
       visitorGateNotification: true,
     },
     security: {
-      twoFactorAuthEnabled: true,
+      twoFactorAuthEnabled: false,
       sessionTimeoutMinutes: 60,
-      strictPasswordPolicy: true,
+      strictPasswordPolicy: false,
       ipWhitelistingEnabled: false,
       auditLoggingStrict: true,
     },
@@ -112,7 +112,7 @@ function getDefaultSettings(): OrganizationSettingsPayload {
       googleMapsUrl: '',
       mapEmbedUrl: '',
       address: '',
-      city: 'Chandigarh',
+      city: '',
       pincode: '',
       latitude: undefined,
       longitude: undefined,
@@ -120,6 +120,25 @@ function getDefaultSettings(): OrganizationSettingsPayload {
       isConfigured: false,
     },
   }
+}
+
+const SAMPLE_PAYMENT: Partial<PaymentAccountSettings> = {
+  bankName: 'HDFC Bank Ltd.',
+  accountHolder: 'Greenwood Heights RWA',
+  accountNumber: '50200088991122',
+  ifscCode: 'HDFC0001234',
+  branch: 'Sector 22 Branch, Chandigarh',
+  upiId: 'test2.rwa@hdfcbank',
+  razorpayKeyId: 'rzp_test_179118382',
+}
+
+function clearSamplePayment(settings: OrganizationSettingsPayload) {
+  const payment = settings.payment
+  ;(Object.keys(SAMPLE_PAYMENT) as (keyof PaymentAccountSettings)[]).forEach((key) => {
+    if (payment[key] === SAMPLE_PAYMENT[key]) {
+      ;(payment as Record<string, unknown>)[key] = ''
+    }
+  })
 }
 
 function getStoredSettings(orgId: string): OrganizationSettingsPayload {
@@ -163,8 +182,9 @@ export async function GET(request: Request) {
     })
 
     const storedSettings = getStoredSettings(orgId)
-    // Synchronize account holder with current organization name if default
-    if (organization && organization.name) {
+    clearSamplePayment(storedSettings)
+    const unitCount = await prisma.unit.count({ where: { organizationId: orgId } })
+    if (organization && organization.name && !storedSettings.payment.accountHolder) {
       storedSettings.payment.accountHolder = organization.name
     }
 
@@ -199,7 +219,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      organization,
+      organization: organization ? { ...organization, totalUnits: unitCount } : null,
+      unitCount,
       settings: storedSettings,
     })
   } catch (err: unknown) {

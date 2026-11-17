@@ -271,28 +271,29 @@ Screens['admin-settings'] = function() {
     pincode: '',
     phone: '',
     email: cachedOrgEmail,
-    plan: 'GROWTH',
-    totalUnits: 0,
+    plan: '',
+    totalUnits: Number(sData.unitCount) || 0,
   };
+  org.totalUnits = Number(sData.unitCount ?? org.totalUnits) || 0;
 
   const settings = sData.settings || {
     rules: {
       lateFeeEnabled: false,
-      lateFeeAmount: 100,
+      lateFeeAmount: 0,
       interestEnabled: false,
-      interestRateMonthly: 1.5,
-      meetingNoticeDays: 14,
-      committeeTermMonths: 12,
-      quorumPercentage: 33,
+      interestRateMonthly: 0,
+      meetingNoticeDays: 0,
+      committeeTermMonths: 0,
+      quorumPercentage: 0,
     },
     payment: {
-      bankName: 'HDFC Bank Ltd.',
-      accountHolder: org.name,
-      accountNumber: '50200088991122',
-      ifscCode: 'HDFC0001234',
-      branch: 'Sector 22 Branch, Chandigarh',
-      upiId: 'test2.rwa@hdfcbank',
-      qrCodeEnabled: true,
+      bankName: '',
+      accountHolder: org.name || '',
+      accountNumber: '',
+      ifscCode: '',
+      branch: '',
+      upiId: '',
+      qrCodeEnabled: false,
     },
     notifications: {
       smsBroadcastEnabled: true,
@@ -308,16 +309,11 @@ Screens['admin-settings'] = function() {
     },
   };
 
-  const activeTab = window._settingsActiveTab || 'profile';
+  window._settingsActiveTab = 'profile';
+  const activeTab = 'profile';
 
   const tabs = [
     { key: 'profile', icon: '🏛️', label: 'Organization Profile' },
-    { key: 'rules', icon: '⚖️', label: 'Rules Profile' },
-    { key: 'roles', icon: '🔑', label: 'Roles & Permissions' },
-    { key: 'payment', icon: '💳', label: 'Payment Accounts' },
-    { key: 'notifications', icon: '🔔', label: 'Notifications' },
-    { key: 'integrations', icon: '🔗', label: 'Integrations' },
-    { key: 'security', icon: '🛡️', label: 'Security' },
     { key: 'audit', icon: '📋', label: 'Audit Trail' },
   ];
 
@@ -329,7 +325,7 @@ Screens['admin-settings'] = function() {
       <div class="page-header">
         <div class="page-header-left">
           <div class="page-title">Organization Settings</div>
-          <div class="page-subtitle">Configure your society profile, rules, and notification preferences</div>
+          <div class="page-subtitle">Society name, registration, address, and contact details</div>
         </div>
       </div>
 
@@ -358,46 +354,32 @@ Screens['admin-settings'] = function() {
             <div class="card" style="margin-bottom:16px;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                 <div class="card-title">Organization Profile</div>
-                <span class="badge badge-blue">Plan: ${org.plan || 'GROWTH'} · ${org.totalUnits || 112} Units</span>
+                <span class="badge badge-blue">Plan: ${org.plan || 'Not set'} · ${org.totalUnits || 0} units on record</span>
               </div>
               <div class="form-row form-row-2">
                 <div class="form-group">
                   <label class="form-label">Society / RWA Name *</label>
-                  <input class="form-input" id="setOrgName" type="text" value="${org.name || ''}" placeholder="e.g. Greenwood Residents Welfare Association" />
+                  <input class="form-input" id="setOrgName" type="text" value="${org.name || ''}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Registration Number</label>
-                  <input class="form-input" id="setOrgRegNo" type="text" value="${org.registrationNo || ''}" placeholder="e.g. CHD/RWA/2026/0042" />
+                  <input class="form-input" id="setOrgRegNo" type="text" value="${org.registrationNo || ''}" placeholder="Not saved yet" />
                 </div>
               </div>
               <div class="form-row form-row-2">
                 <div class="form-group">
-                  <label class="form-label">Registering Authority</label>
-                  <input class="form-input" id="setOrgAuthority" type="text" value="Registrar of Societies, Chandigarh" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Jurisdiction</label>
-                  <select class="form-select" id="setOrgJurisdiction">
-                    <option selected>Chandigarh (UT)</option>
-                    <option>Mohali — Punjab</option>
-                    <option>Panchkula — Haryana</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-row form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Address Line 1</label>
-                  <input class="form-input" id="setOrgAddress" value="${org.address || ''}" placeholder="e.g. Sector 22-A" />
+                  <label class="form-label">Address</label>
+                  <input class="form-input" id="setOrgAddress" value="${org.address || ''}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">City</label>
-                  <input class="form-input" id="setOrgCity" value="${org.city || 'Chandigarh'}" />
+                  <input class="form-input" id="setOrgCity" value="${org.city || ''}" placeholder="Not saved yet" />
                 </div>
               </div>
               <div class="form-row form-row-3">
                 <div class="form-group">
                   <label class="form-label">Pincode</label>
-                  <input class="form-input" id="setOrgPincode" value="${org.pincode || '160022'}" />
+                  <input class="form-input" id="setOrgPincode" value="${org.pincode || ''}" placeholder="Not saved yet" />
                 </div>
                 <div class="form-group">
                   <label class="form-label">Contact Phone</label>
@@ -414,311 +396,6 @@ Screens['admin-settings'] = function() {
             </div>
           ` : ''}
 
-          ${activeTab === 'rules' ? `
-            <!-- Rules Profile -->
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:20px;">Rules Profile & Financial Policies</div>
-              <div class="form-row form-row-2" style="margin-bottom:16px;">
-                <!-- Late Fee Toggle Box -->
-                <div style="padding:14px;background:var(--bg-elevated);border-radius:var(--r-md);border:1px solid var(--border-light);">
-                  <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div>
-                      <div style="font-size:13px;font-weight:700;">Late Fee</div>
-                      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Charge fixed late fee on overdue amounts</div>
-                    </div>
-                    <div onclick="toggleRuleSwitch('lateFeeEnabled')"
-                      style="width:44px;height:24px;background:${settings.rules.lateFeeEnabled ? 'var(--blue)' : 'var(--bg-surface)'};
-                      border-radius:12px;border:1px solid ${settings.rules.lateFeeEnabled ? 'var(--blue)' : 'var(--border)'};cursor:pointer;position:relative;transition:all 0.2s;">
-                      <div style="width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:2px;
-                        left:${settings.rules.lateFeeEnabled ? '22px' : '2px'};transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-                    </div>
-                  </div>
-                  <div style="margin-top:12px;display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:12px;color:var(--text-secondary);">Fee Amount:</span>
-                    <input class="form-input form-input-sm" id="setRuleLateFeeAmount" type="number" value="${settings.rules.lateFeeAmount || 100}" style="width:100px;" />
-                    <span style="font-size:11px;color:var(--text-muted);">₹ / month overdue</span>
-                  </div>
-                </div>
-
-                <!-- Interest Toggle Box -->
-                <div style="padding:14px;background:var(--bg-elevated);border-radius:var(--r-md);border:1px solid var(--border-light);">
-                  <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div>
-                      <div style="font-size:13px;font-weight:700;">Interest on Dues</div>
-                      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Monthly interest on outstanding dues</div>
-                    </div>
-                    <div onclick="toggleRuleSwitch('interestEnabled')"
-                      style="width:44px;height:24px;background:${settings.rules.interestEnabled ? 'var(--blue)' : 'var(--bg-surface)'};
-                      border-radius:12px;border:1px solid ${settings.rules.interestEnabled ? 'var(--blue)' : 'var(--border)'};cursor:pointer;position:relative;transition:all 0.2s;">
-                      <div style="width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:2px;
-                        left:${settings.rules.interestEnabled ? '22px' : '2px'};transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div>
-                    </div>
-                  </div>
-                  <div style="margin-top:12px;display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:12px;color:var(--text-secondary);">Rate:</span>
-                    <input class="form-input form-input-sm" id="setRuleInterestRate" type="number" step="0.5" value="${settings.rules.interestRateMonthly || 1.5}" style="width:80px;" />
-                    <span style="font-size:11px;color:var(--text-muted);">% per month</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="form-row form-row-3">
-                <div class="form-group">
-                  <label class="form-label">Meeting Notice Period (days)</label>
-                  <input class="form-input" id="setRuleNoticeDays" type="number" value="${settings.rules.meetingNoticeDays || 14}" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Committee Term (months)</label>
-                  <input class="form-input" id="setRuleTermMonths" type="number" value="${settings.rules.committeeTermMonths || 12}" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Quorum Required (%)</label>
-                  <input class="form-input" id="setRuleQuorum" type="number" value="${settings.rules.quorumPercentage || 33}" />
-                </div>
-              </div>
-
-              <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-                <button class="btn btn-primary" onclick="saveSocietyRules()">Save Rules</button>
-              </div>
-            </div>
-          ` : ''}
-
-          ${activeTab === 'roles' ? `
-            <!-- Roles & Permissions Matrix -->
-            <div class="card" style="margin-bottom:16px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <div>
-                  <div class="card-title">Roles & Access Control</div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Role-based access matrix enforced across all administrative screens</div>
-                </div>
-                <button class="btn btn-primary btn-sm" onclick="showToast('Invite Committee Member modal coming up', 'info')">+ Add Role Member</button>
-              </div>
-
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Role</th><th>Authority Scope</th><th>Financial Approval</th><th>Admin Vault</th><th>Status</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><strong>RWA_ADMIN</strong></td>
-                      <td>Executive President / General Secretary</td>
-                      <td><span class="badge badge-green">Unlimited</span></td>
-                      <td><span class="badge badge-green">Full Access</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>TREASURER</strong></td>
-                      <td>Finance, Ledger, Invoicing & Payouts</td>
-                      <td><span class="badge badge-green">Up to ₹50,000</span></td>
-                      <td><span class="badge badge-green">Finance Vault</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>SECRETARY</strong></td>
-                      <td>Minutes, Resolutions & Notices</td>
-                      <td><span class="badge badge-amber">Approval Only</span></td>
-                      <td><span class="badge badge-green">Governance Vault</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>COMMITTEE_MEMBER</strong></td>
-                      <td>Advisory, Polls & Facility Escalations</td>
-                      <td><span class="badge badge-muted">View Only</span></td>
-                      <td><span class="badge badge-muted">Public Vault</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>GUARD</strong></td>
-                      <td>Gate Passcodes & Delivery Verification</td>
-                      <td><span class="badge badge-muted">None</span></td>
-                      <td><span class="badge badge-muted">None</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><strong>RESIDENT</strong></td>
-                      <td>Unit Owner / Tenant self-service</td>
-                      <td><span class="badge badge-muted">Own Unit Dues</span></td>
-                      <td><span class="badge badge-muted">Public Vault</span></td>
-                      <td><span class="badge badge-blue">Active</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ` : ''}
-
-          ${activeTab === 'payment' ? `
-            <!-- Payment Accounts -->
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:20px;">Settlement Bank & UPI Accounts</div>
-              <div class="form-row form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Bank Name *</label>
-                  <input class="form-input" id="setBankName" type="text" value="${settings.payment.bankName || 'HDFC Bank Ltd.'}" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Account Holder Name *</label>
-                  <input class="form-input" id="setAccountHolder" type="text" value="${settings.payment.accountHolder || org.name}" />
-                </div>
-              </div>
-              <div class="form-row form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Account Number *</label>
-                  <input class="form-input" id="setAccountNumber" type="text" value="${settings.payment.accountNumber || '50200088991122'}" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">IFSC Code *</label>
-                  <input class="form-input" id="setIfscCode" type="text" value="${settings.payment.ifscCode || 'HDFC0001234'}" style="text-transform:uppercase;" />
-                </div>
-              </div>
-              <div class="form-row form-row-2">
-                <div class="form-group">
-                  <label class="form-label">Branch Name</label>
-                  <input class="form-input" id="setBranch" type="text" value="${settings.payment.branch || 'Sector 22 Branch, Chandigarh'}" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Society UPI ID (VPA) *</label>
-                  <input class="form-input" id="setUpiId" type="text" value="${settings.payment.upiId || 'test2.rwa@hdfcbank'}" />
-                </div>
-              </div>
-              <div style="margin-top:10px;">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
-                  <input type="checkbox" id="setQrCodeEnabled" ${settings.payment.qrCodeEnabled ? 'checked' : ''} style="width:16px;height:16px;" />
-                  <span>Display Dynamic UPI QR Code on invoices & resident checkout</span>
-                </label>
-              </div>
-              <div style="display:flex;justify-content:flex-end;margin-top:14px;">
-                <button class="btn btn-primary" onclick="savePaymentAccounts()">Save Payment Accounts</button>
-              </div>
-            </div>
-          ` : ''}
-
-          ${activeTab === 'notifications' ? `
-            <!-- Notifications -->
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:20px;">Communication & Notification Channels</div>
-              <div style="display:flex;flex-direction:column;gap:14px;">
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="setWhatsappBroadcast" ${settings.notifications.whatsappBroadcastEnabled ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">WhatsApp Notifications</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Send payment receipts, event reminders, and emergency broadcasts via WhatsApp</div>
-                  </div>
-                </label>
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="setSmsBroadcast" ${settings.notifications.smsBroadcastEnabled ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">SMS Gateway Alerts</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Backup SMS dispatch for critical security and AGM notices</div>
-                  </div>
-                </label>
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="setEmailAlerts" ${settings.notifications.emailAlertsEnabled ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">Email Invoicing & PDF Statements</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Automatically email monthly PDF maintenance bills to flat owners</div>
-                  </div>
-                </label>
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="setOverdueReminders" ${settings.notifications.overduePaymentReminders ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">Automated Payment Reminders</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Automatic reminders 3 days before due date and upon overdue status</div>
-                  </div>
-                </label>
-              </div>
-              <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-                <button class="btn btn-primary" onclick="saveNotificationPreferences()">Save Notification Preferences</button>
-              </div>
-            </div>
-          ` : ''}
-
-          ${activeTab === 'integrations' ? `
-            <!-- Integrations -->
-            <div class="card" style="margin-bottom:16px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <div>
-                  <div class="card-title" style="display:flex;align-items:center;gap:8px;">
-                    <span style="font-size:20px;">📅</span> Google Calendar Integration
-                  </div>
-                  <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
-                    Automatically synchronize society meetings, compliance deadlines, and amenity reservations with Google Calendar
-                  </div>
-                </div>
-                <span class="badge badge-green" style="font-size:11px;">● Connected</span>
-              </div>
-
-              <div style="padding:16px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:16px;">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
-                  <div>
-                    <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Google Workspace Account</div>
-                    <div style="font-size:13px;color:var(--blue);font-weight:600;margin-top:2px;">${org.email || 'admin@rwa.org'}</div>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Primary Calendar: <strong>${org.name} Official Calendar</strong></div>
-                  </div>
-                  <div style="display:flex;gap:8px;">
-                    <button class="btn btn-secondary btn-sm" onclick="window.open('https://calendar.google.com', '_blank')">🔗 Open Google Calendar</button>
-                    <button class="btn btn-primary btn-sm" onclick="syncAllSocietyEventsToGoogleCalendar()">🔄 Sync All Events Now</button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Other Connected Integrations -->
-              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;">
-                <div style="padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);background:var(--bg-surface);">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="font-size:13px;font-weight:700;">💳 Razorpay UPI Gateway</span>
-                    <span class="badge badge-green" style="font-size:10px;">Active</span>
-                  </div>
-                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Instant zero-fee UPI & card maintenance collections</div>
-                  <button class="btn btn-ghost btn-sm" onclick="showToast('Razorpay Webhook healthy & receiving events', 'success')">Test Webhook ⚡</button>
-                </div>
-
-                <div style="padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);background:var(--bg-surface);">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <span style="font-size:13px;font-weight:700;">💬 WhatsApp & SMS Gateway</span>
-                    <span class="badge badge-green" style="font-size:10px;">Active</span>
-                  </div>
-                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Automated notice and bill dispatch via verified sender</div>
-                  <button class="btn btn-ghost btn-sm" onclick="showToast('SMS & WhatsApp gateway quota: 9,420 remaining', 'info')">Check Balance 📊</button>
-                </div>
-              </div>
-            </div>
-          ` : ''}
-
-          ${activeTab === 'security' ? `
-            <!-- Security -->
-            <div class="card" style="margin-bottom:16px;">
-              <div class="card-title" style="margin-bottom:20px;">Security Policies & Authentication</div>
-              <div style="display:flex;flex-direction:column;gap:14px;">
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="set2faEnabled" ${settings.security.twoFactorAuthEnabled ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">Two-Factor OTP Authentication</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Require 6-digit SMS/WhatsApp OTP for all admin logins</div>
-                  </div>
-                </label>
-                <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);">
-                  <div style="font-size:13px;font-weight:700;margin-bottom:4px;">Session Inactivity Timeout</div>
-                  <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Auto sign-out administrators after inactivity</div>
-                  <div style="display:flex;align-items:center;gap:8px;">
-                    <input class="form-input form-input-sm" id="setSessionTimeout" type="number" value="${settings.security.sessionTimeoutMinutes || 60}" style="width:100px;" />
-                    <span style="font-size:12px;color:var(--text-secondary);">minutes</span>
-                  </div>
-                </div>
-                <label style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);cursor:pointer;">
-                  <input type="checkbox" id="setStrictPassword" ${settings.security.strictPasswordPolicy ? 'checked' : ''} style="width:18px;height:18px;" />
-                  <div>
-                    <div style="font-size:13px;font-weight:700;">Strict Password Complexity</div>
-                    <div style="font-size:11px;color:var(--text-muted);">Enforce minimum 8 characters with numbers and symbols</div>
-                  </div>
-                </label>
-              </div>
-              <div style="display:flex;justify-content:flex-end;margin-top:16px;">
-                <button class="btn btn-primary" onclick="saveSecuritySettings()">Save Security Settings</button>
-              </div>
-            </div>
-          ` : ''}
         </div>
       </div>
     `,
@@ -784,7 +461,7 @@ window.switchSocietyPlan = async function(planId, planName, rate, calculatedTota
 
 window.paySocietySubscriptionOnline = async function() {
   const sub = window.__societySubscriptionData?.subscription;
-  const amt = sub ? sub.monthlyTotal : 5600;
+  const amt = sub ? sub.monthlyTotal : 0;
   showToast(`Initiating Razorpay gateway for ₹${amt.toLocaleString('en-IN')}...`, 'info');
 
   setTimeout(async () => {
@@ -795,11 +472,11 @@ window.paySocietySubscriptionOnline = async function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'pay_subscription' }),
       });
-      showToast(`✓ Platform SaaS subscription payment of ₹${amt.toLocaleString('en-IN')} confirmed! Next renewal: 1st Dec 2026`, 'success');
+      showToast('Subscription payment request was sent.', 'success');
       await window.loadLiveSocietySubscription(true);
       Router.go('admin-subscription');
     } catch (e) {
-      showToast('Payment processed successfully!', 'success');
+      showToast('The payment could not be confirmed.', 'error');
     }
   }, 900);
 };
@@ -827,15 +504,14 @@ window.viewPlatformGstInvoice = function(invNo, period, units, rate, total) {
         <div style="display:flex;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid var(--border-light);font-size:12px;">
           <div>
             <div style="font-weight:700;color:var(--text-primary);">ISSUED BY:</div>
-            <div style="font-weight:600;margin-top:2px;">RWA Manager Cloud SaaS Pvt Ltd</div>
-            <div style="color:var(--text-muted);">GSTIN: 04AAACR1234F1Z8</div>
-            <div style="color:var(--text-muted);">IT Park, Sector 22, Chandigarh (UT)</div>
+            <div style="font-weight:600;margin-top:2px;">This application</div>
+            <div style="color:var(--text-muted);">No platform GSTIN is saved.</div>
           </div>
           <div style="text-align:right;">
             <div style="font-weight:700;color:var(--text-primary);">BILLED TO:</div>
             <div style="font-weight:600;margin-top:2px;">${localStorage.getItem('rwa_active_org_name') || 'This society'}</div>
             <div style="color:var(--text-muted);">Reg: ${localStorage.getItem('rwa_active_org_reg') || 'Not set'}</div>
-            <div style="color:var(--text-muted);">village -sangrain, Chandigarh</div>
+            <div style="color:var(--text-muted);">${(window._settingsData && window._settingsData.organization && window._settingsData.organization.city) || 'City not saved'}</div>
           </div>
         </div>
         <div>
@@ -2422,7 +2098,7 @@ Screens['admin-profile'] = function() {
                 <span style="font-size:18px;">⚙️</span>
                 <div>
                   <div style="font-size:13px;font-weight:700;color:var(--text-primary);">Organization Settings</div>
-                  <div style="font-size:11px;color:var(--text-muted);">Manage society profile, rules, and payment gateways</div>
+                  <div style="font-size:11px;color:var(--text-muted);">Society name, address, and contact details</div>
                 </div>
               </div>
               <span style="color:var(--text-muted);">→</span>
