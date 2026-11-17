@@ -918,7 +918,7 @@ Screens['admin-duty'] = function() {
       </div>
 
       <!-- Live Stat Counter Cards -->
-      <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:20px;">
+      <div class="metric-pair">
         <div class="card" style="padding:16px 18px;border-radius:16px;border:1px solid #E2E8F0;background:#FFFFFF;display:flex;align-items:center;gap:14px;">
           <div style="width:44px;height:44px;border-radius:12px;background:#EEF2FF;color:#4338CA;display:flex;align-items:center;justify-content:center;font-size:20px;">
             🛡️

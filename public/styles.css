@@ -2811,7 +2811,7 @@ div:has(> .badge) {
   }
 
   /* Page columns stack. Filter and form pairs stay two to a row. */
-  div[style*="grid-template-columns:"]:not(.stat-grid):not(.stat-grid-5):not(.stat-grid-4):not(.stat-grid-3):not(.stat-grid-2):not(.form-row-2):not(.mini-grid-4):not(.mini-grid-3):not(.mini-grid-2):not(.audit-filter-grid):not([style*="1fr 1fr"]):not([style*="repeat("]):not([style*="minmax("]):not([style*="1fr 2fr"]):not([style*="2fr 1fr"]):not([style*="1.2fr"]):not([style*="1fr auto"]),
+  div[style*="grid-template-columns:"]:not(.metric-pair):not(.stats-grid):not(.stat-grid):not(.stat-grid-5):not(.stat-grid-4):not(.stat-grid-3):not(.stat-grid-2):not(.form-row-2):not(.mini-grid-4):not(.mini-grid-3):not(.mini-grid-2):not(.audit-filter-grid):not([style*="1fr 1fr"]):not([style*="repeat("]):not([style*="minmax("]):not([style*="1fr 2fr"]):not([style*="2fr 1fr"]):not([style*="1.2fr"]):not([style*="1fr auto"]),
   .dashboard-main-grid,
   .dashboard-bottom-grid,
   .structure-split-layout,
@@ -3458,7 +3458,7 @@ body.mobile-frame-view .mobile-bottom-nav {
   z-index: 200 !important;
 }
 
-body.mobile-frame-view div[style*="grid-template-columns:"]:not(.stat-grid):not(.stat-grid-5):not(.stat-grid-4):not(.stat-grid-3):not(.stat-grid-2):not(.form-row-2):not(.mini-grid-4):not(.mini-grid-3):not(.mini-grid-2):not(.audit-filter-grid):not([style*="1fr 1fr"]):not([style*="repeat("]):not([style*="minmax("]):not([style*="1fr 2fr"]):not([style*="2fr 1fr"]):not([style*="1.2fr"]):not([style*="1fr auto"]),
+body.mobile-frame-view div[style*="grid-template-columns:"]:not(.metric-pair):not(.stats-grid):not(.stat-grid):not(.stat-grid-5):not(.stat-grid-4):not(.stat-grid-3):not(.stat-grid-2):not(.form-row-2):not(.mini-grid-4):not(.mini-grid-3):not(.mini-grid-2):not(.audit-filter-grid):not([style*="1fr 1fr"]):not([style*="repeat("]):not([style*="minmax("]):not([style*="1fr 2fr"]):not([style*="2fr 1fr"]):not([style*="1.2fr"]):not([style*="1fr auto"]),
 body.mobile-frame-view .dashboard-main-grid,
 body.mobile-frame-view .dashboard-bottom-grid,
 body.mobile-frame-view .structure-split-layout,
@@ -8830,6 +8830,14 @@ body.mobile-frame-view .staff-slip-head,
 body.mobile-frame-view .staff-slip-net { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
 body.mobile-frame-view .staff-slip-net .btn { width: 100% !important; }
 
+/* Summary cards. No inline grid, so the phone layout cannot collapse them to one column. */
+.metric-pair,
+.stats-grid.metric-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
 /* Phone summary cards: two per row on every section. */
 @media (max-width: 900px) {
   .metric-pair,
@@ -8853,15 +8861,14 @@ body.mobile-frame-view .staff-slip-net .btn { width: 100% !important; }
   .stat-grid > .stat-card:last-child:nth-child(odd),
   .stat-grid-5 > .stat-card:last-child {
     grid-column: auto !important;
-    display: block !important;
     min-width: 0 !important;
     width: auto !important;
     max-width: none !important;
-    flex-direction: column !important;
   }
   .metric-pair > .card,
   .metric-pair > .stat-card {
     padding: 12px !important;
+    gap: 8px !important;
   }
 }
 body.mobile-frame-view .metric-pair,
@@ -8885,10 +8892,14 @@ body.mobile-frame-view .stat-grid-5 > .stat-card,
 body.mobile-frame-view .stat-grid > .stat-card:last-child:nth-child(odd),
 body.mobile-frame-view .stat-grid-5 > .stat-card:last-child {
   grid-column: auto !important;
-  display: block !important;
   min-width: 0 !important;
   width: auto !important;
   max-width: none !important;
+}
+body.mobile-frame-view .metric-pair > .card,
+body.mobile-frame-view .metric-pair > .stat-card {
+  padding: 12px !important;
+  gap: 8px !important;
 }
 
 

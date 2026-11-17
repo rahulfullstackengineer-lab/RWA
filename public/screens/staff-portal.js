@@ -231,7 +231,7 @@ Screens['staff-dashboard'] = function() {
 
       <!-- TAB 3: Salary, Dates & Payouts -->
       <div id="staffTabContentSalary" class="staff-tab-view" style="display:none;flex-direction:column;gap:18px;">
-        <div class="staff-salary-grid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:16px;">
+        <div class="staff-salary-grid metric-pair">
           <!-- Monthly Salary -->
           <div style="background:var(--bg-surface,#fff);border:1px solid var(--border,#E2E8F0);border-radius:14px;padding:20px;">
             <div style="font-size:12px;color:#64748B;font-weight:700;text-transform:uppercase;">Monthly Fixed Salary</div>
@@ -951,7 +951,7 @@ Screens['staff-settings'] = function() {
     });
   };
   return staffSectionShell('staff-settings', 'Settings', `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;max-width:760px;">
+    <div class="metric-pair" style="max-width:760px;">
       <div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:16px;">
         <div style="font-size:12px;color:#71717A;font-weight:700;">Name</div>
         <div style="font-size:16px;font-weight:800;margin-top:4px;">${esc(name)}</div>

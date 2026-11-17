@@ -1764,7 +1764,7 @@ Screens['admin-dues'] = function() {
       </div>
 
       <!-- Real-Time KPI Stat Cards -->
-      <div class="stats-grid metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:20px;">
+      <div class="stats-grid metric-pair">
         <div class="stat-card" style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow-sm);border-left:4px solid var(--red);">
           <div class="stat-label" style="font-size:12px;font-weight:600;color:var(--text-muted);display:flex;align-items:center;gap:6px;">
             <span>💰</span> Total Outstanding Dues
