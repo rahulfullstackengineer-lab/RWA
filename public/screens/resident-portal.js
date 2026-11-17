@@ -7510,6 +7510,16 @@ window.loadResidentElection = async function() {
       RESULTS_DECLARED: 'Results declared',
       COMPLETED: 'Completed',
     }[elec.status] || elec.status;
+    const resultsOpen = elec.status === 'RESULTS_DECLARED' || elec.status === 'COMPLETED';
+    const winnerCards = resultsOpen ? (elec.winners || []).map(function(row) {
+      const people = row.winners || [];
+      const line = people.length === 0
+        ? '<div style="color:var(--text-muted);font-size:13px;">No winner. This post received no votes.</div>'
+        : people.map(function(n) {
+            return '<div style="font-size:15px;font-weight:700;">' + esc(n.candidateName) + ' <span style="font-weight:500;color:var(--text-muted);">Flat ' + esc(n.unit) + ' · ' + esc(n.votes) + ' vote' + (Number(n.votes) === 1 ? '' : 's') + (n.tied ? ' · Tie' : '') + '</span></div>';
+          }).join('');
+      return '<div style="padding:12px 14px;border:1px solid var(--border-light);border-radius:2px;background:#fff;"><div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:4px;">' + esc(row.title) + '</div>' + line + '</div>';
+    }).join('') : '';
     const myVotes = elec.myVotes || [];
     const positions = (elec.positions || []).map(function(p) {
       const mine = (p.nominations || []).find(function(n) { return n.mine; });
@@ -7571,8 +7581,9 @@ window.loadResidentElection = async function() {
             <div style="margin-top:4px;font-weight:700;">${esc(elec.votingStart)} to ${esc(elec.votingEnd)}</div>
           </div>
         </div>
-        <div style="margin-top:12px;font-size:13px;color:var(--text-secondary);">Open a post and choose Nominate myself. Your name and flat are taken from your account. The office approves it before other residents can vote for you.</div>
+        <div style="margin-top:12px;font-size:13px;color:var(--text-secondary);">${resultsOpen ? 'The winners below are decided by the votes cast. A tie is shown when the last seat is shared.' : 'Open a post and choose Nominate myself. Your name and flat are taken from your account. The office approves it before other residents can vote for you.'}</div>
       </div>
+      ${resultsOpen ? `<div class="card" style="margin-bottom:16px;"><div style="font-size:16px;font-weight:700;margin-bottom:12px;">Who won</div><div style="display:flex;flex-direction:column;gap:8px;">${winnerCards}</div></div>` : ''}
       ${positions}
     `;
   } catch (err) {

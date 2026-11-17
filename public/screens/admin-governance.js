@@ -1834,6 +1834,29 @@ Screens['admin-committee'] = function() {
               </div>
             </div>
 
+            ${(elec.status === 'RESULTS_DECLARED' || elec.status === 'COMPLETED') ? `
+            <div class="card" style="margin-bottom:16px;">
+              <div class="card-title">Election winners</div>
+              <div style="font-size:12px;color:var(--text-muted);margin:4px 0 12px;">The person with the most votes takes the seat. A tie is shown when the last seat is shared.</div>
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${(elec.positions || []).map(p => {
+                  const seats = Math.max(1, Number(p.seats) || 1);
+                  const ballot = (p.nominations || []).filter(n => n.status === 'APPROVED' && Number(n.votes) > 0)
+                    .sort((a, b) => Number(b.votes) - Number(a.votes) || String(a.candidateName).localeCompare(String(b.candidateName)));
+                  const cutoff = ballot.length ? Number(ballot[Math.min(seats, ballot.length) - 1].votes) : 0;
+                  const picked = ballot.filter((n, index) => index < seats || Number(n.votes) === cutoff);
+                  const above = picked.filter(n => Number(n.votes) > cutoff).length;
+                  const tied = picked.filter(n => Number(n.votes) === cutoff).length > Math.max(0, seats - above);
+                  const safe = (value) => String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                  const line = picked.length === 0
+                    ? '<span style="color:var(--text-muted);">No winner. This post received no votes.</span>'
+                    : picked.map(n => `<div style="font-size:14px;font-weight:700;">${safe(n.candidateName)} <span style="font-weight:500;color:var(--text-muted);">Flat ${safe(n.unit)} · ${Number(n.votes)} vote${Number(n.votes) === 1 ? '' : 's'}${tied && Number(n.votes) === cutoff ? ' · Tie' : ''}</span></div>`).join('');
+                  return `<div style="padding:12px 14px;border:1px solid var(--border-light);border-radius:2px;background:#fff;"><div style="font-size:12px;font-weight:700;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:4px;">${safe(p.title).toUpperCase()}</div>${line}</div>`;
+                }).join('')}
+              </div>
+            </div>
+            ` : ''}
+
             <!-- Contested Positions Card -->
             <div class="card">
               <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">

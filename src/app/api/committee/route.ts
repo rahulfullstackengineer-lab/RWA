@@ -352,6 +352,34 @@ async function getStoredCommitteeData(orgId: string): Promise<CommitteeStoreData
   }
 }
 
+function pickWinners(position: ContestedPosition) {
+  const seats = Math.max(1, Number(position.seats) || 1)
+  const ballot = (position.nominations || [])
+    .filter((n) => n.status === 'APPROVED' && Number(n.votes) > 0)
+    .sort((a, b) => Number(b.votes) - Number(a.votes) || a.candidateName.localeCompare(b.candidateName))
+  if (ballot.length === 0) return []
+  const cutoff = Number(ballot[Math.min(seats, ballot.length) - 1].votes)
+  const picked = ballot.filter((n, index) => index < seats || Number(n.votes) === cutoff)
+  const above = picked.filter((n) => Number(n.votes) > cutoff).length
+  const sharingCutoff = picked.filter((n) => Number(n.votes) === cutoff).length
+  const tied = sharingCutoff > Math.max(0, seats - above)
+  return picked.map((n) => ({
+    id: n.id,
+    candidateName: n.candidateName,
+    unit: n.unit,
+    votes: Number(n.votes) || 0,
+    tied: tied && Number(n.votes) === cutoff,
+  }))
+}
+
+function describeWinners(election: ElectionCycle) {
+  return (election.positions || []).map((position) => {
+    const winners = pickWinners(position)
+    if (winners.length === 0) return `${position.title}: no winner`
+    return `${position.title}: ${winners.map((winner) => `${winner.candidateName} (Flat ${winner.unit}, ${winner.votes} vote${winner.votes === 1 ? '' : 's'}${winner.tied ? ', tie' : ''})`).join('; ')}`
+  }).join('\n')
+}
+
 function electionForMember(election: ElectionCycle | null, userId: string, phone?: string | null) {
   if (!election) return null
   const showCounts = election.status === 'RESULTS_DECLARED' || election.status === 'COMPLETED'
@@ -370,6 +398,12 @@ function electionForMember(election: ElectionCycle | null, userId: string, phone
     secretBallot: election.secretBallot,
     totalEligibleVoters: election.totalEligibleVoters,
     totalVotesCast: showCounts ? election.totalVotesCast : undefined,
+    winners: showCounts ? (election.positions || []).map((position) => ({
+      positionId: position.id,
+      title: position.title,
+      seats: position.seats,
+      winners: pickWinners(position),
+    })) : [],
     myVotes,
     positions: (election.positions || []).map((p) => ({
       id: p.id,
@@ -811,7 +845,7 @@ export async function PATCH(request: Request) {
           user.id,
           user.name,
           `Results declared: ${data.election.title}`,
-          `The results for ${data.election.title} have been declared. Open Committee to see the outcome.`
+          `The results for ${data.election.title} have been declared.\n\n${describeWinners(data.election)}`
         )
       } catch (e) {
         console.error('Results notice error:', e)
