@@ -460,9 +460,9 @@ Screens['admin-settings'] = function() {
         </div>
       </div>
 
-      <div class="structure-split-layout">
+      <div class="structure-split-layout settings-layout">
         <!-- Settings Nav -->
-        <div class="card card-sm" style="height:fit-content;">
+        <div class="card card-sm settings-nav" style="height:fit-content;">
           ${tabs.map(t => {
             const isActive = activeTab === t.key;
             return `
@@ -592,20 +592,20 @@ Screens['admin-settings'] = function() {
                 <div>
                   <div class="razorpay-help-label">Hindi</div>
                   <div class="razorpay-help-frame">
-                    <iframe src="https://www.youtube.com/embed/Q8mSjr18deM" title="How to get Razorpay API keys in Hindi" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                    <iframe src="https://www.youtube.com/embed/Q8mSjr18deM?playsinline=1&rel=0" title="How to get Razorpay API keys in Hindi" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
                   </div>
-                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=Q8mSjr18deM" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=Q8mSjr18deM</a>
+                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=Q8mSjr18deM" target="_blank" rel="noopener noreferrer">Open Hindi video</a>
                 </div>
                 <div>
                   <div class="razorpay-help-label">English</div>
                   <div class="razorpay-help-frame">
-                    <iframe src="https://www.youtube.com/embed/WdYGKhOP4J4" title="How to get Razorpay API keys in English" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                    <iframe src="https://www.youtube.com/embed/WdYGKhOP4J4?playsinline=1&rel=0" title="How to get Razorpay API keys in English" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
                   </div>
-                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=WdYGKhOP4J4" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=WdYGKhOP4J4</a>
+                  <a class="razorpay-help-link" href="https://www.youtube.com/watch?v=WdYGKhOP4J4" target="_blank" rel="noopener noreferrer">Open English video</a>
                 </div>
               </div>
               ${razorpayOn ? `<div style="font-size:13px;margin-bottom:12px;">Connected key: <strong>${razorpayKey}</strong></div>` : ''}
-              <div class="form-row form-row-2">
+              <div class="form-row form-row-2 razorpay-key-row">
                 <div class="form-group">
                   <label class="form-label">Razorpay Key ID</label>
                   <input class="form-input" id="setRazorpayKeyId" type="text" value="${razorpayOn ? razorpayKey : ''}" placeholder="rzp_live_ or rzp_test_" autocomplete="off" />

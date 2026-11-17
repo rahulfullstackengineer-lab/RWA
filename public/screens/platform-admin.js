@@ -121,7 +121,7 @@ Screens['platform-dashboard'] = function() {
           </div>
         </div>
         <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+          <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
             <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155;">
               Title
               <input id="platDashVideoTitle" class="form-input" placeholder="Festival greeting" />

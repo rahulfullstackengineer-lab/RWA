@@ -1277,9 +1277,9 @@ body {
 }
 .razorpay-help-frame {
   position: relative;
-  height: 0;
-  padding-top: 56.25%;
-  min-height: 220px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  height: auto;
   background: #18181B;
   border-radius: 2px;
   overflow: hidden;
@@ -1292,15 +1292,45 @@ body {
   border: 0;
 }
 .razorpay-help-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   margin-top: 8px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #18181B;
-  word-break: break-all;
+  text-decoration: underline;
 }
 @media (max-width: 800px) {
   .razorpay-help-videos { grid-template-columns: 1fr; }
+  .settings-nav {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px;
+  }
+  .settings-nav > div {
+    flex: 0 0 auto;
+    margin-bottom: 0 !important;
+    white-space: nowrap;
+  }
+  .razorpay-key-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+body.mobile-frame-view .razorpay-help-videos { grid-template-columns: 1fr; }
+body.mobile-frame-view .settings-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px;
+}
+body.mobile-frame-view .settings-nav > div {
+  flex: 0 0 auto;
+  margin-bottom: 0 !important;
+  white-space: nowrap;
+}
+body.mobile-frame-view .razorpay-key-row {
+  grid-template-columns: 1fr !important;
 }
 
 table {
@@ -8799,6 +8829,67 @@ body.mobile-frame-view .staff-salary-grid { grid-template-columns: 1fr 1fr !impo
 body.mobile-frame-view .staff-slip-head,
 body.mobile-frame-view .staff-slip-net { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
 body.mobile-frame-view .staff-slip-net .btn { width: 100% !important; }
+
+/* Phone summary cards: two per row on every section. */
+@media (max-width: 900px) {
+  .metric-pair,
+  .stats-grid,
+  .stat-grid,
+  .stat-grid-2,
+  .stat-grid-3,
+  .stat-grid-4,
+  .stat-grid-5 {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .metric-pair > .card,
+  .metric-pair > .stat-card,
+  .stats-grid > .card,
+  .stats-grid > .stat-card,
+  .stat-grid > .stat-card,
+  .stat-grid-5 > .stat-card,
+  .stat-grid > .stat-card:last-child:nth-child(odd),
+  .stat-grid-5 > .stat-card:last-child {
+    grid-column: auto !important;
+    display: block !important;
+    min-width: 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    flex-direction: column !important;
+  }
+  .metric-pair > .card,
+  .metric-pair > .stat-card {
+    padding: 12px !important;
+  }
+}
+body.mobile-frame-view .metric-pair,
+body.mobile-frame-view .stats-grid,
+body.mobile-frame-view .stat-grid,
+body.mobile-frame-view .stat-grid-2,
+body.mobile-frame-view .stat-grid-3,
+body.mobile-frame-view .stat-grid-4,
+body.mobile-frame-view .stat-grid-5 {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+body.mobile-frame-view .metric-pair > .card,
+body.mobile-frame-view .metric-pair > .stat-card,
+body.mobile-frame-view .stats-grid > .card,
+body.mobile-frame-view .stats-grid > .stat-card,
+body.mobile-frame-view .stat-grid > .stat-card,
+body.mobile-frame-view .stat-grid-5 > .stat-card,
+body.mobile-frame-view .stat-grid > .stat-card:last-child:nth-child(odd),
+body.mobile-frame-view .stat-grid-5 > .stat-card:last-child {
+  grid-column: auto !important;
+  display: block !important;
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+}
 
 
 

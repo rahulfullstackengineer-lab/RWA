@@ -151,7 +151,7 @@ Screens['admin-ledger'] = function() {
         <!-- Summary Footer -->
         <div id="ledgerSummaryFooter" style="display:none;margin-top:16px;">
           <div class="card" style="padding:16px;">
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+            <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
               <div style="text-align:center;">
                 <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;margin-bottom:4px;">Opening Balance</div>
                 <div style="font-size:18px;font-weight:800;color:var(--blue);" id="ledgerOpeningBal">RS 0</div>

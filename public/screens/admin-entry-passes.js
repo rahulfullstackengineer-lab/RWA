@@ -55,7 +55,7 @@ Screens['admin-entry-passes'] = function() {
       </div>
 
       <!-- 5 Metric Cards -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;">
+      <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;">
         <div class="stat-card" style="background:var(--bg-surface,#fff);border:1px solid var(--border,#E2E8F0);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;">
           <div style="display:flex;align-items:center;justify-content:space-between;color:var(--text-secondary,#64748B);font-size:12px;font-weight:700;text-transform:uppercase;">
             <span>Active Today</span>

@@ -961,7 +961,7 @@ Screens['admin-vendors'] = function() {
       </div>
 
       <!-- Quick Metrics -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
+      <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
         <div class="card card-sm" style="padding:14px;border-left:4px solid var(--blue);cursor:pointer;" onclick="window.filterVendorsByType('ALL')">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Empanelled Providers</div>
           <div style="font-size:22px;font-weight:800;color:var(--text-primary);margin-top:4px;" id="vendorsMetricTotal">Loading...</div>
@@ -1904,7 +1904,7 @@ Screens['admin-staff'] = function() {
       </div>
 
       <!-- Quick Metrics -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
+      <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
         <div class="card card-sm" style="padding:14px;border-left:4px solid var(--blue);cursor:pointer;" onclick="window.filterStaffByPaymentStatus('ALL')">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Total Society Staff</div>
           <div style="font-size:22px;font-weight:800;color:var(--text-primary);margin-top:4px;" id="staffMetricTotal">Loading...</div>
@@ -2649,7 +2649,7 @@ Screens['admin-assets'] = function() {
       </div>
 
       <!-- Quick Metrics -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
+      <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px;">
         <div class="card card-sm" style="padding:14px;border-left:4px solid var(--blue);cursor:pointer;" onclick="window.filterAssetsByStatus('ALL')">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Total Capital Assets</div>
           <div style="font-size:22px;font-weight:800;color:var(--text-primary);margin-top:4px;" id="assetMetricTotal">Loading...</div>

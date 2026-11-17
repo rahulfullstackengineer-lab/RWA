@@ -1304,7 +1304,7 @@ Screens['admin-meetings'] = function() {
 
     return `
       <div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:16px;">
+        <div class="metric-pair" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:16px;">
           <div class="card card-sm" style="background:var(--amber-light);border-color:rgba(245,158,11,0.2);">
             <div style="font-size:11px;font-weight:700;color:var(--amber-dark,#b45309);text-transform:uppercase;">Pending Actions</div>
             <div style="font-size:24px;font-weight:800;color:var(--amber-dark,#b45309);margin-top:4px;">${pendingCount}</div>
