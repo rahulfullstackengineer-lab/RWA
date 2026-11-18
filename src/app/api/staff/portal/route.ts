@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
+import { residentIdsForPass } from '@/lib/pass-alerts'
 import { clearSalaryMarkedPaidByExpense, staffCreditsFor } from '@/app/api/staff/route'
 import fs from 'fs'
 import path from 'path'
@@ -485,14 +486,11 @@ export async function POST(request: Request) {
         },
       })
 
-      const flatResidents = await prisma.user.findMany({
-        where: { organizationId: pass.organizationId, unit: { unitNumber: pass.residentUnit } },
-        select: { id: true },
-      })
+      const flatResidents = await residentIdsForPass(pass.organizationId, pass)
       await notifyUsers({
         orgId: pass.organizationId,
         roles: ['admin'],
-        userIds: flatResidents.map((person) => person.id),
+        userIds: flatResidents,
         excludeUserId: user.id,
         title: `Visitor arrived: ${pass.visitorName}`,
         message: `${pass.visitorName} checked in at ${locationPost || pass.gateNumber} for flat ${pass.residentUnit}.`,
@@ -533,14 +531,11 @@ export async function POST(request: Request) {
         },
       })
 
-      const checkoutResidents = await prisma.user.findMany({
-        where: { organizationId: pass.organizationId, unit: { unitNumber: pass.residentUnit } },
-        select: { id: true },
-      })
+      const checkoutResidents = await residentIdsForPass(pass.organizationId, pass)
       await notifyUsers({
         orgId: pass.organizationId,
         roles: ['admin'],
-        userIds: checkoutResidents.map((person) => person.id),
+        userIds: checkoutResidents,
         excludeUserId: user.id,
         title: `Visitor left: ${updatedPass.visitorName}`,
         message: `${updatedPass.visitorName} checked out from flat ${updatedPass.residentUnit}.`,

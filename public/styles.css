@@ -863,6 +863,12 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* The page scrolls. Children must keep their own height.
+   A table with overflow:auto was the first thing the column crushed to 0. */
+.content > * {
+  flex-shrink: 0;
+}
+
 .page-sheet {
   flex: 1 1 auto;
   display: flex;
@@ -872,7 +878,8 @@ body {
 }
 
 .page-sheet > div {
-  flex: 1 1 auto;
+  flex: 1 0 auto;
+  min-height: min-content;
 }
 
 .page-sheet > .resident-pay-panel,
@@ -980,7 +987,9 @@ body {
 }
 .resident-pay-card-due strong,
 .resident-pay-card-due span,
-.resident-pay-card-due .resident-pay-label {
+.resident-pay-card-due .resident-pay-label,
+.resident-pay-card-due .office-pay-note,
+.resident-pay-card-due .office-pay-note a {
   color: #FFFFFF !important;
 }
 @media (max-width: 980px) {
@@ -1246,6 +1255,9 @@ body {
    ============================================= */
 .table-wrap {
   overflow-x: auto;
+  flex: 0 0 auto;
+  min-height: min-content;
+  width: 100%;
   border-radius: var(--r-lg);
   border: 1px solid #E2E8F0;
   background: #FFFFFF;

@@ -53,11 +53,11 @@ function departmentCategory(department?: string) {
 
 function defaultPortalAccess(department?: string) {
   const category = departmentCategory(department)
-  if (category === 'SECURITY') return ['gate', 'visitors', 'shift', 'salary', 'intercom']
-  if (category === 'HOUSEKEEPING') return ['cleaning', 'jobs', 'shift', 'salary', 'intercom']
-  if (category === 'GARDENING') return ['garden', 'jobs', 'shift', 'salary', 'intercom']
-  if (category === 'OFFICE') return ['office', 'jobs', 'shift', 'salary', 'intercom']
-  return ['jobs', 'shift', 'salary', 'intercom']
+  if (category === 'SECURITY') return ['gate', 'visitors', 'shift', 'intercom']
+  if (category === 'HOUSEKEEPING') return ['cleaning', 'jobs', 'shift', 'intercom']
+  if (category === 'GARDENING') return ['garden', 'jobs', 'shift', 'intercom']
+  if (category === 'OFFICE') return ['office', 'jobs', 'shift', 'intercom']
+  return ['jobs', 'shift', 'intercom']
 }
 
 function cleanPortalAccess(value: unknown, department?: string) {

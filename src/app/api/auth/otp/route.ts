@@ -52,6 +52,13 @@ export async function POST(request: Request) {
             unitId: matchingUnit.id,
           },
         })
+        const tenantJoin = matchingUnit.tenantPhone === cleanPhone || matchingUnit.tenantPhone === tenDigit
+        await prisma.unit.update({
+          where: { id: matchingUnit.id },
+          data: tenantJoin
+            ? { occupancyStatus: 'TENANTED', tenantName: matchingUnit.tenantName || resName, tenantPhone: matchingUnit.tenantPhone || cleanPhone }
+            : { occupancyStatus: 'OWNER_OCCUPIED', ownerName: matchingUnit.ownerName || resName, ownerPhone: matchingUnit.ownerPhone || cleanPhone },
+        })
       } else {
         // Create an unattached resident record so new residents can log in and onboard into a society
         user = await prisma.user.create({
@@ -148,6 +155,13 @@ export async function POST(request: Request) {
               organizationId: currentOrgId,
               unitId: currentUnitId,
             },
+          })
+          const tenantJoin = matchedUnit.tenantPhone === cleanPhone || matchedUnit.tenantPhone === tenDigit
+          await prisma.unit.update({
+            where: { id: matchedUnit.id },
+            data: tenantJoin
+              ? { occupancyStatus: 'TENANTED', tenantPhone: matchedUnit.tenantPhone || cleanPhone }
+              : { occupancyStatus: 'OWNER_OCCUPIED', ownerPhone: matchedUnit.ownerPhone || cleanPhone },
           })
         }
       }

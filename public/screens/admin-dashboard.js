@@ -398,7 +398,9 @@ Screens['admin-dashboard'] = function() {
                   <div style="font-size:16px;font-weight:650;color:#18181B;letter-spacing:-0.02em;">Campus</div>
                   <div style="font-size:12px;color:#71717A;margin-top:2px;">Units, occupancy, and maintenance spend</div>
                 </div>
+                <!-- Demo: Compliance hidden for now.
                 <button class="dash-tool-btn" onclick="Router.go('admin-compliance')">Compliance</button>
+                -->
               </div>
 
               <!-- Quick Stats Row (100% Real Live Data) -->
@@ -439,6 +441,7 @@ Screens['admin-dashboard'] = function() {
         <!-- Right Column: Society Location Google Map & Admin Broadcasts -->
         <div class="dash-col-right">
 
+          <!-- Demo: Expenses hidden for now.
           <div class="dash-society-map-card">
             <div class="dash-panel-head">
               <div>
@@ -455,6 +458,7 @@ Screens['admin-dashboard'] = function() {
               <div style="padding:40px 16px;text-align:center;color:var(--text-muted);font-size:12px;">Loading expenses...</div>
             </div>
           </div>
+          -->
 
           <!-- Card 2: Admin Inbox & Society Broadcasts -->
           <div class="dash-inbox-card">
@@ -503,7 +507,7 @@ Screens['admin-dashboard'] = function() {
           </div>
         </div>
 
-        <!-- Upcoming Compliance Calendar -->
+        <!-- Demo: Compliance Calendar hidden for now.
         <div class="card" style="display:flex;flex-direction:column;min-height:350px;">
           <div class="card-header">
             <div class="card-title">Compliance Deadlines</div>
@@ -515,6 +519,7 @@ Screens['admin-dashboard'] = function() {
             </div>
           </div>
         </div>
+        -->
 
         <!-- Open Complaints Summary -->
         <div class="card" style="display:flex;flex-direction:column;min-height:350px;">

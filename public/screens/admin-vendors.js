@@ -1127,16 +1127,17 @@ window.staffPortalSectionCatalog = function(department) {
     { id: 'jobs', label: 'Complaints and work orders' },
     { id: 'office', label: 'Office desk: notices and open tickets' },
     { id: 'shift', label: 'My shift and post' },
-    { id: 'salary', label: 'Salary and payouts' },
+    // Demo: salary stays out of the staff portal for now.
+    // { id: 'salary', label: 'Salary and payouts' },
     { id: 'intercom', label: 'Intercom and SOS' },
   ];
   var dept = department || 'Security';
   var suggested = {
-    Security: ['gate', 'visitors', 'shift', 'salary', 'intercom'],
-    Housekeeping: ['cleaning', 'jobs', 'shift', 'salary', 'intercom'],
-    Gardening: ['garden', 'jobs', 'shift', 'salary', 'intercom'],
-    Maintenance: ['jobs', 'shift', 'salary', 'intercom'],
-    Administration: ['office', 'jobs', 'shift', 'salary', 'intercom'],
+    Security: ['gate', 'visitors', 'shift', 'intercom'],
+    Housekeeping: ['cleaning', 'jobs', 'shift', 'intercom'],
+    Gardening: ['garden', 'jobs', 'shift', 'intercom'],
+    Maintenance: ['jobs', 'shift', 'intercom'],
+    Administration: ['office', 'jobs', 'shift', 'intercom'],
   };
   return { all: all, suggested: suggested[dept] || suggested.Maintenance };
 };
@@ -1185,16 +1186,16 @@ window.openAddStaffModal = function() {
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;">
-      <div style="flex:1;">
-        <label class="form-label">Contact Phone Number *</label>
-        <input type="tel" id="stfPhone" required placeholder="+91 94000 12345" class="form-input" style="width:100%;" />
-      </div>
-      <div style="flex:1;">
-        <label class="form-label">Monthly Salary (₹) *</label>
-        <input type="number" id="stfSalary" required placeholder="e.g. 12000" min="0" class="form-input" style="width:100%;font-weight:700;" />
-      </div>
+    <div>
+      <label class="form-label">Contact Phone Number *</label>
+      <input type="tel" id="stfPhone" required placeholder="+91 94000 12345" class="form-input" style="width:100%;" />
     </div>
+    <!-- Demo: salary fields hidden for now.
+    <div>
+      <label class="form-label">Monthly Salary (₹) *</label>
+      <input type="number" id="stfSalary" placeholder="e.g. 12000" min="0" class="form-input" style="width:100%;font-weight:700;" />
+    </div>
+    -->
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
@@ -1212,16 +1213,26 @@ window.openAddStaffModal = function() {
       </div>
     </div>
 
+    <div>
+      <label class="form-label">Aadhaar Last 4 Digits</label>
+      <input type="text" id="stfAadhaar" placeholder="e.g. XXXX-XXXX-4589" class="form-input" style="width:100%;" />
+    </div>
+    <!-- Demo: salary payout fields hidden for now.
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
         <label class="form-label">UPI ID (For Instant Salary Transfer)</label>
         <input type="text" id="stfUpi" placeholder="e.g. ramesh@okhdfcbank" class="form-input" style="width:100%;" />
       </div>
       <div style="flex:1;">
-        <label class="form-label">Aadhaar Last 4 Digits</label>
-        <input type="text" id="stfAadhaar" placeholder="e.g. XXXX-XXXX-4589" class="form-input" style="width:100%;" />
+        <label class="form-label">Bank Account Number (Optional)</label>
+        <input type="text" id="stfAccount" placeholder="Account Number" class="form-input" style="width:100%;" />
       </div>
     </div>
+    <div>
+      <label class="form-label">Bank IFSC Code</label>
+      <input type="text" id="stfIfsc" placeholder="e.g. SBIN0001234" class="form-input" style="width:100%;text-transform:uppercase;" />
+    </div>
+    -->
 
     <div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">
       <div style="font-size:13px;font-weight:800;color:#0F172A;">Portal sections</div>
@@ -1238,16 +1249,6 @@ window.openAddStaffModal = function() {
       <div style="font-size:11px;color:#15803D;margin-top:4px;">Guards and staff will use their phone number + this Security PIN to access the Staff & Gate Portal.</div>
     </div>
 
-    <div style="display:flex;gap:10px;">
-      <div style="flex:1;">
-        <label class="form-label">Bank Account Number (Optional)</label>
-        <input type="text" id="stfAccount" placeholder="Account Number" class="form-input" style="width:100%;" />
-      </div>
-      <div style="flex:1;">
-        <label class="form-label">Bank IFSC Code</label>
-        <input type="text" id="stfIfsc" placeholder="e.g. SBIN0001234" class="form-input" style="width:100%;text-transform:uppercase;" />
-      </div>
-    </div>
   `;
 
   openStaffModal('➕ Onboard Society Staff Member', html, 'Save Staff Member', async function() {
@@ -1255,17 +1256,17 @@ window.openAddStaffModal = function() {
     var role = document.getElementById('stfRole').value.trim();
     var department = document.getElementById('stfDept').value;
     var phone = document.getElementById('stfPhone').value.trim();
-    var salary = parseFloat(document.getElementById('stfSalary').value) || 0;
+    var salary = 0;
     var shift = document.getElementById('stfShift').value;
     var joiningDate = document.getElementById('stfJoinDate').value;
     var pin = (document.getElementById('stfPin')?.value || '1234').trim();
-    var upiId = document.getElementById('stfUpi').value.trim();
+    var upiId = '';
     var aadhaarNumber = document.getElementById('stfAadhaar').value.trim();
-    var accountNumber = document.getElementById('stfAccount').value.trim();
-    var ifscCode = document.getElementById('stfIfsc').value.trim();
-    var portalAccess = window.readStaffAccessChecks('stf');
+    var accountNumber = '';
+    var ifscCode = '';
+    var portalAccess = window.readStaffAccessChecks('stf').filter(function(id) { return id !== 'salary'; });
 
-    if (!name || !role || !phone || !salary) {
+    if (!name || !role || !phone) {
       if (typeof window.showToast === 'function') window.showToast('Please fill all required staff fields', 'error');
       throw new Error('Required fields missing');
     }
@@ -1463,16 +1464,16 @@ window.openEditStaffModal = async function(staffId) {
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;">
-      <div style="flex:1;">
-        <label class="form-label">Contact Phone Number *</label>
-        <input type="tel" id="estfPhone" required value="${staff.phone || ''}" class="form-input" style="width:100%;" />
-      </div>
-      <div style="flex:1;">
-        <label class="form-label">Monthly Salary (₹) *</label>
-        <input type="number" id="estfSalary" required value="${staff.salary || 0}" class="form-input" style="width:100%;font-weight:700;" />
-      </div>
+    <div>
+      <label class="form-label">Contact Phone Number *</label>
+      <input type="tel" id="estfPhone" required value="${staff.phone || ''}" class="form-input" style="width:100%;" />
     </div>
+    <!-- Demo: salary field hidden for now.
+    <div>
+      <label class="form-label">Monthly Salary (₹)</label>
+      <input type="number" id="estfSalary" value="${staff.salary || 0}" class="form-input" style="width:100%;font-weight:700;" />
+    </div>
+    -->
 
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
@@ -1527,16 +1528,16 @@ window.openEditStaffModal = async function(staffId) {
       </div>
     </div>
 
-    <div style="display:flex;gap:10px;">
-      <div style="flex:1;">
-        <label class="form-label">Registered UPI ID</label>
-        <input type="text" id="estfUpi" value="${staff.upiId || ''}" class="form-input" style="width:100%;" />
-      </div>
-      <div style="flex:1;">
-        <label class="form-label">Aadhaar Number</label>
-        <input type="text" id="estfAadhaar" value="${staff.aadhaarNumber || ''}" class="form-input" style="width:100%;" />
-      </div>
+    <div>
+      <label class="form-label">Aadhaar Number</label>
+      <input type="text" id="estfAadhaar" value="${staff.aadhaarNumber || ''}" class="form-input" style="width:100%;" />
     </div>
+    <!-- Demo: salary payout field hidden for now.
+    <div>
+      <label class="form-label">Registered UPI ID</label>
+      <input type="text" id="estfUpi" value="${staff.upiId || ''}" class="form-input" style="width:100%;" />
+    </div>
+    -->
 
     <div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">
       <div style="font-size:13px;font-weight:800;color:#0F172A;">Portal sections</div>
@@ -1559,7 +1560,8 @@ window.openEditStaffModal = async function(staffId) {
     var role = document.getElementById('estfRole').value.trim();
     var department = document.getElementById('estfDept').value;
     var phone = document.getElementById('estfPhone').value.trim();
-    var salary = parseFloat(document.getElementById('estfSalary').value) || 0;
+    var salaryField = document.getElementById('estfSalary');
+    var salary = salaryField ? (parseFloat(salaryField.value) || 0) : undefined;
     var status = document.getElementById('estfStatus').value;
     var shift = document.getElementById('estfShift').value;
     var startTime = (document.getElementById('estfStart')?.value || '').trim();
@@ -1568,16 +1570,19 @@ window.openEditStaffModal = async function(staffId) {
     var supervisorPhone = (document.getElementById('estfSupervisorPhone')?.value || '').trim();
     var reliefName = (document.getElementById('estfRelief')?.value || '').trim();
     var reliefPhone = (document.getElementById('estfReliefPhone')?.value || '').trim();
-    var upiId = document.getElementById('estfUpi').value.trim();
+    var upiField = document.getElementById('estfUpi');
+    var upiId = upiField ? upiField.value.trim() : undefined;
     var aadhaarNumber = document.getElementById('estfAadhaar').value.trim();
     var pin = (document.getElementById('estfPin')?.value || '').trim();
-    var portalAccess = window.readStaffAccessChecks('estf');
+    var portalAccess = window.readStaffAccessChecks('estf').filter(function(id) { return id !== 'salary'; });
     if (!portalAccess.length) {
       if (typeof window.showToast === 'function') window.showToast('Choose at least one portal section', 'error');
       throw new Error('Portal access required');
     }
 
-    var updatePayload = { id: staffId, name, role, department, phone, salary, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, upiId, aadhaarNumber, portalAccess };
+    var updatePayload = { id: staffId, name, role, department, phone, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, aadhaarNumber, portalAccess };
+    if (salary !== undefined) updatePayload.salary = salary;
+    if (upiId !== undefined) updatePayload.upiId = upiId;
     if (pin && pin.length >= 4) {
       updatePayload.pin = pin;
     }
@@ -1855,17 +1860,17 @@ window.renderStaffTable = function() {
             <span>🔑 PIN:</span> <span style="font-family:monospace;background:#DCFCE7;padding:1px 5px;border-radius:4px;color:#166534;font-weight:700;">${s.pin || '1234'}</span>
           </div>
         </td>
+        <!-- Demo: salary columns hidden for now.
         <td style="font-weight:700;font-size:13.5px;color:var(--text-primary);">
           ₹${Number(s.salary).toLocaleString('en-IN')}<span style="font-size:10.5px;font-weight:400;color:var(--text-muted);">/mo</span>
         </td>
+        -->
         <td style="font-size:12px;color:var(--text-muted);">${s.joiningDate || '—'}</td>
         <td>${statusBadge}</td>
-        <td>${payStatusBadge}</td>
+        <!-- <td>${payStatusBadge}</td> -->
         <td style="text-align:right;">
           <div style="display:flex;gap:4px;justify-content:flex-end;">
-            <button class="btn btn-secondary btn-sm" onclick="window.openPaySalaryModal('${s.id}')" style="padding:4px 10px;font-size:11.5px;font-weight:700;background:${isPaidOct?'#F8FAFC':'#FEF3C7'};border-color:${isPaidOct?'#CBD5E1':'#F59E0B'};color:${isPaidOct?'#334155':'#92400E'};">
-              💳 ${isPaidOct ? 'Pay More' : 'Pay'}
-            </button>
+            <!-- <button class="btn btn-secondary btn-sm" onclick="window.openPaySalaryModal('${s.id}')">💳 ${isPaidOct ? 'Pay More' : 'Pay'}</button> -->
             <button class="btn btn-ghost btn-sm" onclick="window.openQuickStaffPinModal('${s.id}')" title="Set Portal Login PIN" style="padding:4px 7px;font-size:11px;color:#2563EB;border:1px solid #BFDBFE;background:#EFF6FF;border-radius:6px;font-weight:700;">🔑 PIN</button>
             <button class="btn btn-ghost btn-sm" onclick="window.openEditStaffModal('${s.id}')" title="Edit Staff" style="padding:4px 8px;font-size:12px;">✏️</button>
             <button class="btn btn-ghost btn-sm" onclick="window.confirmDeleteStaff('${s.id}', '${s.name.replace(/'/g, "\\'")}')" title="Delete Staff" style="padding:4px 8px;font-size:12px;color:#EF4444;">🗑️</button>
@@ -1887,7 +1892,9 @@ Screens['admin-staff'] = function() {
     breadcrumb: 'Operations',
     actions: `
       <div style="display:flex;gap:8px;">
+        <!-- Demo: payroll hidden for now.
         <button class="btn btn-secondary btn-sm" onclick="window.openStaffPayrollHistoryModal()">📑 Payroll History</button>
+        -->
         <button class="btn btn-primary btn-sm" onclick="window.openAddStaffModal()">➕ + Add Staff</button>
       </div>
     `,
@@ -1895,10 +1902,12 @@ Screens['admin-staff'] = function() {
       <div class="page-header" style="margin-bottom:16px;">
         <div class="page-header-left">
           <div class="page-title">Staff Management</div>
-          <div class="page-subtitle">Track society staff, attendance, and salary payments</div>
+          <div class="page-subtitle">Track society staff and attendance</div>
         </div>
         <div class="page-actions" style="display:flex;gap:8px;">
+          <!-- Demo: payroll hidden for now.
           <button class="btn btn-secondary btn-sm" onclick="window.openStaffPayrollHistoryModal()">📑 Payroll History</button>
+          -->
           <button class="btn btn-primary btn-sm" onclick="window.openAddStaffModal()">➕ + Add Staff</button>
         </div>
       </div>
@@ -1910,6 +1919,7 @@ Screens['admin-staff'] = function() {
           <div style="font-size:22px;font-weight:800;color:var(--text-primary);margin-top:4px;" id="staffMetricTotal">Loading...</div>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Security, Housekeeping &amp; Gardening</div>
         </div>
+        <!-- Demo: salary totals hidden for now.
         <div class="card card-sm" style="padding:14px;border-left:4px solid #8B5CF6;">
           <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Monthly Payroll Liability</div>
           <div style="font-size:22px;font-weight:800;color:var(--text-primary);margin-top:4px;" id="staffMetricPayroll">Loading...</div>
@@ -1925,6 +1935,7 @@ Screens['admin-staff'] = function() {
           <div style="font-size:22px;font-weight:800;color:var(--amber);margin-top:4px;" id="staffMetricPending">Loading...</div>
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Staff due for monthly disbursement</div>
         </div>
+        -->
       </div>
 
       <div class="card">
@@ -1950,10 +1961,12 @@ Screens['admin-staff'] = function() {
           </div>
 
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <!-- Demo: salary status filter hidden for now.
             <span style="font-size:12px;color:var(--text-muted);margin-right:2px;">Disbursement Status:</span>
             <button class="btn btn-sm spay-pill active" data-pay="ALL" onclick="window.filterStaffByPaymentStatus('ALL')" style="font-size:11px;padding:3px 8px;">All</button>
             <button class="btn btn-sm spay-pill" data-pay="PENDING_OCT" onclick="window.filterStaffByPaymentStatus('PENDING_OCT')" style="font-size:11px;padding:3px 8px;color:#D97706;font-weight:700;">⏳ Due Oct 2026</button>
             <button class="btn btn-sm spay-pill" data-pay="PAID_OCT" onclick="window.filterStaffByPaymentStatus('PAID_OCT')" style="font-size:11px;padding:3px 8px;color:#16A34A;font-weight:700;">✅ Paid Oct 2026</button>
+            -->
           </div>
         </div>
 
@@ -1964,16 +1977,16 @@ Screens['admin-staff'] = function() {
                 <th>Name &amp; ID</th>
                 <th>Role &amp; Shift</th>
                 <th>Phone</th>
-                <th>Monthly Salary</th>
+                <!-- <th>Monthly Salary</th> -->
                 <th>Joining Date</th>
                 <th>Status</th>
-                <th>Salary Status</th>
+                <!-- <th>Salary Status</th> -->
                 <th style="text-align:right;">Actions</th>
               </tr>
             </thead>
             <tbody id="staffTableBody">
               <tr>
-                <td colspan="8" style="text-align:center;padding:28px;color:var(--text-muted);">
+                <td colspan="6" style="text-align:center;padding:28px;color:var(--text-muted);">
                   Loading live staff registry...
                 </td>
               </tr>

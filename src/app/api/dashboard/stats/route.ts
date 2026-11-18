@@ -20,7 +20,14 @@ export async function GET(request: Request) {
     const occupiedUnits = await prisma.unit.count({
       where: {
         organizationId: orgId,
-        occupancyStatus: { in: ['OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'TENANTED'] },
+        OR: [
+          { occupancyStatus: { in: ['OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'TENANTED', 'OCCUPIED'] } },
+          { users: { some: { role: 'RESIDENT', status: { not: 'REJECTED' } } } },
+          { AND: [{ ownerName: { not: null } }, { ownerName: { not: '' } }] },
+          { AND: [{ tenantName: { not: null } }, { tenantName: { not: '' } }] },
+          { AND: [{ ownerPhone: { not: null } }, { ownerPhone: { not: '' } }] },
+          { AND: [{ tenantPhone: { not: null } }, { tenantPhone: { not: '' } }] },
+        ],
       },
     })
     const vacantUnits = totalUnits - occupiedUnits

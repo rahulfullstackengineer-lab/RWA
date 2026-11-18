@@ -126,6 +126,7 @@
     const type = String((note && (note.type || note.event)) || '').toUpperCase()
     if (/salary sent to/i.test(title)) return false
     if (type === 'STAFF_SALARY' || /salary credited to you/i.test(title)) return true
+    if (type === 'VEHICLE' || /vehicle/i.test(title)) return true
     if (/pass|visitor|gate|duty|shift|sos|emergency|complaint|ticket/i.test(title + ' ' + String((note && note.message) || ''))) return true
     return false
   }
@@ -436,24 +437,33 @@
 
       socket.on('passes:updated', (data) => {
         console.log('🎫 Socket event passes:updated received:', data)
-        if (data.action === 'CHECKED_IN' && data.pass) {
+        const passAction = String((data && data.action) || '').toUpperCase()
+        const passRole = audienceRole(getStoredUser().role)
+        const pass = (data && data.pass) || {}
+        if (passAction === 'CHECKED_IN' && (passRole === 'resident' || passRole === 'admin')) {
           if (typeof showToast === 'function') {
-            showToast(`🔔 Visitor Arrived: ${data.pass.visitorName} checked in at ${data.pass.gateNumber || 'Gate'}!`, 'success')
+            showToast(data.title || ('Visitor arrived: ' + (pass.visitorName || 'Visitor') + ' is at the gate for flat ' + (pass.residentUnit || '')), 'success')
           }
-        } else if (data.action === 'CREATED' && data.pass) {
+          if (typeof window.playNotificationSound === 'function') window.playNotificationSound()
+        } else if (passAction === 'CHECKED_OUT' && (passRole === 'resident' || passRole === 'admin')) {
           if (typeof showToast === 'function') {
-            showToast(`New visiting pass: ${data.pass.visitorName} (Flat ${data.pass.residentUnit})`, 'success')
+            showToast(data.title || ('Visitor left: ' + (pass.visitorName || 'Visitor')), 'info')
           }
+        } else if (passAction === 'CREATED' && (passRole === 'staff' || passRole === 'admin')) {
+          if (typeof showToast === 'function') {
+            showToast(data.title || ('Visitor expected: ' + (pass.visitorName || 'Visitor') + ' for flat ' + (pass.residentUnit || '')), 'info')
+          }
+          if (typeof window.playNotificationSound === 'function') window.playNotificationSound()
         }
         if (typeof updateNotificationBellBadge === 'function') updateNotificationBellBadge(true)
-        const passRole = getStoredUser().role
-        if (passRole === 'RESIDENT') {
+        const storedPassRole = getStoredUser().role
+        if (storedPassRole === 'RESIDENT') {
           if (typeof window.loadLiveResidentDashboard === 'function') window.loadLiveResidentDashboard()
           return
         }
         if (typeof window.loadLiveAdminEntryPasses === 'function') window.loadLiveAdminEntryPasses()
-        if (passRole === 'STAFF' && typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
-        if (typeof window.loadLiveResidentDashboard === 'function' && passRole !== 'STAFF') window.loadLiveResidentDashboard()
+        if (storedPassRole === 'STAFF' && typeof window.loadLiveStaffPortal === 'function') window.loadLiveStaffPortal()
+        if (typeof window.loadLiveResidentDashboard === 'function' && storedPassRole !== 'STAFF') window.loadLiveResidentDashboard()
       })
     } catch (err) {
       console.warn('Socket initialization error:', err)
@@ -1556,6 +1566,46 @@
     })
   }
 
+  window.rememberSocietyPayment = function (settingsData) {
+    const org = (settingsData && settingsData.organization) || {}
+    const accountant = (settingsData && settingsData.accountant) || {}
+    const admin = (settingsData && settingsData.admin) || {}
+    window.__societyPaymentOptions = {
+      online: Boolean(org.razorpayConnected),
+      phone: String(accountant.phone || org.phone || admin.phone || '').trim(),
+    }
+    return window.__societyPaymentOptions
+  }
+
+  window.ensureSocietyPaymentOptions = async function () {
+    if (window.__societyPaymentOptions) return window.__societyPaymentOptions
+    try {
+      const res = await (window.apiFetch || fetch)('/api/settings')
+      if (res && res.ok) return window.rememberSocietyPayment(await res.json())
+    } catch (err) {}
+    window.__societyPaymentOptions = { online: false, phone: '' }
+    return window.__societyPaymentOptions
+  }
+
+  window.officePayNote = function () {
+    const opts = window.__societyPaymentOptions || { phone: '' }
+    const digits = String(opts.phone || '').replace(/\D/g, '')
+    const shown = digits.length >= 10 ? digits.slice(-10) : ''
+    const tel = shown
+      ? ' <a href="tel:+91' + shown + '" style="font-weight:800;color:inherit;text-decoration:underline;">' + shown + '</a>'
+      : ''
+    const text = shown
+      ? 'Please pay at the office, or contact the accountant at' + tel + '.'
+      : 'Please pay at the office, or contact the accountant.'
+    return '<div class="office-pay-note" style="font-size:13px;font-weight:700;line-height:1.45;color:#18181B;">' + text + '</div>'
+  }
+
+  window.onlinePayControl = function (buttonHtml) {
+    const opts = window.__societyPaymentOptions
+    if (opts && opts.online) return buttonHtml
+    return window.officePayNote()
+  }
+
   window.collectWithSocietyRazorpay = function (options) {
     options = options || {}
     return new Promise(function (resolve) {
@@ -1583,7 +1633,12 @@
           return
         }
         if (!orderData.razorpayKeyId || !orderData.order || orderData.order.isMock) {
-          showToast('This society has not connected a Razorpay account.', 'error')
+          const opts = window.__societyPaymentOptions || {}
+          const digits = String(opts.phone || '').replace(/\D/g, '')
+          const shown = digits.length >= 10 ? digits.slice(-10) : ''
+          showToast(shown
+            ? 'Please pay at the office, or contact the accountant at ' + shown + '.'
+            : 'Please pay at the office, or contact the accountant.', 'info')
           resolve({ ok: false })
           return
         }
@@ -3004,7 +3059,7 @@
   window.applyStaffPortalAccess = function(data) {
     const access = (data && data.staff && data.staff.portalAccess && data.staff.portalAccess.length)
       ? data.staff.portalAccess
-      : ['gate', 'visitors', 'shift', 'salary', 'intercom']
+      : ['gate', 'visitors', 'shift', 'intercom']
     const has = function(id) { return access.indexOf(id) !== -1 }
     const scanner = document.querySelector('.staff-scanner')
     if (scanner) scanner.style.display = has('gate') ? '' : 'none'
@@ -3017,12 +3072,14 @@
     if (mark) mark.textContent = category === 'HOUSEKEEPING' ? '🧹' : (category === 'GARDENING' ? '🌱' : (category === 'OFFICE' ? '🏢' : (category === 'MAINTENANCE' ? '🔧' : '👮')))
     const tabs = [
       { id: 'passes', key: 'visitors', label: 'Gate Visitors Today' },
+      { id: 'vehicles', key: 'gate', label: 'Registered Vehicles' },
       { id: 'cleaning', key: 'cleaning', label: 'Cleaning Round' },
       { id: 'garden', key: 'garden', label: 'Garden Round' },
       { id: 'jobs', key: 'jobs', label: 'Work Orders' },
       { id: 'office', key: 'office', label: 'Office Desk' },
       { id: 'duty', key: 'shift', label: 'My Shift & Post' },
-      { id: 'salary', key: 'salary', label: 'Salary & Payouts' },
+      // Demo: salary tab hidden for now.
+      // { id: 'salary', key: 'salary', label: 'Salary & Payouts' },
       { id: 'emergency', key: 'intercom', label: 'Intercom & SOS' },
     ].filter(function(tab) { return has(tab.key) })
     const bar = document.getElementById('staffPortalTabs')
@@ -3304,11 +3361,57 @@
   }
 
   // ---- Tab switcher ------------------------------------------
-  window.switchStaffTab = function(tab, btnEl) {
-    ['passes','duty','salary','emergency'].forEach(t => {
-      const panel = document.getElementById('staffTabContent' + t.charAt(0).toUpperCase() + t.slice(1))
-      if (panel) panel.style.display = (t === tab) ? 'flex' : 'none'
+  window.loadStaffVehicles = async function() {
+    const box = document.getElementById('staffVehicleList')
+    if (!box) return
+    box.innerHTML = '<div style="padding:18px;border:1px solid #E4E4E7;background:#fff;font-size:13px;color:#71717A;">Loading vehicles…</div>'
+    try {
+      const res = await (window.apiFetch || fetch)('/api/vehicles')
+      const data = res && res.ok ? await res.json() : { vehicles: [] }
+      window.__staffVehicles = data.vehicles || []
+    } catch (e) {
+      window.__staffVehicles = []
+    }
+    window.renderStaffVehicles()
+  }
+
+  window.renderStaffVehicles = function() {
+    const box = document.getElementById('staffVehicleList')
+    if (!box) return
+    const query = String((document.getElementById('staffVehicleSearch') || {}).value || '').trim().toLowerCase()
+    const esc = function(value) {
+      return String(value == null ? '' : value).replace(/[&<>"]/g, function(ch) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]
+      })
+    }
+    const rows = (window.__staffVehicles || []).filter(function(vehicle) {
+      const unit = vehicle.unit || {}
+      const hay = [vehicle.registrationNo, vehicle.type, vehicle.make, vehicle.model, vehicle.color, vehicle.parkingSlot, unit.unitNumber, unit.ownerName, unit.tenantName].join(' ').toLowerCase()
+      return !query || hay.indexOf(query) !== -1
     })
+    if (!rows.length) {
+      box.innerHTML = '<div style="padding:18px;border:1px solid #E4E4E7;background:#fff;font-size:13px;color:#3F3F46;">No registered vehicle matches this search.</div>'
+      return
+    }
+    box.innerHTML = rows.map(function(vehicle) {
+      const unit = vehicle.unit || {}
+      const who = unit.ownerName || unit.tenantName || 'Resident'
+      const kind = [vehicle.make, vehicle.model, vehicle.color].filter(Boolean).join(' ') || vehicle.type || 'Vehicle'
+      return '<div style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:14px 16px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">'
+        + '<div><div style="font-size:16px;font-weight:800;letter-spacing:0.04em;">' + esc(vehicle.registrationNo) + '</div>'
+        + '<div style="font-size:13px;color:#3F3F46;margin-top:4px;">' + esc(kind) + '</div></div>'
+        + '<div style="text-align:right;"><div style="font-weight:800;">Flat ' + esc(unit.unitNumber || '—') + '</div>'
+        + '<div style="font-size:12px;color:#71717A;margin-top:4px;">' + esc(who) + (vehicle.parkingSlot ? ' · Slot ' + esc(vehicle.parkingSlot) : '') + '</div></div></div>'
+    }).join('')
+  }
+
+  window.switchStaffTab = function(tab, btnEl) {
+    document.querySelectorAll('.staff-tab-view').forEach(function(panel) {
+      const name = String(panel.id || '').replace('staffTabContent', '')
+      const key = name.charAt(0).toLowerCase() + name.slice(1)
+      panel.style.display = key === tab ? 'flex' : 'none'
+    })
+    if (tab === 'vehicles') window.loadStaffVehicles()
     // Update button active states
     const tabs = document.getElementById('staffPortalTabs')
     if (tabs) {

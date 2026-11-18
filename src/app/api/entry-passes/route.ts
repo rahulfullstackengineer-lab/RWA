@@ -2,25 +2,23 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
+import { residentIdsForPass } from '@/lib/pass-alerts'
 
 async function notifyAboutPass(
   orgId: string,
-  flatNumber: string,
+  pass: { residentUnit?: string | null; unitId?: string | null; residentPhone?: string | null },
+  roles: Array<'admin' | 'staff' | 'resident'>,
   title: string,
   message: string,
   data: Record<string, unknown>,
-  referenceId?: string
+  referenceId?: string,
+  includeHost = true
 ) {
-  const residents = flatNumber
-    ? await prisma.user.findMany({
-        where: { organizationId: orgId, unit: { unitNumber: flatNumber } },
-        select: { id: true },
-      })
-    : []
+  const residents = includeHost ? await residentIdsForPass(orgId, pass) : []
   await notifyUsers({
     orgId,
-    roles: ['admin', 'staff'],
-    userIds: residents.map((person) => person.id),
+    roles,
+    userIds: residents,
     title,
     message,
     type: 'ENTRY_PASS',
@@ -159,8 +157,10 @@ export async function POST(request: Request) {
     }
 
     let flatNumber = residentUnit?.trim() || ''
+    let linkedUnitId = unitId || null
     if (user.role === 'RESIDENT') {
-      flatNumber = user.unit?.unitNumber || ''
+      flatNumber = user.unit?.unitNumber || flatNumber
+      linkedUnitId = user.unitId || linkedUnitId
     }
     if (!visitorName?.trim() || !flatNumber) {
       return NextResponse.json(
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
         residentName: residentName?.trim() || 'Resident',
         residentPhone: residentPhone?.trim() || null,
         residentUnit: flatNumber,
-        unitId: unitId || null,
+        unitId: linkedUnitId,
         gateNumber: gateNumber || 'Gate 1 - Main Gate',
         validFrom: now,
         validUntil,
@@ -202,11 +202,13 @@ export async function POST(request: Request) {
 
     await notifyAboutPass(
       organizationId,
-      newPass.residentUnit,
-      `Visitor pass: ${newPass.visitorName}`,
-      `${newPass.visitorName} is expected at flat ${newPass.residentUnit}. Gate code ${newPass.otpPin}.`,
+      newPass,
+      ['admin', 'staff'],
+      `Visitor expected: ${newPass.visitorName}`,
+      `${newPass.visitorName} (${newPass.visitorType}) is coming to flat ${newPass.residentUnit}. Gate code ${newPass.otpPin}.`,
       { action: 'CREATED', pass: newPass },
-      newPass.id
+      newPass.id,
+      false
     )
 
     return NextResponse.json({
@@ -307,9 +309,11 @@ export async function PATCH(request: Request) {
       data: updateData,
     })
 
+    const passAction: Array<'admin' | 'staff'> = action === 'check_in' || action === 'check_out' ? ['admin'] : ['admin', 'staff']
     await notifyAboutPass(
       updatedPass.organizationId,
-      updatedPass.residentUnit,
+      updatedPass,
+      passAction,
       notificationTitle || `Visitor pass ${updatedPass.status}: ${updatedPass.visitorName}`,
       notificationMsg || `Flat ${updatedPass.residentUnit}: ${updatedPass.visitorName} is now ${updatedPass.status}.`,
       { action: action?.toUpperCase() || 'UPDATED', pass: updatedPass },
@@ -357,7 +361,8 @@ export async function DELETE(request: Request) {
 
     await notifyAboutPass(
       existing.organizationId,
-      existing.residentUnit,
+      existing,
+      ['admin', 'staff'],
       `Visitor pass cancelled: ${existing.visitorName}`,
       `The pass for flat ${existing.residentUnit} was removed.`,
       { action: 'DELETED', passId: id, pass: existing },

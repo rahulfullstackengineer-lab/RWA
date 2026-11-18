@@ -469,10 +469,23 @@ window.renderUnitsAnalytics = function(units, blocks) {
   }
 
   // 2. Occupancy Slices for Donut Chart
-  var ownerCount = units.filter(function(u) { return u.occupancyStatus === 'OWNER_OCCUPIED' || (u.ownerName && !u.tenantName); }).length;
-  var tenantCount = units.filter(function(u) { return u.occupancyStatus === 'TENANTED' || u.occupancyStatus === 'TENANT_OCCUPIED' || u.tenantName; }).length;
-  var vacantCount = units.filter(function(u) { return u.occupancyStatus === 'VACANT' || (!u.ownerName && !u.tenantName); }).length;
-  var otherCount = Math.max(0, units.length - ownerCount - tenantCount - vacantCount);
+  function unitHasResident(u) {
+    return (u.users || []).some(function(person) { return person.role === 'RESIDENT' && person.status !== 'REJECTED'; });
+  }
+  function unitIsOccupied(u) {
+    var status = String(u.occupancyStatus || '').toUpperCase();
+    if (status === 'OWNER_OCCUPIED' || status === 'TENANT_OCCUPIED' || status === 'TENANTED' || status === 'OCCUPIED') return true;
+    if (unitHasResident(u)) return true;
+    return !!(u.ownerName || u.tenantName || u.ownerPhone || u.tenantPhone);
+  }
+  var occupiedUnits = units.filter(unitIsOccupied);
+  var tenantCount = occupiedUnits.filter(function(u) {
+    var status = String(u.occupancyStatus || '').toUpperCase();
+    return status === 'TENANTED' || status === 'TENANT_OCCUPIED' || !!u.tenantName || !!u.tenantPhone;
+  }).length;
+  var ownerCount = Math.max(0, occupiedUnits.length - tenantCount);
+  var vacantCount = Math.max(0, units.length - occupiedUnits.length);
+  var otherCount = 0;
 
   var slices = [
     { label: 'Owner Occupied', count: ownerCount, color: '#3B82F6' },

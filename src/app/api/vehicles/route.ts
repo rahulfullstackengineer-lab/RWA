@@ -215,7 +215,7 @@ export async function POST(request: Request) {
     })
     await notifyUsers({
       orgId: vehicle.unit.organizationId,
-      roles: ['admin'],
+      roles: ['admin', 'staff'],
       userIds: flatPeople.map((person) => person.id),
       title: `Vehicle registered: ${vehicle.registrationNo}`,
       message: `Flat ${vehicle.unit.unitNumber}${vehicle.parkingSlot ? `, slot ${vehicle.parkingSlot}` : ''}`,
@@ -313,7 +313,7 @@ export async function PUT(request: Request) {
 
     await notifyUsers({
       orgId: updated.unit.organizationId,
-      roles: ['admin'],
+      roles: ['admin', 'staff'],
       userIds: (await prisma.user.findMany({ where: { unitId: updated.unitId }, select: { id: true } })).map((person) => person.id),
       title: `Vehicle updated: ${updated.registrationNo}`,
       message: `Flat ${updated.unit.unitNumber}${updated.parkingSlot ? `, slot ${updated.parkingSlot}` : ''}`,
@@ -364,7 +364,7 @@ export async function DELETE(request: Request) {
     if (vehicle.unit?.organizationId) {
       await notifyUsers({
         orgId: vehicle.unit.organizationId,
-        roles: ['admin'],
+        roles: ['admin', 'staff'],
         userIds: vehicle.unitId ? (await prisma.user.findMany({ where: { unitId: vehicle.unitId }, select: { id: true } })).map((person) => person.id) : [],
         title: `Vehicle removed: ${vehicle.registrationNo}`,
         message: `Removed from flat ${vehicle.unit.unitNumber}.`,

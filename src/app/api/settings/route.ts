@@ -224,6 +224,14 @@ export async function GET(request: Request) {
           orderBy: { createdAt: 'asc' },
         })
       : null
+    const treasurer = organization
+      ? await prisma.user.findFirst({
+          where: { organizationId: orgId, role: 'TREASURER', status: { not: 'REJECTED' } },
+          select: { name: true, phone: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : null
+    const accountantPhone = String(treasurer?.phone || organization?.phone || adminUser?.phone || '').trim()
 
     const officeRoles = ['RWA_ADMIN', 'TREASURER', 'PLATFORM_ADMIN', 'PLATFORM_SUPER_ADMIN']
     if (!officeRoles.includes(user.role)) {
@@ -243,6 +251,10 @@ export async function GET(request: Request) {
       admin: adminUser
         ? { ...adminUser, designation: organization?.adminDesignation || '' }
         : null,
+      accountant: {
+        name: treasurer?.name || 'Accountant',
+        phone: accountantPhone,
+      },
       settings: storedSettings,
     })
   } catch (err: unknown) {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
-import { notifyUsers } from '@/lib/socket-server'
+import { emitLiveSocketEvent } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -19,6 +19,13 @@ function getStoredBroadcasts(orgId: string): any[] {
   }
 
   return []
+}
+
+function fillBroadcast(template: string, values: Record<string, string>) {
+  return template.replace(/\{([a-z_]+)\}/gi, (token, key) => {
+    const value = values[String(key).toLowerCase()]
+    return value == null || value === '' ? token : value
+  })
 }
 
 function saveBroadcasts(orgId: string, broadcasts: any[]) {
@@ -103,7 +110,7 @@ export async function POST(request: Request) {
       const unitIds = Array.from(new Set(unpaidInvoices.map((inv) => inv.unitId)))
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
-        select: { id: true, name: true, phone: true },
+        select: { id: true, name: true, phone: true, unitId: true, unit: { select: { unitNumber: true } } },
       })
       audienceLabel = `Defaulters Only (${targetUsers.length})`
     } else if (audience === 'OWNERS_ONLY') {
@@ -115,7 +122,7 @@ export async function POST(request: Request) {
       const unitIds = ownerUnits.map((u) => u.id)
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
-        select: { id: true, name: true, phone: true },
+        select: { id: true, name: true, phone: true, unitId: true, unit: { select: { unitNumber: true } } },
       })
       audienceLabel = `Owners Only (${targetUsers.length})`
     } else if (audience === 'TENANTS_ONLY') {
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
       const unitIds = tenantUnits.map((u) => u.id)
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
-        select: { id: true, name: true, phone: true },
+        select: { id: true, name: true, phone: true, unitId: true, unit: { select: { unitNumber: true } } },
       })
       audienceLabel = `Tenants Only (${targetUsers.length})`
     } else if (audience === 'BLOCK_A') {
@@ -138,14 +145,14 @@ export async function POST(request: Request) {
       const unitIds = blockA?.units.map((u) => u.id) || []
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, unitId: { in: unitIds }, status: 'ACTIVE' },
-        select: { id: true, name: true, phone: true },
+        select: { id: true, name: true, phone: true, unitId: true, unit: { select: { unitNumber: true } } },
       })
       audienceLabel = `Block A Residents (${targetUsers.length})`
     } else {
       // ALL_RESIDENTS
       targetUsers = await prisma.user.findMany({
         where: { organizationId: orgId, status: 'ACTIVE' },
-        select: { id: true, name: true, phone: true },
+        select: { id: true, name: true, phone: true, unitId: true, unit: { select: { unitNumber: true } } },
       })
       audienceLabel = `All Residents (${targetUsers.length})`
     }
@@ -153,18 +160,49 @@ export async function POST(request: Request) {
     const sentCount = targetUsers.length
     const deliveredCount = sentCount
     const failedCount = 0
+    const payLink = `${new URL(request.url).origin}/#resident-bills`
+    const dueRows = await prisma.invoice.groupBy({
+      by: ['unitId'],
+      where: { organizationId: orgId, balanceAmount: { gt: 0 }, status: { notIn: ['CANCELLED', 'VOID', 'DRAFT'] } },
+      _sum: { balanceAmount: true },
+    })
+    const dueByUnit = new Map(dueRows.map((row) => [row.unitId, row._sum.balanceAmount || 0]))
 
     if ((channels.includes('In-App') || channels.includes('IN_APP')) && targetUsers.length > 0) {
-      await notifyUsers({
-        orgId,
-        userIds: targetUsers.map((u) => u.id),
-        title: `📡 ${title}`,
-        message,
-        type: priority === 'URGENT' ? 'ALERT' : 'INFO',
-        event: 'new-broadcast',
-        referenceType: 'BROADCAST',
-        data: { title, message, audience: audienceLabel, channels, priority },
+      const personal = targetUsers.map((person) => {
+        const due = person.unitId ? (dueByUnit.get(person.unitId) || 0) : 0
+        const dueText = new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: 'INR',
+          maximumFractionDigits: due % 1 === 0 ? 0 : 2,
+        }).format(due)
+        const filled = fillBroadcast(message, {
+          resident_name: person.name || 'Resident',
+          unit_number: person.unit?.unitNumber || 'not linked',
+          due_amount: dueText,
+          pay_link: payLink,
+        })
+        return { userId: person.id, message: filled }
       })
+
+      await prisma.notification.createMany({
+        data: personal.map((row) => ({
+          organizationId: orgId,
+          userId: row.userId,
+          title: `📡 ${title}`,
+          message: row.message,
+          type: priority === 'URGENT' ? 'ALERT' : 'INFO',
+          referenceType: 'BROADCAST',
+        })),
+      })
+
+      for (const row of personal) {
+        emitLiveSocketEvent('new-broadcast', {
+          title: `📡 ${title}`,
+          message: row.message,
+          type: priority === 'URGENT' ? 'ALERT' : 'INFO',
+        }, { userId: row.userId })
+      }
     }
 
     // Save into broadcast history store

@@ -63,6 +63,7 @@ window.saveSocietyRazorpay = async function() {
     if (data.organization) {
       window._settingsData = window._settingsData || {};
       window._settingsData.organization = data.organization;
+      window.__societyPaymentOptions = null;
     }
     showToast('Razorpay account connected. Bill payments will go to this account.', 'success');
     window._settingsActiveTab = 'bank';
@@ -88,6 +89,7 @@ window.disconnectSocietyRazorpay = async function() {
       return;
     }
     if (data.organization && window._settingsData) window._settingsData.organization = data.organization;
+    window.__societyPaymentOptions = null;
     showToast('Razorpay account disconnected.', 'success');
     window._settingsActiveTab = 'bank';
     await window.loadLiveSettings(true);

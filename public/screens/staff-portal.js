@@ -112,8 +112,13 @@ Screens['staff-dashboard'] = function() {
         <button class="btn btn-sm btn-secondary" onclick="window.switchStaffTab('duty', this)" style="font-weight:700;border-radius:8px;padding:8px 16px;">
           <span>📅 My Shift &amp; Post</span>
         </button>
+        <!-- Demo: salary tab hidden for now.
         <button class="btn btn-sm btn-secondary" onclick="window.switchStaffTab('salary', this)" style="font-weight:700;border-radius:8px;padding:8px 16px;">
           <span>💰 Salary, Dates &amp; Payouts</span>
+        </button>
+        -->
+        <button class="btn btn-sm btn-secondary" onclick="window.switchStaffTab('vehicles', this)" data-staff-tab="vehicles" style="font-weight:700;border-radius:8px;padding:8px 16px;">
+          <span>Registered Vehicles</span>
         </button>
         <button class="btn btn-sm btn-secondary" onclick="window.switchStaffTab('emergency', this)" style="font-weight:700;border-radius:8px;padding:8px 16px;">
           <span>🚨 Intercom &amp; SOS</span>
@@ -155,6 +160,19 @@ Screens['staff-dashboard'] = function() {
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      <div id="staffTabContentVehicles" class="staff-tab-view" style="display:none;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <h3 style="font-size:16px;font-weight:800;margin:0;">Registered vehicles</h3>
+            <div style="font-size:12px;color:#71717A;margin-top:4px;">Cars and bikes linked to society flats. Match the number plate at the gate.</div>
+          </div>
+          <input id="staffVehicleSearch" type="search" placeholder="Search plate, flat, or name" oninput="window.renderStaffVehicles()" style="min-width:220px;padding:10px 12px;border:1px solid #E4E4E7;border-radius:2px;" />
+        </div>
+        <div id="staffVehicleList" style="display:flex;flex-direction:column;gap:8px;">
+          <div style="padding:18px;border:1px solid #E4E4E7;background:#fff;font-size:13px;color:#71717A;">Loading vehicles…</div>
         </div>
       </div>
 

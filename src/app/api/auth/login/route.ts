@@ -30,6 +30,34 @@ function findInStaffStore(cleanPhone: string, tenDigit: string) {
   return null
 }
 
+async function markFlatOccupiedByLogin(unitId: string, phone: string, tenDigit: string, name?: string | null) {
+  const unit = await prisma.unit.findUnique({ where: { id: unitId } })
+  if (!unit) return
+  const isTenant = unit.tenantPhone === phone || unit.tenantPhone === tenDigit
+  const occupied = ['OWNER_OCCUPIED', 'TENANT_OCCUPIED', 'TENANTED', 'OCCUPIED'].includes(String(unit.occupancyStatus || ''))
+  if (isTenant) {
+    if (occupied && unit.tenantName) return
+    await prisma.unit.update({
+      where: { id: unit.id },
+      data: {
+        occupancyStatus: 'TENANTED',
+        tenantPhone: unit.tenantPhone || phone,
+        tenantName: unit.tenantName || name || undefined,
+      },
+    })
+    return
+  }
+  if (occupied && unit.ownerName) return
+  await prisma.unit.update({
+    where: { id: unit.id },
+    data: {
+      occupancyStatus: 'OWNER_OCCUPIED',
+      ownerPhone: unit.ownerPhone || phone,
+      ownerName: unit.ownerName || name || undefined,
+    },
+  })
+}
+
 
 export async function POST(request: Request) {
   try {
@@ -228,6 +256,7 @@ export async function POST(request: Request) {
             },
             include: { organization: true, unit: true },
           })
+          await markFlatOccupiedByLogin(matchingUnit.id, cleanPhone, tenDigit, resName)
         } else {
           user = await prisma.user.create({
             data: {
@@ -441,7 +470,7 @@ export async function POST(request: Request) {
         },
       })
 
-      if (matchedUnit) {
+        if (matchedUnit) {
         currentOrgId = matchedUnit.organizationId
         currentUnitId = matchedUnit.id
         await prisma.user.update({
@@ -451,6 +480,7 @@ export async function POST(request: Request) {
             unitId: currentUnitId,
           },
         })
+        await markFlatOccupiedByLogin(matchedUnit.id, cleanPhone, tenDigit, user.name)
       }
     }
 

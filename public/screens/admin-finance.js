@@ -871,6 +871,11 @@ Screens['admin-invoices'] = function() {
 };
 
 Screens['admin-invoice-detail'] = function() {
+  if (!window.__societyPaymentOptions && typeof window.ensureSocietyPaymentOptions === 'function') {
+    window.ensureSocietyPaymentOptions().then(function() {
+      if (window.Router && window.Router.current && window.Router.current() === 'admin-invoice-detail') window.Router.refresh();
+    });
+  }
   const savedId = window.readScreenRecord ? window.readScreenRecord('invoice') : '';
   let inv = window.__selectedInvoice || null;
   if (savedId && inv && inv.id !== savedId) inv = null;
@@ -911,7 +916,7 @@ Screens['admin-invoice-detail'] = function() {
     actions: `
       <button class="btn btn-secondary btn-sm" onclick="showToast('PDF invoice downloaded', 'success')">⬇ Download PDF</button>
       ${window.invoiceRefundActionHtml(inv)}
-      ${displayStatus !== 'PAID' ? `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>` : ''}
+      ${displayStatus !== 'PAID' ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>`) : `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay via Razorpay</button>`) : ''}
     `,
     content: `
       <div class="detail-split-layout">
@@ -998,9 +1003,7 @@ Screens['admin-invoice-detail'] = function() {
           <div class="card card-sm">
             <div class="card-title" style="margin-bottom:12px;">Payment Actions</div>
             ${inv.status !== 'PAID' ? `
-              <button class="btn btn-primary w-full" style="justify-content:center;min-height:48px;margin-bottom:8px;" onclick="triggerRazorpayPayment('${inv.id}')">
-                💳 Pay Now via Razorpay
-              </button>
+              ${(typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`<button class="btn btn-primary w-full" style="justify-content:center;min-height:48px;margin-bottom:8px;" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay Now via Razorpay</button>`) : `<button class="btn btn-primary w-full" style="justify-content:center;min-height:48px;margin-bottom:8px;" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay Now via Razorpay</button>`)}
               <button class="btn btn-secondary w-full" style="justify-content:center;min-height:44px;margin-bottom:8px;" onclick="openRecordPaymentModal('${unitNum}', ${inv.balanceAmount})">
                 💵 Record Payment (Cash/Cheque)
               </button>
@@ -2530,6 +2533,7 @@ window.broadcastDuesReminderBatch = function() {
 // =============================================
 window.loadLiveInvoicesScreen = async function() {
   try {
+    if (typeof window.ensureSocietyPaymentOptions === 'function') await window.ensureSocietyPaymentOptions();
     const activeOrgId = localStorage.getItem('rwa_active_org_id') || localStorage.getItem('rwa_active_society_id') || '';
     const url = '/api/billing/invoices' + (activeOrgId ? `?orgId=${encodeURIComponent(activeOrgId)}` : '');
     const res = await (window.apiFetch || fetch)(url).catch(() => null);
@@ -2780,9 +2784,7 @@ function renderInvoicesData(invoices) {
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
               ${window.invoiceRefundActionHtml(inv)}
-              ${inv.status !== 'PAID' ? `
-                <button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')" title="Pay with Razorpay">💳 Pay</button>
-              ` : `
+              ${inv.status !== 'PAID' ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')" title="Pay with Razorpay">💳 Pay</button>`) : `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${inv.id}')" title="Pay with Razorpay">💳 Pay</button>`) : `
                 <button class="btn btn-ghost btn-sm btn-icon" onclick="viewInvoiceDetail('${inv.id}')" title="Receipt">🧾</button>
               `}
               <button class="btn btn-ghost btn-sm btn-icon" onclick="viewInvoiceDetail('${inv.id}')" title="Inspect">🔍</button>
@@ -2830,11 +2832,7 @@ function renderInvoicesData(invoices) {
 
           <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;" onclick="event.stopPropagation()">
             ${window.invoiceRefundActionHtml(inv)}
-            ${inv.status !== 'PAID' ? `
-              <button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="triggerRazorpayPayment('${inv.id}')">
-                💳 Pay Razorpay
-              </button>
-            ` : `
+            ${inv.status !== 'PAID' ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`<button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay Razorpay</button>`) : `<button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="triggerRazorpayPayment('${inv.id}')">💳 Pay Razorpay</button>`) : `
               <button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewInvoiceDetail('${inv.id}')">
                 🧾 View Receipt
               </button>

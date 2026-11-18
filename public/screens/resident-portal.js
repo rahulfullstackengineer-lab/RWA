@@ -96,9 +96,11 @@ Screens['resident-dashboard'] = function() {
           <button class="res-action-pill-btn" onclick="Router.go('resident-notices')">
             📢 Society Notices
           </button>
+          <!-- Demo: Society Election hidden for now.
           <button class="res-action-pill-btn" onclick="Router.go('resident-elections')">
             Society Election
           </button>
+          -->
           <button class="res-action-pill-btn" onclick="window.openResidentStaffDutyModal()">
             🛡️ Staff On Duty
           </button>
@@ -523,6 +525,7 @@ window.billRevisionHtml = function(inv) {
 
 window.loadLiveResidentBills = async function() {
   try {
+    if (typeof window.ensureSocietyPaymentOptions === 'function') await window.ensureSocietyPaymentOptions();
     let user = null;
     try { user = JSON.parse(localStorage.getItem('rwa_user') || '{}'); } catch(e) {}
     const isAdmin = user && (user.role === 'ADMIN' || user.role === 'SUPERADMIN' || user.role === 'RWA_ADMIN');
@@ -693,14 +696,18 @@ window.loadLiveResidentBills = async function() {
 
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
             <div style="font-size:12px;color:var(--text-muted)">
-              ${isPaid ? '✅ Account fully settled for this billing cycle' : '⚡ Instant digital receipt generated upon online verification'}
+              ${isPaid ? '✅ Account fully settled for this billing cycle' : (window.__societyPaymentOptions && window.__societyPaymentOptions.online ? '⚡ Instant digital receipt generated upon online verification' : 'Pay this bill at the society office.')}
             </div>
             <div style="display:flex;gap:10px;">
-              ${!isPaid ? `
+              ${!isPaid ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`
                 <button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${latest.id}', ${latest.balanceAmount || latest.totalAmount}, 'Flat ${unitNum}')">
                   ⚡ Pay via Razorpay (₹${(latest.balanceAmount || latest.totalAmount).toLocaleString('en-IN')})
                 </button>
-              ` : `
+              `) : `
+                <button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${latest.id}', ${latest.balanceAmount || latest.totalAmount}, 'Flat ${unitNum}')">
+                  ⚡ Pay via Razorpay (₹${(latest.balanceAmount || latest.totalAmount).toLocaleString('en-IN')})
+                </button>
+              `) : `
                 <button class="btn btn-secondary btn-sm" onclick="openResidentReceiptModal('${latest.id}')">🧾 Payment Receipt</button>
               `}
               <button class="btn btn-ghost btn-sm" onclick="openResidentInvoiceModal('${latest.id}')">📄 Full Invoice</button>
@@ -726,9 +733,9 @@ window.loadLiveResidentBills = async function() {
             <td><span class="badge ${pStatus}">${b.status}</span></td>
             <td>
               <div style="display:flex;gap:6px;">
-                ${b.status !== 'PAID' ? `
+                ${b.status !== 'PAID' ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`
                   <button class="btn btn-primary btn-xs" onclick="triggerRazorpayPayment('${b.id}', ${b.balanceAmount || b.totalAmount}, 'Flat ${unitNum}')">Pay</button>
-                ` : `
+                `) : `<button class="btn btn-primary btn-xs" onclick="triggerRazorpayPayment('${b.id}', ${b.balanceAmount || b.totalAmount}, 'Flat ${unitNum}')">Pay</button>`) : `
                   <button class="btn btn-ghost btn-xs" onclick="openResidentReceiptModal('${b.id}')">🧾 Receipt</button>
                 `}
                 <button class="btn btn-ghost btn-xs" onclick="openResidentInvoiceModal('${b.id}')">📄 Invoice</button>
@@ -811,6 +818,7 @@ window.loadLiveResidentDashboard = async function() {
     window._residentPassesList = allPasses;
 
     const settingsData = (settingsRes && settingsRes.ok) ? await settingsRes.json() : null;
+    if (settingsData && typeof window.rememberSocietyPayment === 'function') window.rememberSocietyPayment(settingsData);
     const liveOrg = settingsData?.organization || null;
     const liveLoc = settingsData?.settings?.location || null;
     if (liveLoc) {
@@ -1024,12 +1032,17 @@ window.loadLiveResidentDashboard = async function() {
         if (payBtnWrap && unpaidInvoices.length > 0) {
           payBtnWrap.style.display = 'block';
           const oldestInv = unpaidInvoices[unpaidInvoices.length - 1];
-          payBtnWrap.innerHTML = `
+          payBtnWrap.innerHTML = (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`
             <button type="button" style="font-size:12px;padding:6px 10px;font-weight:700;background:#FFFFFF;color:#18181B;border:0;border-radius:2px;cursor:pointer;"
               onclick="event.stopPropagation(); triggerRazorpayPayment('${oldestInv.id}', ${oldestInv.balanceAmount || oldestInv.totalAmount}, 'Flat ${unitNum}')">
               Pay now
             </button>
-          `;
+          `) : `
+            <button type="button" style="font-size:12px;padding:6px 10px;font-weight:700;background:#FFFFFF;color:#18181B;border:0;border-radius:2px;cursor:pointer;"
+              onclick="event.stopPropagation(); triggerRazorpayPayment('${oldestInv.id}', ${oldestInv.balanceAmount || oldestInv.totalAmount}, 'Flat ${unitNum}')">
+              Pay now
+            </button>
+          `);
         }
       } else {
         balEl.textContent = '₹0.00';
@@ -1281,7 +1294,7 @@ window.loadLiveResidentDashboard = async function() {
                   ${isPaid ? `
                     <button class="btn btn-ghost btn-sm" onclick="openResidentReceiptModal('${r.id}')">🧾 Receipt</button>
                   ` : `
-                    <button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${r.id}', ${r.balanceAmount || r.totalAmount}, 'Flat ${r.unit?.unitNumber || unitNum}')">⚡ Pay</button>
+                    ${(typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${r.id}', ${r.balanceAmount || r.totalAmount}, 'Flat ${r.unit?.unitNumber || unitNum}')">⚡ Pay</button>`) : `<button class="btn btn-primary btn-sm" onclick="triggerRazorpayPayment('${r.id}', ${r.balanceAmount || r.totalAmount}, 'Flat ${r.unit?.unitNumber || unitNum}')">⚡ Pay</button>`)}
                   `}
                   <button class="btn btn-ghost btn-sm" onclick="openResidentInvoiceModal('${r.id}')">📄 View</button>
                 </div>
@@ -2540,7 +2553,8 @@ window.openResidentNoticeModal = function(noticeId) {
   }
 };
 
-window.openResidentInvoiceModal = function(invoiceId) {
+window.openResidentInvoiceModal = async function(invoiceId) {
+  if (typeof window.ensureSocietyPaymentOptions === 'function') await window.ensureSocietyPaymentOptions();
   const inv = (window.__residentCachedInvoices || []).find(i => i.id === invoiceId)
     || (window.__cachedInvoices || []).find(i => i.id === invoiceId);
 
@@ -2640,11 +2654,15 @@ window.openResidentInvoiceModal = function(invoiceId) {
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-top:4px;">
         <button type="button" class="btn btn-secondary btn-sm no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
         <div style="display:flex;gap:8px;">
-          ${!isPaid ? `
+          ${!isPaid ? (typeof window.onlinePayControl === 'function' ? window.onlinePayControl(`
             <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('rwaGlobalModal').style.display='none'; triggerRazorpayPayment('${inv.id}', ${inv.balanceAmount || inv.totalAmount}, 'Flat ${unitNum}')">
               ⚡ Pay Now via Razorpay (₹${(inv.balanceAmount || inv.totalAmount).toLocaleString('en-IN')})
             </button>
-          ` : `
+          `) : `
+            <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('rwaGlobalModal').style.display='none'; triggerRazorpayPayment('${inv.id}', ${inv.balanceAmount || inv.totalAmount}, 'Flat ${unitNum}')">
+              ⚡ Pay Now via Razorpay (₹${(inv.balanceAmount || inv.totalAmount).toLocaleString('en-IN')})
+            </button>
+          `) : `
             <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('rwaGlobalModal').style.display='none'; openResidentReceiptModal('${inv.id}')">
               🧾 View Payment Receipt
             </button>
@@ -6081,7 +6099,9 @@ window.renderResidentMyBookings = function() {
   }).join('');
 };
 
-window.openResidentBookAmenityModal = function(preselectedAmenityName) {
+window.openResidentBookAmenityModal = async function(preselectedAmenityName) {
+  if (typeof window.ensureSocietyPaymentOptions === 'function') await window.ensureSocietyPaymentOptions();
+  const onlinePay = Boolean(window.__societyPaymentOptions && window.__societyPaymentOptions.online);
   const amenities = window.__residentAmenitiesCache || [];
   if (!amenities || amenities.length === 0) {
     showToast('No facilities configured by RWA admin yet.', 'warning');
@@ -6176,7 +6196,9 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;">
-        <div style="color:var(--text-secondary);">If this booking has a fee, payment opens Razorpay for the account connected in Settings → My Bank Account.</div>
+        ${onlinePay
+          ? '<div style="color:var(--text-secondary);">If this booking has a fee, payment opens Razorpay for the account connected in Settings → My Bank Account.</div>'
+          : (typeof window.officePayNote === 'function' ? window.officePayNote() : '<div style="color:#18181B;font-weight:700;">Please pay at the office, or contact the accountant.</div>')}
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-secondary);">
           <input type="checkbox" id="resSyncGcal" checked style="width:15px;height:15px;" />
           <span>📅 Add reservation to my Google Calendar</span>
@@ -6207,7 +6229,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
     }
   };
 
-  showModal(`📅 Reserve Facility · ${defaultAmenity.name}`, html, 'Confirm & Pay ✓', async () => {
+  showModal(`📅 Reserve Facility · ${defaultAmenity.name}`, html, onlinePay ? 'Confirm & Pay ✓' : 'Confirm booking', async () => {
     const facilitySelect = document.getElementById('resBookAmnSelect');
     const amenityName = facilitySelect.value;
     const selectedOpt = facilitySelect.options[facilitySelect.selectedIndex];
@@ -6222,7 +6244,8 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
 
     const unitNumber = window.__residentActiveUnit || 'A-1';
     const payable = (Number(feeNum) || 0) + (Number(depositNum) || 0);
-    if (payable > 0) {
+    const canPayOnline = Boolean(window.__societyPaymentOptions && window.__societyPaymentOptions.online);
+    if (payable > 0 && canPayOnline) {
       if (typeof window.collectWithSocietyRazorpay !== 'function') {
         showToast('Payment checkout is still loading. Reload the page and try again.', 'warning');
         return;
@@ -6278,7 +6301,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
     const finalBookingObj = createdBooking ? {
       ...createdBooking,
       icon: matchedAmenity?.icon || '🏛️',
-      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : 'Free entry',
+      fee: feeNum > 0 ? (canPayOnline ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : `Pay ₹${feeNum.toLocaleString('en-IN')} at the office`) : 'Free entry',
       deposit: depositNum > 0 ? `Deposit ₹${depositNum.toLocaleString('en-IN')}` : 'No deposit',
       canCancel: true,
       isPast: false
@@ -6292,7 +6315,7 @@ window.openResidentBookAmenityModal = function(preselectedAmenityName) {
       dateDisplay: bookingDate,
       slot: slot,
       purpose: purpose,
-      fee: feeNum > 0 ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : 'Free entry',
+      fee: feeNum > 0 ? (canPayOnline ? `Paid ₹${feeNum.toLocaleString('en-IN')} to the society Razorpay account` : `Pay ₹${feeNum.toLocaleString('en-IN')} at the office`) : 'Free entry',
       deposit: depositNum > 0 ? `Deposit ₹${depositNum.toLocaleString('en-IN')}` : 'No deposit',
       status: 'CONFIRMED',
       canCancel: true,
@@ -6541,7 +6564,7 @@ Screens['resident-profile'] = function() {
             <div class="card mb-md">
               <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
                 <div class="card-title">Registered Vehicles & Parking Stickers</div>
-                <button class="btn btn-secondary btn-sm" onclick="window.openAddVehicleModal()">+ Add Vehicle</button>
+                <button class="btn btn-secondary btn-sm" onclick="window.openResidentAddVehicleModal()">+ Add Vehicle</button>
               </div>
               <div id="profVehiclesList" style="display:flex;flex-direction:column;gap:10px;">
                 <div style="padding:20px;text-align:center;color:var(--text-muted);">Loading registered vehicles...</div>
@@ -6924,12 +6947,19 @@ window.renderResidentVehiclesList = function() {
   `).join('');
 };
 
-window.openAddVehicleModal = function() {
-  const currentUnit = window.__residentProfileActiveUnit || 'A-101';
+window.openResidentAddVehicleModal = function() {
+  const currentUnit = window.__residentProfileActiveUnit || '';
   const targetUnit = (window.__societyUnitsCache || []).find(u => u.unitNumber === currentUnit) || {};
+  if (!currentUnit) {
+    if (typeof showToast === 'function') showToast('Connect this profile to a flat before registering a vehicle.', 'warning');
+    return;
+  }
 
   const html = `
     <div style="font-size:13px;line-height:1.5;">
+      <div style="margin-bottom:12px;padding:10px 12px;border:1px solid #E4E4E7;border-radius:2px;background:#FAFAFA;">
+        This vehicle is registered to <strong>Flat ${currentUnit}</strong>.
+      </div>
       <div style="margin-bottom:12px;">
         <label class="form-label" style="font-weight:700;margin-bottom:4px;">Vehicle Registration Plate *</label>
         <input type="text" id="addVehPlate" placeholder="e.g. DL 01 AB 1234" class="form-input" style="width:100%;text-transform:uppercase;font-family:monospace;font-weight:700;" required />

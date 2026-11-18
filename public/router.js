@@ -229,7 +229,8 @@ var Shell = (() => {
           { id: 'admin-payments', icon: 'payments', label: 'Payments' },
           { id: 'admin-dues', icon: 'dues', label: 'Dues & Defaulters', badge: '…', badgeId: 'sidebarBadgeDues', badgeColor: 'red' },
           { id: 'admin-ledger', icon: 'ledger', label: 'Ledger' },
-          { id: 'admin-expenses', icon: 'expenses', label: 'Expenses' },
+          // Demo: Expenses hidden for now.
+          // { id: 'admin-expenses', icon: 'expenses', label: 'Expenses' },
           { id: 'admin-reports', icon: 'stats', label: 'Reports' },
           { id: 'admin-receivables', icon: 'finance', label: 'External Receivables' },
         ]
@@ -249,19 +250,21 @@ var Shell = (() => {
           { id: 'admin-complaints', icon: 'tickets', label: 'Complaints', badge: '…', badgeId: 'sidebarBadgeComplaints', badgeColor: 'red' },
         ]
       },
-      {
-        label: 'Governance',
-        items: [
-          { id: 'admin-meetings', icon: 'meetings', label: 'Meetings' },
-          { id: 'admin-committee', icon: 'committee', label: 'Committee & Elections' },
-        ]
-      },
-      {
-        label: 'Documents',
-        items: [
-          { id: 'admin-compliance', icon: 'compliance', label: 'Compliance Calendar' },
-        ]
-      },
+      // Demo: Governance hidden for now.
+      // {
+      //   label: 'Governance',
+      //   items: [
+      //     { id: 'admin-meetings', icon: 'meetings', label: 'Meetings' },
+      //     { id: 'admin-committee', icon: 'committee', label: 'Committee & Elections' },
+      //   ]
+      // },
+      // Demo: Documents hidden for now.
+      // {
+      //   label: 'Documents',
+      //   items: [
+      //     { id: 'admin-compliance', icon: 'compliance', label: 'Compliance Calendar' },
+      //   ]
+      // },
       {
         label: 'Operations',
         items: [
@@ -317,8 +320,9 @@ var Shell = (() => {
           { id: 'resident-notices', icon: 'inbox', label: 'Inbox', badge: '9+', hasDot: true },
           { id: 'resident-complaints', icon: 'tickets', label: 'Tickets & Complaints' },
           { id: 'resident-polls', icon: 'polls', label: 'Community Polls' },
-          { id: 'resident-elections', icon: 'committee', label: 'Society Election' },
-          { id: 'resident-meetings', icon: 'meetings', label: 'Society Meetings' },
+          // Demo: Society Election and Society Meetings hidden for now.
+          // { id: 'resident-elections', icon: 'committee', label: 'Society Election' },
+          // { id: 'resident-meetings', icon: 'meetings', label: 'Society Meetings' },
           { id: 'resident-payments', icon: 'payments', label: 'Payment Receipts' },
         ]
       }
@@ -1206,6 +1210,7 @@ window.handleNotificationItemClick = async function(notifId, type, portal) {
     else if (type === 'COMPLAINT') Router.go('resident-complaints');
     else if (type === 'ELECTION') Router.go('resident-elections');
     else if (type === 'NOTICE') Router.go('resident-notices');
+    else if (type === 'ENTRY_PASS' || type === 'VISITOR_ALERT') Router.go('resident-dashboard');
     else if (type === 'RESIDENT_ONBOARDED') Router.go('resident-profile');
     else Router.go('resident-notifications');
     return;
