@@ -40,6 +40,7 @@ export async function GET(request: Request) {
         unit: {
           include: {
             block: true,
+            users: { select: { id: true, name: true, phone: true, role: true, status: true } },
           },
         },
       },

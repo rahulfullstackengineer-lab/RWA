@@ -31,7 +31,18 @@ export async function GET(request: Request) {
         include: {
           block: true,
           users: {
-            select: { id: true, name: true, phone: true, role: true, email: true },
+            select: { id: true, name: true, phone: true, role: true, email: true, status: true },
+          },
+          vehicles: {
+            select: {
+              id: true,
+              type: true,
+              registrationNo: true,
+              make: true,
+              model: true,
+              color: true,
+              parkingSlot: true,
+            },
           },
           invoices: {
             select: {
@@ -194,6 +205,17 @@ export async function PATCH(request: Request) {
       include: {
         block: true,
         users: { select: { id: true, name: true, phone: true, role: true, email: true } },
+        vehicles: {
+          select: {
+            id: true,
+            type: true,
+            registrationNo: true,
+            make: true,
+            model: true,
+            color: true,
+            parkingSlot: true,
+          },
+        },
         invoices: {
           select: {
             id: true,

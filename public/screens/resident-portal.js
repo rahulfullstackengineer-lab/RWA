@@ -121,8 +121,9 @@ Screens['resident-dashboard'] = function() {
         <button class="btn btn-primary" onclick="window.openGenerateEntryPassModal()">Create visitor pass</button>
       </div>
 
-      <!-- Active Society Poll Banner -->
+      <!-- Demo: Community Polls hidden for now.
       <div id="residentDashboardPollAlert" style="margin-bottom:20px;display:none;"></div>
+      -->
 
       <!-- 3. Middle Bento Grid (Complex Spotlight + Requests + Upcoming Amenities) -->
       <div class="res-bento-main-grid">
@@ -294,7 +295,7 @@ Screens['resident-dashboard'] = function() {
 
         <!-- Right: Active Poll, Resident Sponsor Deals & Intercom -->
         <div>
-          <!-- Live Poll Widget -->
+          <!-- Demo: Community Polls hidden for now.
           <div class="card mb-md" id="residentDashboardPollWidgetCard" style="border:1px solid rgba(139,92,246,0.3);background:#FFFFFF;border-radius:20px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,23,42,0.04);">
             <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0;border:none;">
               <div class="card-title" style="font-size:14.5px;font-weight:700;color:#0F172A;display:flex;align-items:center;gap:6px;">
@@ -308,6 +309,7 @@ Screens['resident-dashboard'] = function() {
               </div>
             </div>
           </div>
+          -->
 
           <!-- Society Campus Location (Google Maps configured by Admin) -->
           <div class="card mb-md" id="residentSocietyMapCard" style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:20px;padding:18px 20px;box-shadow:0 1px 3px rgba(15,23,42,0.04);position:relative;overflow:hidden;transition:all 0.2s ease;">
@@ -3695,7 +3697,7 @@ window.renderResidentNoticesList = function(type) {
 
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:12px;border-top:1px solid var(--border-light);justify-content:space-between;">
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            ${isElection ? `
+            ${false && isElection ? `
               <button class="btn btn-primary btn-sm" onclick="Router.go('resident-polls')" style="display:inline-flex;align-items:center;gap:6px;">
                 <span>🗳️ Cast Secret Ballot Now →</span>
               </button>

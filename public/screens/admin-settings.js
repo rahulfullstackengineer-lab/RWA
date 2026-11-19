@@ -1727,6 +1727,28 @@ window.loadLiveVehiclesScreen = async function() {
   }
 };
 
+window.vehicleResidentName = function(unit) {
+  if (!unit) return 'Resident';
+  const status = String(unit.occupancyStatus || '').toUpperCase();
+  const tenant = String(unit.tenantName || '').trim();
+  const owner = String(unit.ownerName || '').trim();
+  const linked = (unit.users || []).filter(function(person) {
+    return person && person.status !== 'REJECTED' && person.role !== 'STAFF' && person.name;
+  });
+  if ((status.indexOf('TENANT') !== -1 || status === 'TENANTED') && (tenant || linked.length)) {
+    return tenant || linked.map(function(person) { return person.name; }).join(', ');
+  }
+  return owner || tenant || (linked.length ? linked.map(function(person) { return person.name; }).join(', ') : 'Resident');
+};
+
+window.vehicleResidentPhone = function(unit) {
+  if (!unit) return '';
+  const status = String(unit.occupancyStatus || '').toUpperCase();
+  const tenanted = status.indexOf('TENANT') !== -1 || status === 'TENANTED';
+  if (tenanted && (unit.tenantPhone || unit.tenantName)) return unit.tenantPhone || '';
+  return unit.ownerPhone || unit.tenantPhone || '';
+};
+
 window.renderVehiclesData = function(list) {
   const tbody = document.getElementById('vehiclesTableBody');
   const cardsContainer = document.getElementById('vehiclesMobileCardsContainer');
@@ -1791,8 +1813,8 @@ window.renderVehiclesData = function(list) {
 
       const flatLabel = v.unit?.unitNumber || '—';
       const blockLabel = v.unit?.block?.name ? `<span style="font-size:11px; color:var(--text-muted); font-weight:normal;"> (${v.unit.block.name})</span>` : '';
-      const ownerLabel = v.unit?.ownerName || v.unit?.tenantName || 'Resident';
-      const ownerPhone = v.unit?.ownerPhone || v.unit?.tenantPhone || '';
+      const ownerLabel = window.vehicleResidentName(v.unit);
+      const ownerPhone = window.vehicleResidentPhone(v.unit);
 
       const makeModel = [v.make, v.model].filter(Boolean).join(' ') || '—';
       const colorLabel = v.color ? `<span style="color:var(--text-muted); font-size:11px;"> (${v.color})</span>` : '';
@@ -1863,7 +1885,7 @@ window.renderVehiclesData = function(list) {
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border-light); padding-top:6px;">
-            <span>Owner: <strong>${v.unit?.ownerName || v.unit?.tenantName || 'Resident'}</strong></span>
+            <span>Resident: <strong>${window.vehicleResidentName(v.unit)}</strong></span>
             <div style="display:flex; gap:6px;">
               <button class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:11px;" onclick="openEditVehicleModal('${v.id}')">✏️ Edit</button>
               <button class="btn btn-ghost btn-sm" style="padding:3px 8px; font-size:11px; color:var(--red);" onclick="deleteVehicle('${v.id}', '${v.registrationNo}')">🗑️</button>
@@ -1943,7 +1965,7 @@ function applyVehiclePillFilter(list, filterCategory) {
 // Modal: Add Car & Allocate Parking Slot
 // =============================================
 
-window.openAddVehicleModal = async function() {
+window.openAddVehicleModal = async function(preselectUnitId) {
   // Pre-load units for dropdown
   let units = window.__cachedUnits || [];
   if (!units || units.length === 0) {
@@ -1959,9 +1981,10 @@ window.openAddVehicleModal = async function() {
 
   const unitOptions = units.length > 0
     ? units.map(u => {
-        const owner = u.ownerName || u.tenantName || 'Resident';
+        const owner = (typeof window.vehicleResidentName === 'function' ? window.vehicleResidentName(u) : (u.tenantName || u.ownerName || 'Resident'));
         const block = u.block?.name ? `(${u.block.name})` : '';
-        return `<option value="${u.id}">Flat ${u.unitNumber} ${block} — ${owner}</option>`;
+        const selected = preselectUnitId && u.id === preselectUnitId ? 'selected' : '';
+        return `<option value="${u.id}" ${selected}>Flat ${u.unitNumber} ${block} — ${owner}</option>`;
       }).join('')
     : '<option value="">No flats found - please add units first</option>';
 
@@ -2072,7 +2095,12 @@ window.openAddVehicleModal = async function() {
     }
 
     showToast(`✅ Vehicle ${registrationNo.toUpperCase()} & Parking Slot allocated successfully!`, 'success');
-    window.loadLiveVehiclesScreen();
+    if (typeof Router !== 'undefined' && Router.current && Router.current() === 'admin-unit-detail' && typeof window.restoreOpenUnit === 'function') {
+      window.restoreOpenUnit(unitId);
+    }
+    if (typeof window.loadLiveVehiclesScreen === 'function' && document.getElementById('vehiclesTableBody')) {
+      window.loadLiveVehiclesScreen();
+    }
   }, '560px');
 };
 
@@ -2102,7 +2130,7 @@ window.openEditVehicleModal = async function(vehicleId) {
 
   const unitOptions = units.map(u => {
     const isSelected = u.id === vehicle.unitId ? 'selected' : '';
-    const owner = u.ownerName || u.tenantName || 'Resident';
+    const owner = (typeof window.vehicleResidentName === 'function' ? window.vehicleResidentName(u) : (u.tenantName || u.ownerName || 'Resident'));
     return `<option value="${u.id}" ${isSelected}>Flat ${u.unitNumber} — ${owner}</option>`;
   }).join('');
 

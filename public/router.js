@@ -319,7 +319,8 @@ var Shell = (() => {
         items: [
           { id: 'resident-notices', icon: 'inbox', label: 'Inbox', badge: '9+', hasDot: true },
           { id: 'resident-complaints', icon: 'tickets', label: 'Tickets & Complaints' },
-          { id: 'resident-polls', icon: 'polls', label: 'Community Polls' },
+          // Demo: Community Polls hidden for now.
+          // { id: 'resident-polls', icon: 'polls', label: 'Community Polls' },
           // Demo: Society Election and Society Meetings hidden for now.
           // { id: 'resident-elections', icon: 'committee', label: 'Society Election' },
           // { id: 'resident-meetings', icon: 'meetings', label: 'Society Meetings' },

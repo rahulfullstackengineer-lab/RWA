@@ -165,6 +165,8 @@ Screens['admin-unit-detail'] = function() {
   if (typeof window.rememberOpenUnit === 'function') window.rememberOpenUnit(u.id);
 
   const statusObj = STATUS_LABELS[u.occupancyStatus] || { label: u.occupancyStatus || 'Occupied', color: 'blue' };
+  const occupantName = u.tenantName || u.ownerName || 'this resident';
+  const unitVehicles = (u.vehicles || []).filter(function(v) { return v && v.registrationNo; });
   const allInvoices = u.invoices || [];
   const unpaidInvoices = allInvoices.filter(i => (i.balanceAmount || 0) > 0);
   const totalOutstanding = unpaidInvoices.reduce((sum, i) => sum + (i.balanceAmount || 0), 0);
@@ -280,6 +282,39 @@ Screens['admin-unit-detail'] = function() {
                 </div>
               </div>
             ` : ''}
+          </div>
+
+          <!-- Vehicles registered on this flat -->
+          <div class="card" style="margin-bottom:20px;">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <div>
+                <div class="card-title">Registered Vehicles (${unitVehicles.length})</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">Vehicles linked to ${occupantName} on Unit ${u.unitNumber}</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openAddVehicleModal('${u.id}')">+ Add Vehicle</button>
+            </div>
+            ${unitVehicles.length ? `
+              <div style="display:flex;flex-direction:column;gap:8px;">
+                ${unitVehicles.map(function(v) {
+                  const kind = [v.make, v.model, v.color].filter(Boolean).join(' · ') || (v.type || 'Vehicle');
+                  const icon = String(v.type || '').toUpperCase().indexOf('BIKE') !== -1 ? '🏍️' : '🚗';
+                  return `
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border-light);border-radius:var(--r-md);">
+                      <div style="font-size:22px;">${icon}</div>
+                      <div style="flex:1;">
+                        <div style="font-size:14px;font-weight:800;letter-spacing:0.04em;">${v.registrationNo}</div>
+                        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${kind}${v.parkingSlot ? ' · Slot ' + v.parkingSlot : ''}</div>
+                      </div>
+                      <span class="badge badge-blue" style="font-size:10px;">${occupantName}</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : `
+              <div style="padding:16px;color:var(--text-muted);font-size:13px;">
+                No vehicle is registered for ${occupantName} on this flat.
+              </div>
+            `}
           </div>
 
           <!-- All Generated Bills & Dues Breakdown Card -->
@@ -470,13 +505,15 @@ window.renderUnitsAnalytics = function(units, blocks) {
 
   // 2. Occupancy Slices for Donut Chart
   function unitHasResident(u) {
-    return (u.users || []).some(function(person) { return person.role === 'RESIDENT' && person.status !== 'REJECTED'; });
+    return (u.users || []).some(function(person) {
+      return person.role !== 'STAFF' && person.status !== 'REJECTED';
+    }) || ((u.vehicles || []).length > 0);
   }
   function unitIsOccupied(u) {
-    var status = String(u.occupancyStatus || '').toUpperCase();
-    if (status === 'OWNER_OCCUPIED' || status === 'TENANT_OCCUPIED' || status === 'TENANTED' || status === 'OCCUPIED') return true;
+    var status = String(u.occupancyStatus || '').toUpperCase().replace(/[\s-]+/g, '_');
+    if (status && status !== 'VACANT' && status.indexOf('CONSTRUCT') === -1 && (status.indexOf('OCCUP') !== -1 || status.indexOf('OWNER') !== -1 || status.indexOf('TENANT') !== -1 || status.indexOf('ALLOT') !== -1)) return true;
     if (unitHasResident(u)) return true;
-    return !!(u.ownerName || u.tenantName || u.ownerPhone || u.tenantPhone);
+    return !!(String(u.ownerName || '').trim() || String(u.tenantName || '').trim() || String(u.ownerPhone || '').trim() || String(u.tenantPhone || '').trim());
   }
   var occupiedUnits = units.filter(unitIsOccupied);
   var tenantCount = occupiedUnits.filter(function(u) {
