@@ -212,7 +212,7 @@ var Shell = (() => {
         label: 'Property',
         items: [
           { id: 'admin-units', icon: 'building', label: 'Units' },
-          { id: 'admin-campus', icon: 'building', label: 'Live Campus' },
+          { id: 'admin-campus', icon: 'map', label: 'Live Campus' },
         ]
       },
       {
