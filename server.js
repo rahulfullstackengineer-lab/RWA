@@ -9,7 +9,29 @@ const port = parseInt(process.env.PORT || '3000', 10)
 const app = next({ dev, hostname, port })
 const handle = app.getRequestHandler()
 
-app.prepare().then(() => {
+async function ensureOrganizationColumns() {
+  const dbUrl = process.env.DATABASE_URL || ''
+  if (!dbUrl.startsWith('postgres')) return
+  const { PrismaClient } = require('@prisma/client')
+  const prisma = new PrismaClient()
+  const statements = [
+    'ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "registeringAuthority" TEXT',
+    'ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "housingType" TEXT',
+    'ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "adminDesignation" TEXT',
+  ]
+  try {
+    for (const sql of statements) {
+      await prisma.$executeRawUnsafe(sql)
+    }
+  } catch (err) {
+    console.error('Could not add missing organization columns:', err && err.message ? err.message : err)
+  } finally {
+    await prisma.$disconnect()
+  }
+}
+
+app.prepare().then(async () => {
+  await ensureOrganizationColumns()
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true)
