@@ -790,7 +790,7 @@ window.toggleUserAccountMenu = function(event, portal) {
   const user = window.getLoggedInUser();
   const userName = (user.name || (portal === 'platform' ? 'Platform Administrator' : (portal === 'resident' ? 'Flat Resident' : 'Society Administrator'))).replace(/\s+/g, ' ');
   const userPhone = user.phone ? (user.phone.startsWith('+') ? user.phone : `+91 ${user.phone}`) : '+91 98000 00000';
-  const rawRole = (user.role || (portal === 'resident' ? 'RESIDENT' : 'RWA_ADMIN'));
+  const rawRole = (user.role || (portal === 'resident' ? 'RESIDENT' : portal === 'staff' ? 'STAFF' : portal === 'platform' ? 'PLATFORM_ADMIN' : 'RWA_ADMIN'));
   const userRole = rawRole === 'PLATFORM_ADMIN' ? 'Platform Super Admin' :
                    rawRole === 'RWA_ADMIN' ? 'RWA Admin' :
                    rawRole === 'TREASURER' ? 'Treasurer' :
@@ -798,9 +798,10 @@ window.toggleUserAccountMenu = function(event, portal) {
                    rawRole === 'PRESIDENT' ? 'President' :
                    rawRole === 'COMMITTEE_MEMBER' ? 'Committee Member' :
                    rawRole === 'RESIDENT' ? 'Resident Member' :
+                   rawRole === 'STAFF' ? 'Gate Staff' :
                    rawRole.replace(/_/g, ' ');
   const orgName = ((user.organization && user.organization.name) || (user.organizationId && localStorage.getItem('rwa_active_org_name')) || 'No society linked').replace(/\s+/g, ' ');
-  const isAdmin = user.role !== 'RESIDENT';
+  const isOffice = ['RWA_ADMIN', 'ADMIN', 'TREASURER', 'SECRETARY', 'PRESIDENT', 'COMMITTEE_MEMBER', 'MANAGER', 'SUPER_ADMIN'].indexOf(rawRole) !== -1;
   const userInitial = userName.split(/\s+/).filter(Boolean).map(n=>n[0]).join('').slice(0,2).toUpperCase() || 'AD';
   const avatarColor = portal === 'resident' ? 'green' : portal === 'platform' ? 'purple' : 'blue';
   const unitDisplay = user.unitNumber || (user.unit && user.unit.unitNumber) || window.__residentPreviewUnitNumber || null;
@@ -852,7 +853,26 @@ window.toggleUserAccountMenu = function(event, portal) {
         <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('resident-amenities');">
           <span>🏸</span> <span>Amenity Bookings</span>
         </div>
-        ${isAdmin ? `
+        ${isOffice ? `
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('admin-dashboard');" style="color:var(--blue);font-weight:600;">
+            <span>🛠️</span> <span>Return to Admin Portal</span>
+          </div>
+        ` : ''}
+      ` : (portal === 'staff' ? `
+        <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('staff-dashboard');">
+          <span>🛡️</span> <span>Gate Scanner & Passes</span>
+        </div>
+        <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('staff-passes');">
+          <span>🎫</span> <span>All Society Passes</span>
+        </div>
+        <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('staff-roster');">
+          <span>📅</span> <span>Campus Duty Roster</span>
+        </div>
+        <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('staff-intercom');">
+          <span>📞</span> <span>Emergency Intercom</span>
+        </div>
+        ${isOffice ? `
           <div class="dropdown-divider"></div>
           <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('admin-dashboard');" style="color:var(--blue);font-weight:600;">
             <span>🛠️</span> <span>Return to Admin Portal</span>
@@ -868,7 +888,7 @@ window.toggleUserAccountMenu = function(event, portal) {
         <div class="dropdown-item" onclick="window.closeHeaderDropdowns(); Router.go('platform-subscriptions');">
           <span>💳</span> <span>Unit-Wise Pricing & Plans</span>
         </div>
-      `)}
+      `))}
       <div class="dropdown-divider"></div>
       <div class="dropdown-item danger" onclick="window.closeHeaderDropdowns(); handleSignOut();">
         <span>🚪</span> <span>Sign Out</span>
@@ -983,6 +1003,7 @@ window.openUserProfileModal = function(portal) {
   const avatarColor = portal === 'resident' ? 'green' : portal === 'platform' ? 'purple' : 'blue';
   const modalTitle = portal === 'platform' ? 'Platform Super Admin Profile' :
                      portal === 'resident' ? 'Resident Profile & Security Settings' :
+                     portal === 'staff' ? 'Gate Staff Profile & Security Settings' :
                      'Administrator Profile & Security Settings';
 
   const modal = document.createElement('div');

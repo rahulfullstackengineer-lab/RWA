@@ -8678,7 +8678,84 @@ body.mobile-frame-view .card > .card-header .btn {
 .staff-pass-card-action { margin-top: 10px; }
 .staff-pass-card-action .btn { width: 100%; }
 
+/* Gate page: keep the visitor list on screen instead of running under the window. */
+.content:has(.staff-portal) {
+  overflow: hidden;
+  padding: 16px;
+}
+.content:has(.staff-portal) > .staff-portal {
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-shrink: 1;
+  gap: 12px !important;
+}
+.staff-portal {
+  min-width: 0;
+}
+.staff-hero h2 { font-size: 18px !important; }
+.staff-hero-meta { margin-top: 4px !important; }
+.staff-tabs .btn { border-radius: 2px !important; }
+#staffTabContentPasses {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.staff-pass-table {
+  flex: 1 1 auto;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.staff-pass-table > div {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.staff-pass-table table {
+  table-layout: fixed;
+  width: 100%;
+}
+.staff-pass-table th,
+.staff-pass-table td {
+  vertical-align: middle;
+  padding: 10px 12px !important;
+}
+.staff-pass-table thead th {
+  position: sticky;
+  top: 0;
+  background: #F4F4F5;
+  z-index: 1;
+}
+.staff-pass-table th:nth-child(1),
+.staff-pass-table td:nth-child(1) { width: 15%; }
+.staff-pass-table th:nth-child(2),
+.staff-pass-table td:nth-child(2) { width: 18%; }
+.staff-pass-table th:nth-child(3),
+.staff-pass-table td:nth-child(3) { width: 24%; }
+.staff-pass-table th:nth-child(4),
+.staff-pass-table td:nth-child(4) { width: 16%; }
+.staff-pass-table th:nth-child(5),
+.staff-pass-table td:nth-child(5) { width: 12%; }
+.staff-pass-table th:nth-child(6),
+.staff-pass-table td:nth-child(6) { width: 15%; white-space: nowrap; }
+.staff-pass-table td > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @media (max-width: 840px) {
+  .content:has(.staff-portal) {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .content:has(.staff-portal) > .staff-portal,
+  #staffTabContentPasses,
+  .staff-pass-table {
+    flex: none;
+    min-height: 0;
+    height: auto;
+  }
   .staff-hero {
     flex-direction: column !important;
     align-items: stretch !important;

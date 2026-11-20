@@ -3502,10 +3502,11 @@
           '<div style="font-weight:700;font-size:13px;">' + (p.visitorName || '—') + '</div>' +
           '<div style="font-size:11px;color:#64748B;">' + (p.visitorPhone || '') + '</div>' +
         '</td>' +
-        '<td style="padding:12px 16px;">' +
-          '<div style="font-weight:600;font-size:13px;color:#0F172A;">' + (p.residentUnit || '—') + '</div>' +
-          '<div style="font-size:11px;color:#64748B;">' + (p.residentName || '') + '</div>' +
-          (p.residentPhone ? '<div style="font-size:11px;color:#18181B;font-weight:700;">' + p.residentPhone + '</div>' : '') +
+        '<td style="padding:10px 12px;">' +
+          '<div style="font-weight:700;font-size:13px;color:#18181B;">' + (p.residentUnit || '—') + '</div>' +
+          '<div style="font-size:11px;color:#71717A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            [p.residentName, p.residentPhone].filter(Boolean).join(' · ') +
+          '</div>' +
         '</td>' +
         '<td style="padding:12px 16px;">' +
           '<div style="display:flex;align-items:center;gap:6px;">' +

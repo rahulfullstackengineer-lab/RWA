@@ -251,11 +251,28 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'This poll is closed or not active for voting' }, { status: 400 })
       }
 
-      if (user.role !== 'RESIDENT' || !user.unit?.unitNumber) {
+      const officeRoles = new Set(['RWA_ADMIN', 'ADMIN', 'TREASURER', 'SECRETARY', 'PRESIDENT', 'COMMITTEE_MEMBER', 'MANAGER', 'SUPER_ADMIN', 'PLATFORM_ADMIN'])
+      let effectiveUnit = ''
+      if (user.role === 'RESIDENT') {
+        if (!user.unit?.unitNumber) {
+          return NextResponse.json({ error: 'Your flat is not linked yet, so this vote cannot be recorded.' }, { status: 403 })
+        }
+        effectiveUnit = user.unit.unitNumber.trim().toUpperCase()
+      } else if (officeRoles.has(user.role)) {
+        const requested = String(voterUnit || '').trim()
+        const units = await prisma.unit.findMany({
+          where: { organizationId: orgId },
+          select: { unitNumber: true },
+        })
+        const match = units.find((unit) => unit.unitNumber.trim().toUpperCase() === requested.toUpperCase())
+        if (!match) {
+          return NextResponse.json({ error: 'Choose a flat in this society before casting this vote.' }, { status: 400 })
+        }
+        effectiveUnit = match.unitNumber.trim().toUpperCase()
+      } else {
         return NextResponse.json({ error: 'Only a resident linked to a flat can vote' }, { status: 403 })
       }
       poll.voters = poll.voters || []
-      const effectiveUnit = user.unit.unitNumber.trim().toUpperCase()
 
       const existingVote = poll.voters.find((v: any) =>
         effectiveUnit ? (v.unit && v.unit.toUpperCase() === effectiveUnit) : (v.userId && v.userId === user.id)

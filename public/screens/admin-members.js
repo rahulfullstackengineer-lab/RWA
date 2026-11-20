@@ -7,6 +7,10 @@ window.__cachedMembers = [];
 window.__selectedMemberFilter = 'ALL';
 window.__selectedMemberDetail = null;
 
+function memberJsArg(value) {
+  return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 Screens['admin-members'] = function() {
   function tryLoadMembers(attempts) {
     attempts = attempts || 0;
@@ -249,7 +253,7 @@ Screens['admin-resident-detail'] = function() {
     actions: `
       <button class="btn btn-secondary btn-sm" onclick="showToast('Edit coming soon', 'info')">Edit</button>
       <button class="btn btn-primary btn-sm" onclick="Router.go('admin-invoices')">View Bills</button>
-      ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove resident</button>` : ''}
+      ${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" onclick="removeSocietyResident('${memberJsArg(m.id)}', '${memberJsArg(m.name)}')">Remove resident</button>` : ''}
     `,
     content: `
       <div class="detail-split-layout">
@@ -667,7 +671,7 @@ function renderMembersData(members) {
             : '<span class="pill-badge pill-status-new">owner</span>'));
 
       return `
-        <tr onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" style="cursor:pointer;">
+        <tr onclick="viewMemberDetail('${memberJsArg(m.id)}', event)" style="cursor:pointer;">
           <td>
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="avatar ${roleColor}" style="width:32px;height:32px;font-size:12px;font-weight:700;">
@@ -687,8 +691,8 @@ function renderMembersData(members) {
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:4px;">
               ${(m.status || '').toUpperCase() === 'PENDING'
-                ? `<button class="btn btn-primary btn-sm" style="background:#18181B;border:none;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'REJECTED')">Reject</button>`
-                : `<button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)" title="Open">View</button>${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})" title="Remove from society">Remove</button>` : ''}`}
+                ? `<button class="btn btn-primary btn-sm" style="background:#18181B;border:none;" onclick="window.decideMembershipApplication('${memberJsArg(m.id)}', '${memberJsArg(m.name || 'Resident')}', 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" onclick="window.decideMembershipApplication('${memberJsArg(m.id)}', '${memberJsArg(m.name || 'Resident')}', 'REJECTED')">Reject</button>`
+                : `<button type="button" class="btn btn-ghost btn-sm btn-icon" onclick="viewMemberDetail('${memberJsArg(m.id)}', event)" title="Open">View</button>${m.role === 'RESIDENT' ? `<button class="btn btn-ghost btn-sm" onclick="removeSocietyResident('${memberJsArg(m.id)}', '${memberJsArg(m.name)}')" title="Remove from society">Remove</button>` : ''}`}
             </div>
           </td>
         </tr>
@@ -710,7 +714,7 @@ function renderMembersData(members) {
       const roleColor = m.role === 'RWA_ADMIN' ? 'blue' : (m.occupancyType === 'TENANT' ? 'purple' : 'green');
 
       return `
-        <div class="card card-sm" style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);cursor:pointer;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">
+        <div class="card card-sm" style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--border-light);border-radius:var(--r-md);cursor:pointer;" onclick="viewMemberDetail('${memberJsArg(m.id)}', event)">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <div style="display:flex;align-items:center;gap:10px;">
               <div class="avatar ${roleColor}" style="width:36px;height:36px;font-size:13px;font-weight:700;">${initials}</div>
@@ -729,8 +733,8 @@ function renderMembersData(members) {
 
           <div style="display:flex;gap:8px;margin-top:4px;border-top:1px solid var(--border-light);padding-top:8px;" onclick="event.stopPropagation()">
             ${(m.status || '').toUpperCase() === 'PENDING'
-              ? `<button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;background:#18181B;border:none;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="window.decideMembershipApplication(${JSON.stringify(m.id)}, ${JSON.stringify(m.name || 'Resident')}, 'REJECTED')">Reject</button>`
-              : `<button type="button" class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail(${JSON.stringify(m.id)}, event)">Profile</button>${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident(${JSON.stringify(m.id)}, ${JSON.stringify(m.name)})">Remove</button>` : ''}`}
+              ? `<button class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;background:#18181B;border:none;" onclick="window.decideMembershipApplication('${memberJsArg(m.id)}', '${memberJsArg(m.name || 'Resident')}', 'ACTIVE')">Approve</button><button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="window.decideMembershipApplication('${memberJsArg(m.id)}', '${memberJsArg(m.name || 'Resident')}', 'REJECTED')">Reject</button>`
+              : `<button type="button" class="btn btn-primary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="viewMemberDetail('${memberJsArg(m.id)}', event)">Profile</button>${m.role === 'RESIDENT' ? `<button class="btn btn-secondary btn-sm" style="flex:1;min-height:44px;justify-content:center;" onclick="removeSocietyResident('${memberJsArg(m.id)}', '${memberJsArg(m.name)}')">Remove</button>` : ''}`}
           </div>
         </div>
       `;

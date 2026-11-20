@@ -46,9 +46,9 @@ Screens['staff-dashboard'] = function() {
     <div class="staff-portal" style="display:flex;flex-direction:column;gap:20px;">
       
       <!-- Top Guard Duty Identity Strip -->
-      <div class="staff-hero" style="background:linear-gradient(135deg, #064E3B 0%, #0F172A 100%);color:#fff;border-radius:18px;padding:22px 26px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;box-shadow:0 12px 30px -5px rgba(6,78,59,0.25);border:1px solid rgba(52,211,153,0.25);">
+      <div class="staff-hero" style="background:#18181B;color:#fff;border-radius:2px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border:1px solid #18181B;">
         <div class="staff-hero-main" style="display:flex;align-items:center;gap:18px;">
-          <div id="staffHeroMark" style="width:60px;height:60px;border-radius:16px;background:rgba(52,211,153,0.18);border:2px solid #34D399;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">
+          <div id="staffHeroMark" style="width:44px;height:44px;border-radius:2px;background:#27272A;border:1px solid #3F3F46;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
             👮
           </div>
           <div>
@@ -75,13 +75,13 @@ Screens['staff-dashboard'] = function() {
       </div>
 
       <!-- Quick Fast-Pass Security Scanner / PIN Input -->
-      <div class="staff-scanner" style="background:var(--bg-surface,#fff);border:2px solid #3B82F6;border-radius:16px;padding:20px 24px;box-shadow:0 8px 24px rgba(59,130,246,0.08);">
+      <div class="staff-scanner" style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;padding:14px 16px;">
         <div class="staff-scanner-head" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
             <span style="font-size:22px;">🔍</span>
             <div style="min-width:0;">
               <div style="font-size:15px;font-weight:800;color:var(--text-primary,#0F172A);">Gate Fast-Verification &amp; Check-In</div>
-              <div class="staff-scanner-help" style="font-size:12px;color:var(--text-secondary,#64748B);">Enter the 6-digit Pass Code (e.g. PASS-84920) or 4-digit PIN (e.g. 4821) or Visitor Phone</div>
+              <div class="staff-scanner-help" style="font-size:12px;color:#71717A;">Pass code, 4-digit PIN, or visitor phone</div>
             </div>
           </div>
           <span class="staff-scanner-chip" style="background:rgba(59,130,246,0.1);color:#2563EB;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:8px;">Instant Resident Alert</span>
@@ -97,7 +97,7 @@ Screens['staff-dashboard'] = function() {
               style="width:100%;padding:12px 16px;font-size:15px;font-weight:700;border-radius:10px;border:1.5px solid #CBD5E1;color:#0F172A;letter-spacing:0.5px;background:#F8FAFC;"
             />
           </div>
-          <button class="btn btn-primary" onclick="window.handleStaffQuickVerify()" style="padding:12px 24px;font-size:14px;font-weight:800;background:linear-gradient(135deg,#2563EB,#1D4ED8);border:none;border-radius:10px;display:inline-flex;align-items:center;gap:8px;">
+          <button class="btn btn-primary" onclick="window.handleStaffQuickVerify()" style="padding:12px 18px;font-size:14px;font-weight:800;background:#18181B;border:none;border-radius:2px;display:inline-flex;align-items:center;gap:8px;white-space:nowrap;">
             <span>✅ Verify &amp; Allow Entry</span>
           </button>
         </div>
@@ -138,7 +138,7 @@ Screens['staff-dashboard'] = function() {
         </div>
 
         <div id="staffPassCards" class="staff-pass-cards"></div>
-        <div class="staff-pass-table" style="background:var(--bg-surface,#fff);border:1px solid var(--border,#E2E8F0);border-radius:14px;overflow:hidden;">
+        <div class="staff-pass-table" style="background:#fff;border:1px solid #E4E4E7;border-radius:2px;overflow:hidden;">
           <div style="overflow-x:auto;">
             <table class="table" style="width:100%;border-collapse:collapse;margin:0;font-size:13px;">
               <thead>

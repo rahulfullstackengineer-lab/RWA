@@ -7573,7 +7573,7 @@ window.loadResidentElection = async function() {
           action = '<span style="font-size:12px;color:var(--text-muted);">No approved names yet</span>';
         } else {
           action = approved.map(function(n) {
-            return '<button class="btn btn-primary btn-sm" style="margin:0 6px 6px 0;" onclick="window.castResidentVote(\'' + esc(p.id) + '\', \'' + esc(n.id) + '\', \'' + esc(n.candidateName) + '\')">Vote for ' + esc(n.candidateName) + '</button>';
+            return '<button class="btn btn-primary btn-sm" style="margin:0 6px 6px 0;" onclick="window.castResidentElectionVote(\'' + esc(p.id) + '\', \'' + esc(n.id) + '\', \'' + esc(n.candidateName) + '\')">Vote for ' + esc(n.candidateName) + '</button>';
           }).join('');
         }
       }
@@ -7648,7 +7648,7 @@ window.openSelfNomination = function(positionId, title) {
   });
 };
 
-window.castResidentVote = async function(positionId, nominationId, name) {
+window.castResidentElectionVote = async function(positionId, nominationId, name) {
   if (!confirm('Cast your vote for ' + name + '? This stays private.')) return;
   const res = await (window.apiFetch || fetch)('/api/committee', {
     method: 'PATCH',
