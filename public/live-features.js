@@ -440,6 +440,9 @@
         const passAction = String((data && data.action) || '').toUpperCase()
         const passRole = audienceRole(getStoredUser().role)
         const pass = (data && data.pass) || {}
+        if (pass && pass.id && typeof window.syncCampusVisitor === 'function') {
+          window.syncCampusVisitor(pass, passAction)
+        }
         if (passAction === 'CHECKED_IN' && (passRole === 'resident' || passRole === 'admin')) {
           if (typeof showToast === 'function') {
             showToast(data.title || ('Visitor arrived: ' + (pass.visitorName || 'Visitor') + ' is at the gate for flat ' + (pass.residentUnit || '')), 'success')

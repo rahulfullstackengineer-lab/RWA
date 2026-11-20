@@ -154,10 +154,9 @@ window.renderLiveCampus = function() {
   });
 
   var openComplaints = (snap.complaints || []).filter(function(item) { return campusComplaintTone(item.status); });
-  var inside = (snap.passes || []).filter(function(pass) { return pass.status === 'CHECKED_IN'; }).slice(0, 12);
-  var expected = (snap.passes || []).filter(function(pass) { return pass.status === 'APPROVED'; }).slice(0, 8);
+  window.__campusSubtitleBase = towers.length + ' block' + (towers.length === 1 ? '' : 's') + ' · ' + units.length + ' flats · ' + gateNames.length + ' gate' + (gateNames.length === 1 ? '' : 's') + ' · ';
   if (subtitle) {
-    subtitle.textContent = towers.length + ' block' + (towers.length === 1 ? '' : 's') + ' · ' + units.length + ' flats · ' + gateNames.length + ' gate' + (gateNames.length === 1 ? '' : 's') + ' · ' + inside.length + ' visitors inside · ' + openComplaints.length + ' open complaints';
+    subtitle.textContent = window.__campusSubtitleBase + campusVisitorLine() + ' · ' + openComplaints.length + ' open complaints';
   }
   if (legend) {
     legend.innerHTML = [
@@ -167,7 +166,8 @@ window.renderLiveCampus = function() {
       ['work', 'Work in progress'],
       ['wait', 'Waiting'],
       ['car', 'Parked vehicle'],
-      ['guest', 'Visitor moving to a flat'],
+      ['approach', 'Visitor waiting outside'],
+      ['guest', 'Visitor inside'],
     ].map(function(item) {
       return '<span><i class="campus-swatch campus-swatch-' + item[0] + '"></i>' + item[1] + '</span>';
     }).join('');
@@ -180,15 +180,59 @@ window.renderLiveCampus = function() {
     guardsByGate: guardsByGate,
     complaintsByUnit: complaintsByUnit,
     vehiclesByUnit: vehiclesByUnit,
-    inside: inside,
-    expected: expected,
   });
+};
+
+function campusVisitorLine() {
+  var list = (window.__campusSnapshot && window.__campusSnapshot.passes) || [];
+  var outsideN = 0;
+  var insideN = 0;
+  list.forEach(function(pass) {
+    var status = String(pass.status || '').toUpperCase();
+    if (status === 'APPROVED') outsideN += 1;
+    else if (status === 'CHECKED_IN') insideN += 1;
+  });
+  return outsideN + ' waiting outside · ' + insideN + ' inside';
+}
+
+window.syncCampusVisitor = function(pass, action) {
+  if (!pass || !pass.id) return;
+  var snap = window.__campusSnapshot || (window.__campusSnapshot = { passes: [] });
+  var list = snap.passes || (snap.passes = []);
+  var idx = -1;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id === pass.id) idx = i;
+  }
+  var merged = idx >= 0 ? Object.assign({}, list[idx], pass) : pass;
+  var act = String(action || merged.status || '').toUpperCase();
+  if (act === 'CHECK_IN' || act === 'CHECKED_IN') merged.status = 'CHECKED_IN';
+  else if (act === 'CHECK_OUT' || act === 'CHECKED_OUT') merged.status = 'CHECKED_OUT';
+  else if (act === 'CANCEL' || act === 'CANCELLED' || act === 'REVOKE' || act === 'REVOKED') merged.status = 'CANCELLED';
+  else if (act === 'CREATED' || act === 'APPROVE' || act === 'APPROVED') merged.status = merged.status || 'APPROVED';
+  if (idx >= 0) list[idx] = merged;
+  else list.unshift(merged);
+  if (window.__campus3D && typeof window.__campus3D.syncVisitor === 'function') {
+    window.__campus3D.syncVisitor(merged, act);
+  } else {
+    window.__campusVisitorQueue = window.__campusVisitorQueue || [];
+    window.__campusVisitorQueue.push({ pass: merged, action: act });
+  }
+  var subtitle = document.getElementById('campusSubtitle');
+  if (subtitle && window.__campusSubtitleBase && document.getElementById('campusViewport')) {
+    var openN = (snap.complaints || []).filter(function(item) { return campusComplaintTone(item.status); }).length;
+    subtitle.textContent = window.__campusSubtitleBase + campusVisitorLine() + ' · ' + openN + ' open complaints';
+  }
+  var detail = document.getElementById('campusDetail');
+  if (detail && detail.getAttribute('data-visit') === String(merged.id) && typeof window.showCampusVisit === 'function') {
+    window.showCampusVisit(merged.id);
+  }
 };
 
 window.mountCampus3D = async function(model) {
   var host = document.getElementById('campusViewport');
   if (!host) return;
   if (window.__campus3D && window.__campus3D.dispose) window.__campus3D.dispose();
+  window.__campus3D = null;
   var libs;
   try {
     var THREE = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js');
@@ -212,7 +256,39 @@ window.mountCampus3D = async function(model) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.08;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   viewport.appendChild(renderer.domElement);
+
+  var kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [] };
+  try {
+    var gltfMod = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js');
+    var gltfLoader = new gltfMod.GLTFLoader();
+    var kitRoot = 'https://cdn.jsdelivr.net/gh/shorepine/kenney@main/3d/';
+    function loadKit(path) {
+      return new Promise(function(resolve) {
+        gltfLoader.load(kitRoot + path, function(gltf) { resolve(gltf.scene); }, undefined, function() { resolve(null); });
+      });
+    }
+    var loadedKits = await Promise.all([
+      loadKit('car/sedan.glb'),
+      loadKit('car/suv.glb'),
+      loadKit('car/taxi.glb'),
+      loadKit('mini-characters/character-male-a.glb'),
+      loadKit('city-suburban/tree-large.glb'),
+      loadKit('city-commercial/building-skyscraper-a.glb'),
+      loadKit('city-commercial/building-skyscraper-b.glb'),
+      loadKit('city-commercial/building-skyscraper-c.glb'),
+    ]);
+    kit.car = loadedKits[0];
+    kit.suv = loadedKits[1];
+    kit.taxi = loadedKits[2];
+    kit.guard = loadedKits[3];
+    kit.tree = loadedKits[4];
+    kit.towers = [loadedKits[5], loadedKits[6], loadedKits[7]].filter(Boolean);
+  } catch (err) {
+    kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [] };
+  }
+  if (!document.getElementById('campusViewport')) return;
 
   var scene = new THREE.Scene();
   scene.background = new THREE.Color('#c5d4e4');
@@ -252,22 +328,31 @@ window.mountCampus3D = async function(model) {
     canvas.width = 1024;
     canvas.height = 1024;
     var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#7ea35a';
+    var grass = ctx.createLinearGradient(0, 0, 1024, 1024);
+    grass.addColorStop(0, '#8fb56a');
+    grass.addColorStop(1, '#6f9a52');
+    ctx.fillStyle = grass;
     ctx.fillRect(0, 0, 1024, 1024);
-    for (var i = 0; i < 1800; i++) {
-      ctx.fillStyle = i % 2 ? 'rgba(90,130,60,0.35)' : 'rgba(170,190,90,0.25)';
-      ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 8, 3);
+    for (var i = 0; i < 700; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(40,70,30,0.08)';
+      ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 14, 4);
     }
-    ctx.fillStyle = '#9aa3ad';
-    ctx.fillRect(0, 700, 1024, 150);
-    ctx.fillStyle = '#b7c0c8';
-    ctx.fillRect(430, 180, 160, 700);
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.setLineDash([18, 16]);
+    ctx.fillStyle = '#d5d8dc';
+    ctx.fillRect(0, 690, 1024, 190);
+    ctx.fillStyle = '#5d656e';
+    ctx.fillRect(0, 718, 1024, 128);
+    ctx.fillStyle = '#c5ccd3';
+    ctx.fillRect(392, 120, 240, 760);
+    ctx.fillStyle = '#6b737c';
+    ctx.fillRect(430, 120, 164, 760);
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.setLineDash([22, 18]);
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(0, 775);
-    ctx.lineTo(1024, 775);
+    ctx.moveTo(0, 782);
+    ctx.lineTo(1024, 782);
+    ctx.moveTo(512, 120);
+    ctx.lineTo(512, 880);
     ctx.stroke();
     ctx.setLineDash([]);
     return canvasTex(canvas);
@@ -280,7 +365,67 @@ window.mountCampus3D = async function(model) {
   ground.receiveShadow = true;
   scene.add(ground);
 
+  function placeModel(source, opts) {
+    if (!source) return null;
+    var model = source.clone(true);
+    model.traverse(function(obj) {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+    if (opts.faceX) model.rotation.y = Math.PI / 2;
+    model.updateMatrixWorld(true);
+    var box = new THREE.Box3().setFromObject(model);
+    var size = new THREE.Vector3();
+    box.getSize(size);
+    var current = opts.height ? size.y : Math.max(size.x, size.z);
+    var target = opts.height || opts.length || 2;
+    if (!current) return null;
+    model.scale.setScalar(target / current);
+    model.updateMatrixWorld(true);
+    box.setFromObject(model);
+    model.position.y -= box.min.y;
+    model.position.x -= (box.min.x + box.max.x) / 2;
+    model.position.z -= (box.min.z + box.max.z) / 2;
+    var holder = new THREE.Group();
+    holder.add(model);
+    return holder;
+  }
+  function plate(title, detail) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = detail ? 176 : 120;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.fillRect(16, 16, 480, canvas.height - 32);
+    ctx.strokeStyle = '#18181B';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(16, 16, 480, canvas.height - 32);
+    ctx.fillStyle = '#18181B';
+    ctx.font = '700 52px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var head = String(title || '').slice(0, 18);
+    ctx.fillText(head, 256, detail ? 68 : 60);
+    if (detail) {
+      ctx.fillStyle = '#3F3F46';
+      ctx.font = '500 34px sans-serif';
+      ctx.fillText(String(detail).slice(0, 26), 256, 122);
+    }
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(canvas), transparent: true, depthWrite: false }));
+    sprite.scale.set(3.6, detail ? 1.24 : 0.84, 1);
+    sprite.position.y = 2.05;
+    return sprite;
+  }
+
   function tree(x, z) {
+    var grown = placeModel(kit.tree, { height: 3.6 });
+    if (grown) {
+      grown.position.set(x, 0, z);
+      scene.add(grown);
+      return;
+    }
     var group = new THREE.Group();
     var trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.2, 6), new THREE.MeshStandardMaterial({ color: '#6b4a32', roughness: 0.9 }));
     trunk.position.y = 0.6;
@@ -325,6 +470,25 @@ window.mountCampus3D = async function(model) {
     var x = (index - (span - 1) / 2) * gap;
     var z = -2;
     towerPos[tower.id] = { x: x, z: z, height: height };
+    var usedModel = false;
+    var front = { minX: x - widthB / 2 + 0.6, maxX: x + widthB / 2 - 0.6, minY: 1.2, maxY: height - 0.6, z: z + depth / 2 + 0.08 };
+    if (kit.towers.length) {
+      var building = placeModel(kit.towers[index % kit.towers.length], { height: height });
+      if (building) {
+        building.position.set(x, 0, z);
+        scene.add(building);
+        var bounds = new THREE.Box3().setFromObject(building);
+        front = {
+          minX: bounds.min.x + 0.35,
+          maxX: bounds.max.x - 0.35,
+          minY: Math.max(1.1, bounds.min.y + 0.8),
+          maxY: Math.max(2.4, bounds.max.y - 0.7),
+          z: bounds.max.z + 0.08,
+        };
+        usedModel = true;
+      }
+    }
+    if (!usedModel) {
     var body = new THREE.Mesh(
       new THREE.BoxGeometry(widthB, height, depth),
       [
@@ -347,13 +511,16 @@ window.mountCampus3D = async function(model) {
     roof.position.set(x, height + 0.2, z);
     roof.castShadow = true;
     scene.add(roof);
+    }
     var name = label(tower.name);
-    name.position.set(x, height + 2.2, z);
+    name.position.set(x, (usedModel ? front.maxY : height) + 1.8, z);
     scene.add(name);
 
+    var windowCols = 4;
+    var windowRows = Math.max(1, Math.ceil(Math.min(units.length, 48) / windowCols));
     units.forEach(function(unit, unitIndex) {
-      var col = unitIndex % 4;
-      var row = Math.floor(unitIndex / 4);
+      var col = unitIndex % windowCols;
+      var row = Math.floor(unitIndex / windowCols);
       if (row > 11) return;
       var issues = (model.complaintsByUnit && model.complaintsByUnit[unit.id]) || [];
       var tone = issues.length ? campusComplaintTone(issues[0].status) : '';
@@ -362,8 +529,11 @@ window.mountCampus3D = async function(model) {
       if (tone === 'open') color = '#ef4444';
       else if (tone === 'work') color = '#ea580c';
       else if (tone === 'wait') color = '#d97706';
+      if (usedModel && !tone) return;
+      var spanX = Math.max(1.2, front.maxX - front.minX);
+      var spanY = Math.max(1.2, front.maxY - front.minY);
       var win = new THREE.Mesh(
-        new THREE.BoxGeometry(1.15, 0.72, 0.12),
+        new THREE.BoxGeometry(Math.min(1.15, spanX / windowCols * 0.62), Math.min(0.72, spanY / windowRows * 0.55), 0.12),
         new THREE.MeshStandardMaterial({
           color: color,
           emissive: tone ? color : (occupied ? '#f6e7bf' : '#000000'),
@@ -372,7 +542,11 @@ window.mountCampus3D = async function(model) {
           metalness: 0.05,
         })
       );
-      win.position.set(x - 2.7 + col * 1.8, 1.3 + row * 1.35, z + depth / 2 + 0.08);
+      win.position.set(
+        front.minX + ((col + 0.5) / windowCols) * spanX,
+        front.minY + ((row + 0.5) / windowRows) * spanY,
+        front.z
+      );
       win.userData = { kind: 'unit', id: unit.id };
       win.castShadow = true;
       scene.add(win);
@@ -390,15 +564,24 @@ window.mountCampus3D = async function(model) {
       else if (named.indexOf('red') !== -1) paint = '#b91c1c';
       else if (named.indexOf('blue') !== -1) paint = '#1d4ed8';
       else if (named.indexOf('silver') !== -1 || named.indexOf('grey') !== -1 || named.indexOf('gray') !== -1) paint = '#d4d4d8';
-      var car = new THREE.Group();
-      var shell = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.48, 0.95), new THREE.MeshStandardMaterial({ color: paint, metalness: 0.45, roughness: 0.35 }));
-      shell.position.y = 0.38;
-      var cabin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.4, 0.82), new THREE.MeshStandardMaterial({ color: '#0f172a', metalness: 0.5, roughness: 0.15 }));
-      cabin.position.set(-0.12, 0.75, 0);
-      shell.castShadow = cabin.castShadow = true;
-      car.add(shell, cabin);
+      var vehicleKind = String(vehicle.type || '').toLowerCase();
+      var carSource = /suv|jeep/.test(vehicleKind) ? kit.suv : kit.car;
+      var car = placeModel(carSource, { length: 2.6, faceX: true });
+      if (!car) {
+        car = new THREE.Group();
+        var shell = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.48, 0.95), new THREE.MeshStandardMaterial({ color: paint, metalness: 0.45, roughness: 0.35 }));
+        shell.position.y = 0.38;
+        var cabin = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.4, 0.82), new THREE.MeshStandardMaterial({ color: '#0f172a', metalness: 0.5, roughness: 0.15 }));
+        cabin.position.set(-0.12, 0.75, 0);
+        shell.castShadow = cabin.castShadow = true;
+        car.add(shell, cabin);
+      }
       car.position.set(x - 2.4 + (carIndex % 3) * 2.2, 0, z + depth / 2 + 2.4 + Math.floor(carIndex / 3) * 1.6);
+      car.rotation.y = Math.PI / 2;
       car.userData = { kind: 'vehicle', id: vehicle.id };
+      var unitNo = (vehicle.unit && vehicle.unit.unitNumber) || '';
+      var carTag = plate(vehicle.registrationNo || 'Vehicle', [unitNo ? 'Flat ' + unitNo : '', vehicle.parkingSlot ? 'Slot ' + vehicle.parkingSlot : ''].filter(Boolean).join(' · ') || 'Parked');
+      car.add(carTag);
       scene.add(car);
     });
   });
@@ -424,38 +607,137 @@ window.mountCampus3D = async function(model) {
     scene.add(gateLabel);
     var guards = (model.guardsByGate && model.guardsByGate[name]) || [];
     guards.slice(0, 3).forEach(function(guard, guardIndex) {
-      var person = new THREE.Group();
-      var legs = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), new THREE.MeshStandardMaterial({ color: '#1e293b' }));
-      legs.position.y = 0.35;
-      var torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.32), new THREE.MeshStandardMaterial({ color: '#1d4ed8', roughness: 0.5 }));
-      torso.position.y = 1.05;
-      var head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), new THREE.MeshStandardMaterial({ color: '#e7c2a2', roughness: 0.6 }));
-      head.position.y = 1.6;
-      person.add(legs, torso, head);
-      person.position.set(x - 1.2 + guardIndex * 1.1, 0, z - 1.5);
+      var person = placeModel(kit.guard, { height: 1.8 });
+      if (!person) {
+        person = new THREE.Group();
+        var legs = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.28), new THREE.MeshStandardMaterial({ color: '#1e293b' }));
+        legs.position.y = 0.35;
+        var torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.32), new THREE.MeshStandardMaterial({ color: '#1d4ed8', roughness: 0.5 }));
+        torso.position.y = 1.05;
+        var head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), new THREE.MeshStandardMaterial({ color: '#e7c2a2', roughness: 0.6 }));
+        head.position.y = 1.6;
+        person.add(legs, torso, head);
+      }
+      person.position.set(x - 1.4 + guardIndex * 1.35, 0, z - 1.8);
       person.userData = { kind: 'guard', gateIndex: index, guardIndex: guardIndex, bob: guardIndex };
+      var guardTag = plate(guard.staffName || 'Guard', guard.shiftName || guard.locationPost || 'On duty');
+      person.add(guardTag);
       scene.add(person);
     });
   });
 
-  var walkers = [];
-  (model.inside || []).forEach(function(pass) {
+  var visitors = [];
+  function visitorSpots(pass, slot) {
     var gateName = campusGateName(pass.gateNumber) || gates[0];
-    var from = gatePos[gateName] || gatePos[gates[0]];
+    var gate = gatePos[gateName] || gatePos[gates[0]] || { x: 0, z: 18 };
     var tower = towers.find(function(item) {
       return (item.units || []).some(function(unit) { return unit.id === pass.unitId || unit.unitNumber === pass.residentUnit; });
     }) || towers[0];
-    var to = tower ? towerPos[tower.id] : { x: 0, z: -2 };
-    if (!from || !to) return;
-    var dot = new THREE.Mesh(
-      new THREE.SphereGeometry(0.28, 12, 10),
-      new THREE.MeshStandardMaterial({ color: '#f8fafc', emissive: '#38bdf8', emissiveIntensity: 0.35 })
+    var home = tower && towerPos[tower.id] ? towerPos[tower.id] : { x: 0, z: -2 };
+    var lane = (slot % 3) - 1;
+    return {
+      far: { x: gate.x + lane * 2.4, z: gate.z + 16 },
+      outside: { x: gate.x + lane * 2.4, z: gate.z + 6.5 },
+      gate: { x: gate.x + lane * 0.35, z: gate.z },
+      tower: { x: home.x + lane * 2.2, z: home.z + 7.2 },
+    };
+  }
+  function makeVisitorCar(pass) {
+    var car = placeModel(kit.taxi || kit.car, { length: 2.6, faceX: true });
+    if (!car) {
+      car = new THREE.Group();
+      var shell = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, 0.48, 0.95),
+        new THREE.MeshStandardMaterial({ color: '#1d4ed8', metalness: 0.4, roughness: 0.35 })
+      );
+      shell.position.y = 0.38;
+      var cabin = new THREE.Mesh(
+        new THREE.BoxGeometry(0.85, 0.38, 0.82),
+        new THREE.MeshStandardMaterial({ color: '#e2e8f0', metalness: 0.2, roughness: 0.2 })
+      );
+      cabin.position.set(-0.05, 0.74, 0);
+      var lamp = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.1, 0.7),
+        new THREE.MeshStandardMaterial({ color: '#fef3c7', emissive: '#fde68a', emissiveIntensity: 0.8 })
+      );
+      lamp.position.set(0.82, 0.42, 0);
+      shell.castShadow = cabin.castShadow = true;
+      car.add(shell, cabin, lamp);
+    }
+    car.userData = { kind: 'visit', id: pass.id };
+    var visitTag = plate(
+      pass.visitorName || 'Visitor',
+      [pass.vehicleNumber, pass.residentUnit ? 'Flat ' + pass.residentUnit : ''].filter(Boolean).join(' · ') || 'Visitor'
     );
-    dot.castShadow = true;
-    dot.userData = { kind: 'visit', id: pass.id };
-    scene.add(dot);
-    walkers.push({ mesh: dot, from: from, to: to, t: Math.random() });
-  });
+    car.add(visitTag);
+    return car;
+  }
+  function pointCar(mesh, from, to) {
+    var dx = to.x - from.x;
+    var dz = to.z - from.z;
+    if (!dx && !dz) return;
+    mesh.rotation.y = Math.atan2(-dz, dx);
+  }
+  function setLeg(visitor, phase, from, to, speed) {
+    visitor.phase = phase;
+    visitor.from = from;
+    visitor.to = to;
+    visitor.t = 0;
+    visitor.speed = speed;
+    pointCar(visitor.mesh, from, to);
+  }
+  function findVisitor(id) {
+    for (var i = 0; i < visitors.length; i++) {
+      if (visitors[i].id === id && visitors[i].phase !== 'done') return visitors[i];
+    }
+    return null;
+  }
+  function addVisitor(pass, phase) {
+    var existing = findVisitor(pass.id);
+    if (existing) return existing;
+    if (visitors.length >= 24) return null;
+    var spots = visitorSpots(pass, visitors.length);
+    var car = makeVisitorCar(pass);
+    var start = phase === 'parked' ? spots.tower : (phase === 'wait' ? spots.outside : spots.far);
+    car.position.set(start.x, 0, start.z);
+    if (phase === 'parked') pointCar(car, spots.tower, spots.gate);
+    else pointCar(car, spots.outside, spots.gate);
+    scene.add(car);
+    var visitor = { id: pass.id, mesh: car, pass: pass, spots: spots, phase: phase, from: start, to: start, t: 1, speed: 0 };
+    visitors.push(visitor);
+    if (phase === 'arrive') setLeg(visitor, 'arrive', spots.far, spots.outside, 0.01);
+    else if (phase === 'enter') setLeg(visitor, 'enterGate', spots.outside, spots.gate, 0.014);
+    else if (phase === 'leave') setLeg(visitor, 'exitGate', spots.tower, spots.gate, 0.014);
+    return visitor;
+  }
+  function syncVisitor(pass, action) {
+    if (stopped || !pass || !pass.id) return;
+    var act = String(action || pass.status || '').toUpperCase();
+    var leaving = act === 'CHECK_OUT' || act === 'CHECKED_OUT' || act === 'CANCEL' || act === 'CANCELLED' || act === 'REVOKE' || act === 'REVOKED' || String(pass.status || '').toUpperCase() === 'CHECKED_OUT' || String(pass.status || '').toUpperCase() === 'CANCELLED';
+    var entering = !leaving && (act === 'CHECK_IN' || act === 'CHECKED_IN' || String(pass.status || '').toUpperCase() === 'CHECKED_IN');
+    var arriving = !leaving && !entering && (act === 'CREATED' || act === 'APPROVE' || act === 'APPROVED' || String(pass.status || '').toUpperCase() === 'APPROVED');
+    var visitor = findVisitor(pass.id);
+    if (leaving) {
+      var wasOutside = visitor && (visitor.phase === 'wait' || visitor.phase === 'arrive');
+      if (!visitor) visitor = addVisitor(pass, 'parked');
+      if (!visitor || visitor.phase === 'exitGate' || visitor.phase === 'exitOut') return;
+      visitor.pass = pass;
+      visitor.spots = visitorSpots(pass, visitors.indexOf(visitor));
+      var here = { x: visitor.mesh.position.x, z: visitor.mesh.position.z };
+      if (wasOutside) setLeg(visitor, 'exitOut', here, visitor.spots.far, 0.012);
+      else setLeg(visitor, 'exitGate', here, visitor.spots.gate, 0.014);
+      return;
+    }
+    if (entering) {
+      if (!visitor) visitor = addVisitor(pass, 'wait');
+      if (!visitor || visitor.phase === 'parked' || visitor.phase === 'enterTower' || visitor.phase === 'enterGate') return;
+      visitor.pass = pass;
+      visitor.spots = visitorSpots(pass, visitors.indexOf(visitor));
+      setLeg(visitor, 'enterGate', { x: visitor.mesh.position.x, z: visitor.mesh.position.z }, visitor.spots.gate, 0.014);
+      return;
+    }
+    if (arriving && !visitor) addVisitor(pass, 'arrive');
+  }
 
   var raycaster = new THREE.Raycaster();
   var pointer = new THREE.Vector2();
@@ -466,7 +748,12 @@ window.mountCampus3D = async function(model) {
     raycaster.setFromCamera(pointer, camera);
     var hits = raycaster.intersectObjects(scene.children, true);
     for (var i = 0; i < hits.length; i++) {
-      var data = hits[i].object.userData || (hits[i].object.parent && hits[i].object.parent.userData);
+      var node = hits[i].object;
+      var data = null;
+      while (node) {
+        if (node.userData && node.userData.kind) { data = node.userData; break; }
+        node = node.parent;
+      }
       if (!data || !data.kind) continue;
       if (data.kind === 'unit') window.showCampusUnit(data.id);
       else if (data.kind === 'vehicle') window.showCampusVehicle(data.id);
@@ -488,13 +775,27 @@ window.mountCampus3D = async function(model) {
     scene.traverse(function(obj) {
       if (obj.userData && obj.userData.kind === 'guard') obj.position.y = Math.sin(time * 2 + obj.userData.bob) * 0.06;
     });
-    walkers.forEach(function(walker) {
-      walker.t = (walker.t + 0.0035) % 1;
-      var ease = walker.t < 0.5 ? 2 * walker.t * walker.t : 1 - Math.pow(-2 * walker.t + 2, 2) / 2;
-      walker.mesh.position.set(
-        walker.from.x + (walker.to.x - walker.from.x) * ease,
-        0.5 + Math.sin(walker.t * Math.PI) * 0.15,
-        walker.from.z + (walker.to.z - walker.from.z) * ease
+    visitors.forEach(function(visitor) {
+      if (visitor.phase === 'wait' || visitor.phase === 'parked' || visitor.phase === 'done') return;
+      visitor.t += visitor.speed;
+      if (visitor.t >= 1) {
+        visitor.mesh.position.set(visitor.to.x, 0, visitor.to.z);
+        if (visitor.phase === 'arrive') visitor.phase = 'wait';
+        else if (visitor.phase === 'enterGate') setLeg(visitor, 'enterTower', visitor.spots.gate, visitor.spots.tower, 0.01);
+        else if (visitor.phase === 'enterTower') {
+          visitor.phase = 'parked';
+          pointCar(visitor.mesh, visitor.spots.tower, visitor.spots.gate);
+        } else if (visitor.phase === 'exitGate') setLeg(visitor, 'exitOut', visitor.spots.gate, visitor.spots.far, 0.012);
+        else if (visitor.phase === 'exitOut') {
+          scene.remove(visitor.mesh);
+          visitor.phase = 'done';
+        }
+        return;
+      }
+      visitor.mesh.position.set(
+        visitor.from.x + (visitor.to.x - visitor.from.x) * visitor.t,
+        0,
+        visitor.from.z + (visitor.to.z - visitor.from.z) * visitor.t
       );
     });
     renderer.render(scene, camera);
@@ -521,7 +822,17 @@ window.mountCampus3D = async function(model) {
       window.removeEventListener('resize', resize);
       dispose();
     },
+    syncVisitor: syncVisitor,
   };
+  (window.__campusVisitorQueue || []).forEach(function(item) {
+    if (item && item.pass) syncVisitor(item.pass, item.action);
+  });
+  window.__campusVisitorQueue = [];
+  ((window.__campusSnapshot && window.__campusSnapshot.passes) || []).forEach(function(pass) {
+    var status = String(pass.status || '').toUpperCase();
+    if (status === 'APPROVED') addVisitor(pass, 'wait');
+    else if (status === 'CHECKED_IN') addVisitor(pass, 'parked');
+  });
   tick();
 };
 
@@ -534,6 +845,7 @@ window.showCampusUnit = function(unitId) {
   var cars = (snap.vehicles || []).filter(function(item) { return item.unitId === unit.id || (item.unit && item.unit.id === unit.id); });
   var visits = (snap.passes || []).filter(function(item) { return item.unitId === unit.id || item.residentUnit === unit.unitNumber; });
   var person = unit.tenantName || unit.ownerName || 'Vacant';
+  box.removeAttribute('data-visit');
   box.innerHTML = '<div class="campus-detail-title">Flat ' + campusText(unit.unitNumber) + '</div>' +
     '<div class="campus-detail-copy">' + campusText((unit.block && unit.block.name) || 'Society') + ' · ' + campusText(person) + '</div>' +
     '<div class="campus-detail-label">Complaints</div>' +
@@ -559,6 +871,7 @@ window.showCampusGuard = function(gateIndex, guardIndex) {
   var guards = (window.__campusGuards && window.__campusGuards[gate]) || [];
   var guard = guards[guardIndex] || guards[0];
   if (!guard) return;
+  box.removeAttribute('data-visit');
   var through = (snap.passes || []).filter(function(pass) {
     return (campusGateName(pass.gateNumber) || 'Main Gate') === gate;
   }).slice(0, 6);
@@ -576,6 +889,7 @@ window.showCampusVehicle = function(vehicleId) {
   var box = document.getElementById('campusDetail');
   if (!vehicle || !box) return;
   var unit = vehicle.unit || {};
+  box.removeAttribute('data-visit');
   box.innerHTML = '<div class="campus-detail-title">' + campusText(vehicle.registrationNo || 'Vehicle') + '</div>' +
     '<div class="campus-detail-copy">' + campusText([vehicle.make, vehicle.model, vehicle.color].filter(Boolean).join(' ') || vehicle.type || 'Vehicle') + '</div>' +
     '<div class="campus-detail-row">Flat ' + campusText(unit.unitNumber || '—') + (vehicle.parkingSlot ? ' · slot ' + campusText(vehicle.parkingSlot) : '') + '</div>' +
@@ -587,9 +901,15 @@ window.showCampusVisit = function(passId) {
   var pass = (snap.passes || []).find(function(item) { return item.id === passId; });
   var box = document.getElementById('campusDetail');
   if (!pass || !box) return;
+  var status = String(pass.status || '').toUpperCase();
+  var where = 'On the way';
+  if (status === 'APPROVED') where = 'Waiting outside ' + (campusGateName(pass.gateNumber) || pass.gateNumber || 'the gate');
+  else if (status === 'CHECKED_IN') where = 'Inside, at flat ' + (pass.residentUnit || '—');
+  else if (status === 'CHECKED_OUT') where = 'Left through ' + (pass.gateNumber || 'the gate');
+  else if (status === 'CANCELLED') where = 'Pass cancelled';
+  box.setAttribute('data-visit', String(pass.id));
   box.innerHTML = '<div class="campus-detail-title">' + campusText(pass.visitorName || 'Visitor') + '</div>' +
-    '<div class="campus-detail-copy">' + campusText(pass.visitorType || 'Guest') + (pass.vehicleNumber ? ' · ' + campusText(pass.vehicleNumber) : '') + '</div>' +
-    '<div class="campus-detail-row">Entered ' + campusText(pass.gateNumber || 'the gate') + '</div>' +
-    '<div class="campus-detail-row">Going to flat ' + campusText(pass.residentUnit || '—') + ' · ' + campusText(pass.residentName || '') + '</div>' +
-    '<div class="campus-detail-row">' + campusText(String(pass.status || '').replace(/_/g, ' ')) + '</div>';
+    '<div class="campus-detail-copy">' + campusText(pass.vehicleNumber || pass.visitorType || 'Guest') + '</div>' +
+    '<div class="campus-detail-row">' + campusText(where) + '</div>' +
+    '<div class="campus-detail-row">Flat ' + campusText(pass.residentUnit || '—') + ' · ' + campusText(pass.residentName || '') + '</div>';
 };

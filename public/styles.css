@@ -1479,6 +1479,7 @@ tbody td:first-child {
 .campus-swatch-work { background: #C2410C; border-color: #C2410C; }
 .campus-swatch-wait { background: #B45309; border-color: #B45309; }
 .campus-swatch-car { background: #fff; }
+.campus-swatch-approach { background: #2563EB; border-color: #2563EB; }
 .campus-swatch-guest { background: #18181B; border-radius: 99px; }
 .campus-layout {
   display: grid;
