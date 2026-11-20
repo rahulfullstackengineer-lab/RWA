@@ -100,7 +100,7 @@ Screens['admin-structure'] = function() {
 
           <!-- Desktop Table Wrap -->
           <div class="table-wrap desktop-only-table">
-            <table>
+            <table class="units-registry-table">
               <thead>
                 <tr>
                   <th>Unit</th>
@@ -109,7 +109,7 @@ Screens['admin-structure'] = function() {
                   <th>Owner / Primary Contact</th>
                   <th>Area</th>
                   <th>Status</th>
-                  <th>Dues</th>
+                  <th>Outstanding</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -717,53 +717,20 @@ function renderUnitsData(units) {
           </div>
         `;
       } else {
-        residentDisplayHtml = `
-          <span style="color:var(--text-muted);font-size:12px;font-style:italic;">No owner / resident yet added</span>
-        `;
+        residentDisplayHtml = `<span class="unit-vacant">Vacant</span>`;
       }
 
-      // 2. Dues Column: Shows dues on all generated bills separately by month with status
       const allInvoices = u.invoices || [];
       const unpaidInvoices = allInvoices.filter(inv => (inv.balanceAmount || 0) > 0);
       const totalDue = unpaidInvoices.reduce((sum, inv) => sum + (inv.balanceAmount || 0), 0);
-
-      let duesHtml = '';
-      if (totalDue === 0) {
-        duesHtml = `
-          <div>
-            <span class="badge badge-green" style="font-size:11px;padding:2px 8px;">Nil Dues (₹0)</span>
-            ${allInvoices.length > 0 ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">All bills cleared</div>` : ''}
-          </div>
-        `;
-      } else {
-        duesHtml = `
-          <div>
-            <div style="font-weight:800;font-size:14px;color:var(--red);margin-bottom:3px;display:flex;align-items:baseline;gap:4px;">
-              <span>₹${totalDue.toLocaleString('en-IN')}</span>
-              <span style="font-size:10px;font-weight:600;color:var(--text-muted);">(${unpaidInvoices.length} ${unpaidInvoices.length === 1 ? 'bill' : 'bills'})</span>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:3px;">
-              ${unpaidInvoices.map(inv => {
-                const isOverdue = inv.status === 'OVERDUE';
-                const isPartial = inv.status === 'PARTIALLY_PAID';
-                const badgeColor = isOverdue ? 'red' : isPartial ? 'amber' : 'blue';
-                return `
-                  <div style="font-size:11px;display:flex;align-items:center;gap:5px;white-space:nowrap;line-height:1.2;">
-                    <span style="font-weight:600;color:var(--text-secondary);">${inv.billingMonth}:</span>
-                    <span style="font-weight:700;color:var(--text-primary);">₹${(inv.balanceAmount || 0).toLocaleString('en-IN')}</span>
-                    <span class="badge badge-${badgeColor}" style="font-size:9px;padding:1px 4px;font-weight:700;">${inv.status}</span>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        `;
-      }
+      const duesHtml = totalDue === 0
+        ? `<div class="unit-due-clear">Clear</div><span class="unit-due-note">${allInvoices.length ? 'Bills paid' : 'No bills yet'}</span>`
+        : `<div class="unit-due-amount">₹${totalDue.toLocaleString('en-IN')}</div><span class="unit-due-note">${unpaidInvoices.length} open bill${unpaidInvoices.length === 1 ? '' : 's'}</span>`;
 
       // 3. Action Column: Clear dedicated button to open unit detail page
       return `
         <tr onclick="viewUnitDetail('${u.id}')" style="cursor:pointer;">
-          <td><strong style="color:var(--text-primary);font-size:14px;">${u.unitNumber}</strong></td>
+          <td><strong class="unit-no">${u.unitNumber}</strong></td>
           <td><span class="badge badge-muted">${blockName}</span></td>
           <td><span style="font-size:12px;color:var(--text-secondary);">${typeDisplay}</span></td>
           <td>${residentDisplayHtml}</td>

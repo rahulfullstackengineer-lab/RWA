@@ -686,12 +686,22 @@ window.reviewExpiringRenewals = function() {
 // Main Data Fetcher
 window.loadLiveVendorsScreen = async function() {
   try {
-    var res = await (window.apiFetch ? window.apiFetch('/api/vendors') : fetch('/api/vendors'));
-    if (res.ok) {
+    var fetchFn = window.apiFetch || fetch;
+    var results = await Promise.all([
+      fetchFn('/api/vendors').catch(function() { return null; }),
+      fetchFn('/api/complaints').catch(function() { return null; }),
+    ]);
+    var res = results[0];
+    var jobRes = results[1];
+    if (res && res.ok) {
       var data = await res.json();
       window.__cachedVendorsList = data.vendors || [];
       window.__cachedContractsList = data.contracts || [];
       window.__cachedVendorMetrics = data.metrics || {};
+    }
+    if (jobRes && jobRes.ok) {
+      var jobData = await jobRes.json();
+      window.__cachedVendorJobs = jobData.complaints || [];
     }
   } catch (e) {
     console.error('Failed to fetch vendors:', e);
@@ -748,6 +758,11 @@ window.loadLiveVendorsScreen = async function() {
 };
 
 // Render Vendors Cards
+window.toggleVendorHistory = function(vendorId) {
+  window.__vendorHistoryOpen = window.__vendorHistoryOpen === vendorId ? '' : vendorId;
+  window.renderVendorsCards();
+};
+
 window.renderVendorsCards = function() {
   var container = document.getElementById('vendorsCardsList');
   if (!container) return;
@@ -783,6 +798,29 @@ window.renderVendorsCards = function() {
     return;
   }
 
+  function vendorText(value) {
+    return String(value == null ? '' : value).replace(/[&<>]/g, function(ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch];
+    });
+  }
+  function vendorWhen(value) {
+    if (!value) return '';
+    var date = new Date(value);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function jobsForVendor(vendor) {
+    var name = String(vendor.name || '').toLowerCase().trim();
+    var phone = String(vendor.phone || '').replace(/\D/g, '').slice(-10);
+    return (window.__cachedVendorJobs || []).filter(function(job) {
+      var assigned = String(job.assignedTo || '').toLowerCase();
+      if (!assigned) return false;
+      if (name && assigned.indexOf(name) !== -1) return true;
+      var digits = assigned.replace(/\D/g, '');
+      return phone.length >= 8 && digits.indexOf(phone) !== -1;
+    });
+  }
+
   container.innerHTML = vendors.map(function(v) {
     var typeBadge = v.type === 'AMC' ? '<span class="badge badge-blue">AMC</span>' : (v.type === 'CONTRACT' ? '<span class="badge badge-purple">Monthly Retainer</span>' : '<span class="badge badge-muted">On-Call</span>');
     var icon = v.service?.includes('Plumb') ? '🚰' : (v.service?.includes('Elev') || v.service?.includes('Lift') ? '🛗' : (v.service?.includes('Elect') ? '⚡' : (v.service?.includes('Secur') ? '🛡️' : (v.service?.includes('Clean') || v.service?.includes('House') ? '🧹' : (v.service?.includes('Hort') || v.service?.includes('Garden') ? '🌱' : '🏪')))));
@@ -790,38 +828,73 @@ window.renderVendorsCards = function() {
       ? '<span class="badge badge-green" style="font-size:11px;">Active</span>' 
       : '<span class="badge badge-muted" style="font-size:11px;">Inactive</span>';
 
+    var jobs = jobsForVendor(v);
+    var openJobs = jobs.filter(function(job) {
+      var status = String(job.status || '').toUpperCase();
+      return status !== 'RESOLVED' && status !== 'CLOSED' && status !== 'REJECTED';
+    });
+    var historyJobs = jobs.filter(function(job) {
+      var status = String(job.status || '').toUpperCase();
+      return status === 'RESOLVED' || status === 'CLOSED' || status === 'REJECTED';
+    });
+    var showAll = window.__vendorHistoryOpen === v.id;
+    var visibleHistory = showAll ? historyJobs : historyJobs.slice(0, 3);
+    var agreements = (window.__cachedContractsList || []).filter(function(contract) {
+      return contract.vendorId === v.id || String(contract.vendorName || '').toLowerCase() === String(v.name || '').toLowerCase();
+    });
+    function jobLine(job, done) {
+      var flat = job.unit && job.unit.unitNumber ? 'Flat ' + job.unit.unitNumber : 'Society';
+      var when = vendorWhen(done ? (job.resolvedAt || job.updatedAt) : job.createdAt);
+      var state = String(job.status || '').replace(/_/g, ' ').toLowerCase();
+      return '<div class="vendor-job-line"><strong>' + vendorText(job.ticketNumber || 'Ticket') + '</strong> · ' + vendorText(job.title || job.category || 'Work') + ' · ' + vendorText(flat) + (when ? ' · ' + when : '') + ' · ' + vendorText(state) + '</div>';
+    }
+    var workHtml = '<div class="vendor-work">' +
+      '<div class="vendor-work-label">Connected work</div>' +
+      '<div class="vendor-work-trade">' + vendorText(v.service || 'General maintenance') + '</div>' +
+      (agreements.length ? agreements.map(function(contract) {
+        return '<div class="vendor-job-line">Agreement · ' + vendorText(contract.title) + ' · ' + vendorText(contract.status || 'ACTIVE') + '</div>';
+      }).join('') : '') +
+      '<div class="vendor-work-label">Open jobs</div>' +
+      (openJobs.length ? openJobs.map(function(job) { return jobLine(job, false); }).join('') : '<div class="vendor-job-empty">No open job is assigned to this person.</div>') +
+      '<div class="vendor-work-label">Work history</div>' +
+      (historyJobs.length ? visibleHistory.map(function(job) { return jobLine(job, true); }).join('') : '<div class="vendor-job-empty">No finished work is on record yet.</div>') +
+      (historyJobs.length > 3 ? '<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;padding:2px 0;" onclick="window.toggleVendorHistory(\'' + String(v.id).replace(/'/g, '') + '\')">' + (showAll ? 'Show recent only' : 'Show all ' + historyJobs.length + ' jobs') + '</button>' : '') +
+      '</div>';
+
     return `
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border-light);border-radius:var(--r-md);margin-bottom:8px;background:var(--bg-surface);transition:all 0.15s;" onmouseover="this.style.background='var(--bg-elevated)'" onmouseout="this.style.background='var(--bg-surface)'">
-        <div style="width:40px;height:40px;background:var(--bg-elevated);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;border:1px solid var(--border-light);">
-          ${icon}
+      <div class="vendor-person" style="padding:12px 14px;border:1px solid #E4E4E7;border-radius:2px;margin-bottom:8px;background:#fff;">
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="width:40px;height:40px;background:#F4F4F5;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;border:1px solid #E4E4E7;">
+            ${icon}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <div style="font-size:14px;font-weight:700;color:#18181B;">${vendorText(v.name)}</div>
+              ${typeBadge}
+              ${v.rating ? `<span style="font-size:11px;font-weight:700;color:#A16207;">${v.rating} rating</span>` : ''}
+            </div>
+            <div style="font-size:12px;color:#71717A;margin-top:2px;">
+              ${v.contactPerson ? 'Contact: ' + vendorText(v.contactPerson) : ''}
+            </div>
+            <div style="font-size:12px;color:#18181B;margin-top:2px;font-weight:600;">
+              <a href="tel:${vendorText(v.phone)}" style="color:#18181B;text-decoration:none;">${vendorText(v.phone)}</a>
+              ${v.email ? ' · ' + vendorText(v.email) : ''}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="display:flex;gap:4px;justify-content:flex-end;">
+              ${statusBadge}
+            </div>
+            <div style="margin-top:6px;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
+              <a href="tel:${vendorText(v.phone)}" class="btn btn-secondary btn-sm" style="padding:3px 8px;font-size:11px;font-weight:600;">Call</a>
+              <button class="btn btn-ghost btn-sm" onclick="Router.go('admin-complaints')" style="padding:3px 8px;font-size:11px;" title="Issue work order on helpdesk">Ticket</button>
+              <button class="btn btn-ghost btn-sm" onclick="window.openAddAgreementModal('${String(v.id).replace(/'/g, '')}')" style="padding:3px 8px;font-size:11px;" title="New AMC contract">AMC</button>
+              <button class="btn btn-ghost btn-sm" onclick="window.openEditVendorModal('${String(v.id).replace(/'/g, '')}')" style="padding:3px 8px;font-size:11px;" title="Edit details">Edit</button>
+              <button class="btn btn-ghost btn-sm" onclick="window.confirmDeleteVendor('${String(v.id).replace(/'/g, '')}', '${String(v.name || '').replace(/'/g, "\\'")}')" style="padding:3px 6px;font-size:11px;color:#B91C1C;" title="Delete vendor">Remove</button>
+            </div>
+          </div>
         </div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${v.name}</div>
-            ${typeBadge}
-            ${v.rating ? `<span style="font-size:11px;font-weight:700;color:#F59E0B;">⭐ ${v.rating}</span>` : ''}
-          </div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">
-            <strong>${v.service}</strong> ${v.contactPerson ? '· Contact: ' + v.contactPerson : ''}
-          </div>
-          <div style="font-size:11.5px;color:var(--blue);margin-top:2px;font-weight:500;">
-            📞 <a href="tel:${v.phone}" style="color:var(--blue);text-decoration:none;">${v.phone}</a>
-            ${v.email ? ' · ✉️ ' + v.email : ''}
-            ${v.gstin ? ' · <span style="color:var(--text-muted);font-family:monospace;">GST: ' + v.gstin + '</span>' : ''}
-          </div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="display:flex;gap:4px;justify-content:flex-end;">
-            ${statusBadge}
-          </div>
-          <div style="margin-top:6px;display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap;">
-            <a href="tel:${v.phone}" class="btn btn-secondary btn-sm" style="padding:3px 8px;font-size:11px;font-weight:600;">📞 Call</a>
-            <button class="btn btn-ghost btn-sm" onclick="Router.go('admin-complaints')" style="padding:3px 8px;font-size:11px;" title="Issue work order on helpdesk">🎫 Ticket</button>
-            <button class="btn btn-ghost btn-sm" onclick="window.openAddAgreementModal('${v.id}')" style="padding:3px 8px;font-size:11px;" title="New AMC contract">+ AMC</button>
-            <button class="btn btn-ghost btn-sm" onclick="window.openEditVendorModal('${v.id}')" style="padding:3px 8px;font-size:11px;" title="Edit details">✏️</button>
-            <button class="btn btn-ghost btn-sm" onclick="window.confirmDeleteVendor('${v.id}', '${v.name.replace(/'/g, "\\'")}')" style="padding:3px 6px;font-size:11px;color:#EF4444;" title="Delete vendor">🗑️</button>
-          </div>
-        </div>
+        ${workHtml}
       </div>
     `;
   }).join('');

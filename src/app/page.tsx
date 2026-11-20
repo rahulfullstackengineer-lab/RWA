@@ -11,6 +11,7 @@ export default function Home() {
       '/screens/auth.js',
       '/screens/admin-dashboard.js',
       '/screens/admin-units.js',
+      '/screens/admin-campus.js',
       '/screens/admin-members.js',
       '/screens/admin-finance.js',
       '/screens/admin-ledger.js',
