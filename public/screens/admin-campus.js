@@ -18,6 +18,7 @@ Screens['admin-campus'] = function() {
         </div>
       </div>
       <div class="campus-legend" id="campusLegend"></div>
+      <div class="campus-tower-bar" id="campusTowerBar"></div>
       <div class="campus-layout">
         <div class="campus-stage" id="campusStage">
           <div style="padding:28px;color:#71717A;">Drawing the society…</div>
@@ -139,59 +140,58 @@ function expandCampusStructures(towers, kind) {
   return towers;
 }
 
+function parkingBays(x, z, yaw, count, firstRow) {
+  var bays = [];
+  var across = 3;
+  var start = firstRow || 0;
+  for (var i = 0; i < count; i++) {
+    var col = i % across;
+    var row = start + Math.floor(i / across);
+    var localX = (col - (across - 1) / 2) * 3.6;
+    var localZ = 7.4 + row * 3.5;
+    var cos = Math.cos(yaw);
+    var sin = Math.sin(yaw);
+    bays.push({
+      x: x + localX * cos + localZ * sin,
+      z: z - localX * sin + localZ * cos,
+      yaw: yaw,
+    });
+  }
+  return bays;
+}
+
 function placeCampusStructures(list, kind) {
   var count = Math.max(1, list.length);
   var maxZ = -8;
+  var cols = kind === 'villa'
+    ? Math.max(2, Math.ceil(Math.sqrt(count)))
+    : Math.min(4, Math.max(2, Math.ceil(Math.sqrt(count))));
+  if (count === 1) cols = 1;
+  var rows = Math.ceil(count / cols);
+  var colGap = kind === 'villa' ? 10 : (kind === 'floors' ? 14 : 18);
+  var rowGap = kind === 'villa' ? 12 : (kind === 'floors' ? 16 : 24);
   list.forEach(function(item, index) {
     var floors = Math.max(1, Math.ceil(((item.units || []).length || 1) / 4));
-    var x = 0;
-    var z = -2;
-    var height = 12;
-    var yaw = 0;
-    if (kind === 'villa') {
-      var cols = Math.max(1, Math.ceil(Math.sqrt(count)));
-      var col = index % cols;
-      var row = Math.floor(index / cols);
-      x = (col - (cols - 1) / 2) * 7.2;
-      z = (row - (Math.ceil(count / cols) - 1) / 2) * 7.2 - 1;
-      height = 3.6 + (index % 3) * 0.55;
-      yaw = row % 2 ? Math.PI : 0;
-    } else if (kind === 'floors') {
-      x = (index - (count - 1) / 2) * 8.2;
-      z = index % 2 ? -5 : 1.2;
-      height = 6.8;
-      yaw = index % 2 ? 0 : Math.PI;
-    } else if (kind === 'cghs') {
-      var angle = (index / count) * Math.PI * 2 - Math.PI / 2;
-      var radius = Math.max(12, 7 + count * 1.8);
-      x = Math.cos(angle) * radius;
-      z = Math.sin(angle) * radius * 0.7;
-      height = Math.min(11, 5.2 + floors * 0.85);
-      yaw = angle + Math.PI;
-    } else if (kind === 'chb') {
-      var pocket = Math.floor(index / 3);
-      var seat = index % 3;
-      var pockets = Math.ceil(count / 3);
-      x = (pocket - (pockets - 1) / 2) * 15 + (seat - 1) * 4.4;
-      z = seat === 1 ? -7 : 1.6;
-      height = Math.min(14, 6.2 + floors * 0.75);
-    } else if (kind === 'commercial') {
-      x = (index - (count - 1) / 2) * 15;
-      z = index % 2 ? -4 : 2;
-      height = Math.min(12, 6 + floors * 0.5);
-    } else {
-      var gap = count > 4 ? 11 : 14;
-      x = (index - (count - 1) / 2) * gap;
-      z = -2;
-      height = Math.min(26, 3.2 + floors * 1.15);
-    }
+    var col = index % cols;
+    var row = Math.floor(index / cols);
+    var x = (col - (cols - 1) / 2) * colGap;
+    var z = ((rows - 1) / 2 - row) * rowGap;
+    var yaw = row % 2 === 0 ? 0 : Math.PI;
+    var height = Math.min(22, 4 + floors * 1.05);
+    if (kind === 'villa') height = 3.6 + (index % 3) * 0.55;
+    else if (kind === 'floors') height = 6.8;
+    else if (kind === 'cghs') height = Math.min(11, 5.2 + floors * 0.85);
+    else if (kind === 'chb') height = Math.min(14, 6.2 + floors * 0.75);
+    else if (kind === 'commercial') height = Math.min(12, 6 + floors * 0.5);
     item.x = x;
     item.z = z;
     item.height = height;
     item.yaw = yaw;
+    item.bays = parkingBays(x, z, yaw, 6, 0);
+    item.visitorBays = parkingBays(x, z, yaw, 3, 2);
     if (z > maxZ) maxZ = z;
   });
-  return maxZ + (kind === 'villa' ? 12 : 16);
+  return maxZ + 18;
 }
 
 function campusComplaintTone(status) {
@@ -293,7 +293,17 @@ window.renderLiveCampus = function() {
     }).join('');
   }
 
-  stage.innerHTML = '<div id="campusViewport" class="campus-viewport"><div class="campus-viewport-note">Drag to look around. Scroll to zoom.</div></div>';
+  var towerBar = document.getElementById('campusTowerBar');
+  if (towerBar) {
+    var focusId = window.__campusTowerFocus || 'all';
+    towerBar.innerHTML = '<button type="button" class="campus-tower-btn' + (focusId === 'all' ? ' is-active' : '') + '" onclick="window.focusCampusTower(\'all\')">All blocks</button>' +
+      towers.map(function(tower) {
+        var active = focusId === tower.id ? ' is-active' : '';
+        return '<button type="button" class="campus-tower-btn' + active + '" onclick="window.focusCampusTower(\'' + String(tower.id).replace(/'/g, '') + '\')">' + campusText(tower.name || 'Block') + '</button>';
+      }).join('');
+  }
+  stage.innerHTML = '<div id="campusViewport" class="campus-viewport"><div class="campus-viewport-note">Drag to look around. Scroll to zoom. Pick one block above to open it on its own.</div></div>';
+  window.__campusStructures = structures;
   window.mountCampus3D({
     towers: structures,
     layout: layoutKind,
@@ -316,6 +326,44 @@ function campusVisitorLine() {
   });
   return outsideN + ' waiting outside · ' + insideN + ' inside';
 }
+
+window.focusCampusTower = function(id) {
+  window.__campusTowerFocus = id || 'all';
+  var buttons = document.querySelectorAll('.campus-tower-btn');
+  for (var i = 0; i < buttons.length; i++) {
+    var onclick = buttons[i].getAttribute('onclick') || '';
+    var selected = window.__campusTowerFocus === 'all' ? onclick.indexOf("'all'") !== -1 : onclick.indexOf("'" + window.__campusTowerFocus + "'") !== -1;
+    if (selected) buttons[i].classList.add('is-active');
+    else buttons[i].classList.remove('is-active');
+  }
+  if (window.__campus3D && typeof window.__campus3D.focusTower === 'function') {
+    window.__campus3D.focusTower(window.__campusTowerFocus);
+  }
+};
+
+window.showCampusTower = function(towerId) {
+  var snap = window.__campusSnapshot || {};
+  var box = document.getElementById('campusDetail');
+  if (!box) return;
+  var structures = window.__campusStructures || [];
+  var tower = null;
+  for (var i = 0; i < structures.length; i++) if (structures[i].id === towerId) tower = structures[i];
+  var units = tower && tower.units ? tower.units : [];
+  var title = (tower && tower.name) || 'Block';
+  box.removeAttribute('data-visit');
+  box.innerHTML = '<div class="campus-detail-title">' + campusText(title) + '</div>' +
+    '<div class="campus-detail-copy">' + units.length + ' flat' + (units.length === 1 ? '' : 's') + ' in this block.</div>' +
+    (units.length ? units.map(function(unit) {
+      var person = String(unit.ownerName || unit.tenantName || '').trim() || 'Vacant';
+      var tone = '';
+      (snap.complaints || []).some(function(item) {
+        if (item.unitId !== unit.id) return false;
+        tone = campusComplaintTone(item.status);
+        return !!tone;
+      });
+      return '<button type="button" class="campus-detail-row' + (person === 'Vacant' ? '' : ' is-live') + (tone ? ' is-' + tone : '') + '" onclick="window.showCampusUnit(\'' + String(unit.id).replace(/'/g, '') + '\')">Flat ' + campusText(unit.unitNumber) + ' · ' + campusText(person) + '</button>';
+    }).join('') : '<div class="campus-detail-copy">No flats are saved in this block.</div>');
+};
 
 window.syncCampusVisitor = function(pass, action) {
   if (!pass || !pass.id) return;
@@ -426,7 +474,7 @@ window.mountCampus3D = async function(model) {
   scene.fog = new THREE.Fog('#c5d4e4', 70, 160);
   var camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 300);
   var layout = model.layout || 'towers';
-  var wide = layout === 'villa' || layout === 'cghs' || layout === 'chb';
+  var wide = layout === 'villa' || layout === 'cghs' || layout === 'chb' || (model.towers || []).length > 3;
   scene.fog = new THREE.Fog('#c5d4e4', wide ? 90 : 70, wide ? 220 : 160);
   camera.position.set(wide ? 42 : 34, layout === 'villa' ? 36 : 28, wide ? 48 : 42);
 
@@ -436,7 +484,7 @@ window.mountCampus3D = async function(model) {
   controls.maxPolarAngle = Math.PI / 2.05;
   controls.minPolarAngle = 0.35;
   controls.minDistance = 16;
-  controls.maxDistance = (layout === 'villa' || layout === 'cghs' || layout === 'chb') ? 170 : 110;
+  controls.maxDistance = wide ? 190 : 110;
 
   scene.add(new THREE.HemisphereLight('#f4f7fb', '#6b8f71', 1.15));
   var sun = new THREE.DirectionalLight('#fff4e0', 1.65);
@@ -611,7 +659,10 @@ window.mountCampus3D = async function(model) {
   var span = Math.max(1, towers.length);
   var gap = span > 4 ? 11 : 14;
   var towerPos = {};
+  var towerGroups = [];
   towers.forEach(function(tower, index) {
+    var towerGroup = new THREE.Group();
+    towerGroup.userData = { kind: 'tower', id: tower.id };
     var units = (tower.units || []).slice(0, 48);
     var floors = Math.max(1, Math.ceil(units.length / 4));
     var height = tower.height || Math.min(26, 3.2 + floors * 1.15);
@@ -630,7 +681,7 @@ window.mountCampus3D = async function(model) {
       if (building) {
         building.position.set(x, 0, z);
         if (tower.yaw) building.rotation.y = tower.yaw;
-        scene.add(building);
+        towerGroup.add(building);
         var bounds = new THREE.Box3().setFromObject(building);
         front = {
           minX: bounds.min.x + 0.35,
@@ -657,18 +708,18 @@ window.mountCampus3D = async function(model) {
     body.position.set(x, height / 2, z);
     body.castShadow = true;
     body.receiveShadow = true;
-    scene.add(body);
+    towerGroup.add(body);
     var roof = new THREE.Mesh(
       new THREE.BoxGeometry(widthB + 0.4, 0.45, depth + 0.4),
       new THREE.MeshStandardMaterial({ color: '#5f6770', roughness: 0.5, metalness: 0.2 })
     );
     roof.position.set(x, height + 0.2, z);
     roof.castShadow = true;
-    scene.add(roof);
+    towerGroup.add(roof);
     }
     var name = label(tower.name);
     name.position.set(x, (usedModel ? front.maxY : height) + 1.8, z);
-    scene.add(name);
+    towerGroup.add(name);
 
     var windowCols = 4;
     var windowRows = Math.max(1, Math.ceil(Math.min(units.length, 48) / windowCols));
@@ -703,15 +754,15 @@ window.mountCampus3D = async function(model) {
         win.position.set(wx, wy, front.z);
         win.userData = { kind: 'unit', id: unit.id };
         win.castShadow = true;
-        scene.add(win);
+        towerGroup.add(win);
       }
       var ownerLabel = unitOwnerName(unit);
       var tag = unitTag(unit.unitNumber, ownerLabel, tone, ownerLabel !== 'Vacant');
-      var tagWidth = Math.min(2.6, Math.max(1.35, spanX / colsForUnit * 0.92));
+      var tagWidth = Math.min(1.7, Math.max(0.85, spanX / colsForUnit * 0.78));
       tag.scale.set(tagWidth, tagWidth * 0.33, 1);
       tag.position.set(wx, wy, front.z + 0.35);
       tag.userData = { kind: 'unit', id: unit.id };
-      scene.add(tag);
+      towerGroup.add(tag);
     });
 
     var parked = [];
@@ -738,14 +789,22 @@ window.mountCampus3D = async function(model) {
         shell.castShadow = cabin.castShadow = true;
         car.add(shell, cabin);
       }
-      car.position.set(x - 2.4 + (carIndex % 3) * 2.2, 0, z + depth / 2 + 2.4 + Math.floor(carIndex / 3) * 1.6);
-      car.rotation.y = Math.PI / 2;
+      var bay = tower.bays && tower.bays[carIndex];
+      if (bay) {
+        car.position.set(bay.x, 0, bay.z);
+        car.rotation.y = bay.yaw === 0 ? Math.PI / 2 : -Math.PI / 2;
+      } else {
+        car.position.set(x - 4.8 + carIndex * 3.6, 0, z + depth / 2 + 4);
+        car.rotation.y = Math.PI / 2;
+      }
       car.userData = { kind: 'vehicle', id: vehicle.id };
       var unitNo = (vehicle.unit && vehicle.unit.unitNumber) || '';
       var carTag = plate(vehicle.registrationNo || 'Vehicle', [unitNo ? 'Flat ' + unitNo : '', vehicle.parkingSlot ? 'Slot ' + vehicle.parkingSlot : ''].filter(Boolean).join(' · ') || 'Parked');
       car.add(carTag);
-      scene.add(car);
+      towerGroup.add(car);
     });
+    scene.add(towerGroup);
+    towerGroups.push(towerGroup);
   });
 
   (function dressSurroundings() {
@@ -823,9 +882,14 @@ window.mountCampus3D = async function(model) {
     }
     towers.forEach(function(tower) {
       var widePad = layout === 'villa' || layout === 'floors' ? 5.4 : 8.2;
-      slab(widePad, layout === 'villa' ? 5 : 6.4, '#e7e5e4', tower.x, tower.z + 0.4, 0.02);
-      slab(2.2, 4.2, '#d6d3d1', tower.x, tower.z + (layout === 'villa' ? 3.4 : 4.6), 0.04);
-      hedge(widePad * 0.7, 0.45, tower.x, tower.z - (layout === 'villa' ? 2.4 : 3.2));
+      slab(widePad, layout === 'villa' ? 5 : 6.4, '#e7e5e4', tower.x, tower.z + (tower.yaw ? -0.4 : 0.4), 0.02);
+      (tower.bays || []).forEach(function(bay) {
+        slab(3.1, 1.7, '#9ca3af', bay.x, bay.z, 0.03);
+        slab(2.5, 0.08, '#f8fafc', bay.x, bay.z + (tower.yaw ? -0.7 : 0.7), 0.05);
+      });
+      (tower.visitorBays || []).forEach(function(bay) {
+        slab(3.1, 1.7, '#dbeafe', bay.x, bay.z, 0.03);
+      });
     });
     if (layout === 'cghs') {
       slab(8, 5, '#86b36a', 0, centerZ, 0.025);
@@ -908,12 +972,17 @@ window.mountCampus3D = async function(model) {
       return (item.units || []).some(function(unit) { return unit.id === pass.unitId || unit.unitNumber === pass.residentUnit; });
     }) || towers[0];
     var home = tower && towerPos[tower.id] ? towerPos[tower.id] : { x: 0, z: -2 };
-    var lane = (slot % 3) - 1;
+    var lane = slot % 5;
+    var rank = Math.floor(slot / 5);
+    var holdX = gate.x - 9 + lane * 3.6;
+    var holdZ = gate.z + 8 + rank * 3.6;
+    var visitBay = tower && tower.visitorBays && tower.visitorBays[slot % tower.visitorBays.length];
     return {
-      far: { x: gate.x + lane * 2.4, z: gate.z + 16 },
-      outside: { x: gate.x + lane * 2.4, z: gate.z + 6.5 },
-      gate: { x: gate.x + lane * 0.35, z: gate.z },
-      tower: { x: home.x + lane * 2.2, z: home.z + 7.2 },
+      far: { x: holdX, z: gate.z + 16 + rank * 3.6 },
+      outside: { x: holdX, z: holdZ },
+      gate: { x: gate.x + (lane - 2) * 0.15, z: gate.z },
+      towerId: tower && tower.id,
+      tower: visitBay ? { x: visitBay.x, z: visitBay.z } : { x: home.x + (lane - 2) * 3.6, z: home.z + 12 },
     };
   }
   function makeVisitorCar(pass) {
@@ -1030,6 +1099,7 @@ window.mountCampus3D = async function(model) {
       }
       if (!data || !data.kind) continue;
       if (data.kind === 'unit') window.showCampusUnit(data.id);
+      else if (data.kind === 'tower') window.focusCampusTower(data.id);
       else if (data.kind === 'vehicle') window.showCampusVehicle(data.id);
       else if (data.kind === 'visit') window.showCampusVisit(data.id);
       else if (data.kind === 'guard') window.showCampusGuard(data.gateIndex, data.guardIndex);
@@ -1050,7 +1120,9 @@ window.mountCampus3D = async function(model) {
       if (obj.userData && obj.userData.kind === 'guard') obj.position.y = Math.sin(time * 2 + obj.userData.bob) * 0.06;
     });
     visitors.forEach(function(visitor) {
+      if (!visitor || !visitor.mesh || !visitor.from || !visitor.to) return;
       if (visitor.phase === 'wait' || visitor.phase === 'parked' || visitor.phase === 'done') return;
+      if (visitor.from.x == null || visitor.to.x == null) return;
       visitor.t += visitor.speed;
       if (visitor.t >= 1) {
         visitor.mesh.position.set(visitor.to.x, 0, visitor.to.z);
@@ -1091,13 +1163,40 @@ window.mountCampus3D = async function(model) {
     renderer.setSize(nextW, nextH);
   }
   window.addEventListener('resize', resize);
+  var overviewCamera = camera.position.clone();
+  var overviewTarget = controls.target.clone();
+  function focusTower(id) {
+    var single = id && id !== 'all';
+    var chosen = null;
+    towerGroups.forEach(function(group) {
+      var show = !single || group.userData.id === id;
+      group.visible = show;
+      if (show && single) chosen = group;
+    });
+    visitors.forEach(function(visitor) {
+      if (!visitor.mesh) return;
+      var homeId = visitor.spots && visitor.spots.towerId;
+      visitor.mesh.visible = !single || !homeId || homeId === id;
+    });
+    if (!chosen) {
+      camera.position.copy(overviewCamera);
+      controls.target.copy(overviewTarget);
+      return;
+    }
+    var spot = towerPos[id] || { x: 0, z: 0, height: 12 };
+    controls.target.set(spot.x, Math.min(6, spot.height * 0.28), spot.z);
+    camera.position.set(spot.x + 12, Math.max(8, spot.height * 0.45), spot.z + 16);
+    if (typeof window.showCampusTower === 'function') window.showCampusTower(id);
+  }
   window.__campus3D = {
     dispose: function() {
       window.removeEventListener('resize', resize);
       dispose();
     },
     syncVisitor: syncVisitor,
+    focusTower: focusTower,
   };
+  if (window.__campusTowerFocus && window.__campusTowerFocus !== 'all') focusTower(window.__campusTowerFocus);
   (window.__campusVisitorQueue || []).forEach(function(item) {
     if (item && item.pass) syncVisitor(item.pass, item.action);
   });
