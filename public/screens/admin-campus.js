@@ -547,23 +547,23 @@ window.mountCampus3D = async function(model) {
     if (tenant) return tenant;
     return 'Vacant';
   }
-  function unitTag(unitNumber, person, tone) {
+  function unitTag(unitNumber, person, tone, occupied) {
     var canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 168;
     var ctx = canvas.getContext('2d');
-    var stroke = tone === 'open' ? '#DC2626' : (tone === 'work' ? '#C2410C' : (tone === 'wait' ? '#B45309' : '#18181B'));
-    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    var stroke = tone === 'open' ? '#DC2626' : (tone === 'work' ? '#C2410C' : (tone === 'wait' ? '#B45309' : (occupied ? '#14532D' : '#A1A1AA')));
+    ctx.fillStyle = occupied ? '#14532D' : '#F4F4F5';
     ctx.fillRect(12, 12, 488, 144);
     ctx.strokeStyle = stroke;
     ctx.lineWidth = 8;
     ctx.strokeRect(12, 12, 488, 144);
-    ctx.fillStyle = '#18181B';
+    ctx.fillStyle = occupied ? '#FFFFFF' : '#3F3F46';
     ctx.font = '700 48px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(unitNumber || 'Flat').slice(0, 16), 256, 58);
-    ctx.fillStyle = '#3F3F46';
+    ctx.fillStyle = occupied ? '#DCFCE7' : '#A1A1AA';
     ctx.font = '500 36px sans-serif';
     ctx.fillText(String(person || 'Vacant').slice(0, 22), 256, 112);
     var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(canvas), transparent: true, depthWrite: false }));
@@ -705,7 +705,8 @@ window.mountCampus3D = async function(model) {
         win.castShadow = true;
         scene.add(win);
       }
-      var tag = unitTag(unit.unitNumber, unitOwnerName(unit), tone);
+      var ownerLabel = unitOwnerName(unit);
+      var tag = unitTag(unit.unitNumber, ownerLabel, tone, ownerLabel !== 'Vacant');
       var tagWidth = Math.min(2.6, Math.max(1.35, spanX / colsForUnit * 0.92));
       tag.scale.set(tagWidth, tagWidth * 0.33, 1);
       tag.position.set(wx, wy, front.z + 0.35);
