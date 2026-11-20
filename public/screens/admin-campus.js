@@ -41,6 +41,7 @@ window.loadLiveCampus = async function() {
     fetchFn('/api/complaints').catch(function() { return null; }),
     fetchFn('/api/entry-passes').catch(function() { return null; }),
     fetchFn('/api/staff/duty').catch(function() { return null; }),
+    fetchFn('/api/settings').catch(function() { return null; }),
   ]);
   async function read(res) {
     if (!res || !res.ok) return {};
@@ -57,8 +58,10 @@ window.loadLiveCampus = async function() {
   var complaints = complaintData.complaints || [];
   var passes = passData.passes || [];
   var duties = dutyData.duties || [];
+  var settingsData = await read(pack[5]);
+  var housingType = (settingsData.organization && settingsData.organization.housingType) || '';
 
-  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties };
+  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties, housingType: housingType };
   window.renderLiveCampus();
 };
 
@@ -76,6 +79,119 @@ function campusGateName(value) {
   if (/main/i.test(text) && /gate/i.test(text)) return 'Main Gate';
   if (/gate/i.test(text)) return text.length > 24 ? text.slice(0, 24) : text;
   return '';
+}
+
+function campusLayoutKind(housingType) {
+  var text = String(housingType || '').toLowerCase();
+  if (/villa|plotted|plot|row house|rowhouse|enclave/.test(text)) return 'villa';
+  if (/builder|floor/.test(text)) return 'floors';
+  if (/commercial|mixed/.test(text)) return 'commercial';
+  if (/chb|pocket/.test(text)) return 'chb';
+  if (/cghs|cooperative/.test(text)) return 'cghs';
+  return 'towers';
+}
+
+function campusLayoutLabel(kind, housingType) {
+  if (String(housingType || '').trim()) return String(housingType).trim();
+  if (kind === 'villa') return 'Plotted / Villa Gated Colony';
+  if (kind === 'floors') return 'Independent Builder Floors';
+  if (kind === 'commercial') return 'Commercial / Mixed-Use Complex';
+  if (kind === 'chb') return 'CHB Multi-Pocket Flats';
+  if (kind === 'cghs') return 'Cooperative Group Housing (CGHS)';
+  return 'Multi-Tower High-Rise Apartments';
+}
+
+function expandCampusStructures(towers, kind) {
+  if (kind === 'villa') {
+    var plots = [];
+    towers.forEach(function(tower) {
+      var units = tower.units && tower.units.length ? tower.units : [{ id: tower.id, unitNumber: tower.name }];
+      units.forEach(function(unit, index) {
+        if (plots.length >= 30) return;
+        plots.push({
+          id: String(tower.id) + ':' + (unit.id || index),
+          name: unit.unitNumber || tower.name,
+          units: [unit],
+        });
+      });
+    });
+    return plots.length ? plots : towers;
+  }
+  if (kind === 'floors') {
+    var houses = [];
+    towers.forEach(function(tower) {
+      var units = tower.units || [];
+      if (!units.length || units.length <= 6) {
+        houses.push(tower);
+        return;
+      }
+      for (var i = 0; i < units.length && houses.length < 16; i += 4) {
+        var slice = units.slice(i, i + 4);
+        houses.push({
+          id: String(tower.id) + ':f' + i,
+          name: tower.name,
+          units: slice,
+        });
+      }
+    });
+    return houses.length ? houses : towers;
+  }
+  return towers;
+}
+
+function placeCampusStructures(list, kind) {
+  var count = Math.max(1, list.length);
+  var maxZ = -8;
+  list.forEach(function(item, index) {
+    var floors = Math.max(1, Math.ceil(((item.units || []).length || 1) / 4));
+    var x = 0;
+    var z = -2;
+    var height = 12;
+    var yaw = 0;
+    if (kind === 'villa') {
+      var cols = Math.max(1, Math.ceil(Math.sqrt(count)));
+      var col = index % cols;
+      var row = Math.floor(index / cols);
+      x = (col - (cols - 1) / 2) * 7.2;
+      z = (row - (Math.ceil(count / cols) - 1) / 2) * 7.2 - 1;
+      height = 3.6 + (index % 3) * 0.55;
+      yaw = row % 2 ? Math.PI : 0;
+    } else if (kind === 'floors') {
+      x = (index - (count - 1) / 2) * 8.2;
+      z = index % 2 ? -5 : 1.2;
+      height = 6.8;
+      yaw = index % 2 ? 0 : Math.PI;
+    } else if (kind === 'cghs') {
+      var angle = (index / count) * Math.PI * 2 - Math.PI / 2;
+      var radius = Math.max(12, 7 + count * 1.8);
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius * 0.7;
+      height = Math.min(11, 5.2 + floors * 0.85);
+      yaw = angle + Math.PI;
+    } else if (kind === 'chb') {
+      var pocket = Math.floor(index / 3);
+      var seat = index % 3;
+      var pockets = Math.ceil(count / 3);
+      x = (pocket - (pockets - 1) / 2) * 15 + (seat - 1) * 4.4;
+      z = seat === 1 ? -7 : 1.6;
+      height = Math.min(14, 6.2 + floors * 0.75);
+    } else if (kind === 'commercial') {
+      x = (index - (count - 1) / 2) * 15;
+      z = index % 2 ? -4 : 2;
+      height = Math.min(12, 6 + floors * 0.5);
+    } else {
+      var gap = count > 4 ? 11 : 14;
+      x = (index - (count - 1) / 2) * gap;
+      z = -2;
+      height = Math.min(26, 3.2 + floors * 1.15);
+    }
+    item.x = x;
+    item.z = z;
+    item.height = height;
+    item.yaw = yaw;
+    if (z > maxZ) maxZ = z;
+  });
+  return maxZ + (kind === 'villa' ? 12 : 16);
 }
 
 function campusComplaintTone(status) {
@@ -154,7 +270,11 @@ window.renderLiveCampus = function() {
   });
 
   var openComplaints = (snap.complaints || []).filter(function(item) { return campusComplaintTone(item.status); });
-  window.__campusSubtitleBase = towers.length + ' block' + (towers.length === 1 ? '' : 's') + ' · ' + units.length + ' flats · ' + gateNames.length + ' gate' + (gateNames.length === 1 ? '' : 's') + ' · ';
+  var layoutKind = campusLayoutKind(snap.housingType);
+  var structures = expandCampusStructures(towers, layoutKind);
+  var gateZ = placeCampusStructures(structures, layoutKind);
+  var placeWord = layoutKind === 'villa' ? 'plot' : (layoutKind === 'floors' ? 'building' : 'block');
+  window.__campusSubtitleBase = campusLayoutLabel(layoutKind, snap.housingType) + ' · ' + towers.length + ' ' + placeWord + (towers.length === 1 ? '' : 's') + ' · ' + units.length + ' flats · ' + gateNames.length + ' gate' + (gateNames.length === 1 ? '' : 's') + ' · ';
   if (subtitle) {
     subtitle.textContent = window.__campusSubtitleBase + campusVisitorLine() + ' · ' + openComplaints.length + ' open complaints';
   }
@@ -175,7 +295,9 @@ window.renderLiveCampus = function() {
 
   stage.innerHTML = '<div id="campusViewport" class="campus-viewport"><div class="campus-viewport-note">Drag to look around. Scroll to zoom.</div></div>';
   window.mountCampus3D({
-    towers: towers,
+    towers: structures,
+    layout: layoutKind,
+    gateZ: gateZ,
     gateNames: gateNames,
     guardsByGate: guardsByGate,
     complaintsByUnit: complaintsByUnit,
@@ -259,34 +381,43 @@ window.mountCampus3D = async function(model) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   viewport.appendChild(renderer.domElement);
 
-  var kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [] };
+  var kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [], houses: [], blocks: [] };
   try {
     var gltfMod = await import('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js');
     var gltfLoader = new gltfMod.GLTFLoader();
     var kitRoot = 'https://cdn.jsdelivr.net/gh/shorepine/kenney@main/3d/';
-    function loadKit(path) {
+    function loadKit(url) {
       return new Promise(function(resolve) {
-        gltfLoader.load(kitRoot + path, function(gltf) { resolve(gltf.scene); }, undefined, function() { resolve(null); });
+        gltfLoader.load(url, function(gltf) { resolve(gltf.scene); }, undefined, function() { resolve(null); });
       });
     }
+    var localBuildings = '/models/modular/';
     var loadedKits = await Promise.all([
-      loadKit('car/sedan.glb'),
-      loadKit('car/suv.glb'),
-      loadKit('car/taxi.glb'),
-      loadKit('mini-characters/character-male-a.glb'),
-      loadKit('city-suburban/tree-large.glb'),
-      loadKit('city-commercial/building-skyscraper-a.glb'),
-      loadKit('city-commercial/building-skyscraper-b.glb'),
-      loadKit('city-commercial/building-skyscraper-c.glb'),
+      loadKit(kitRoot + 'car/sedan.glb'),
+      loadKit(kitRoot + 'car/suv.glb'),
+      loadKit(kitRoot + 'car/taxi.glb'),
+      loadKit(kitRoot + 'mini-characters/character-male-a.glb'),
+      loadKit(kitRoot + 'city-suburban/tree-large.glb'),
+      loadKit(kitRoot + 'city-suburban/tree-small.glb'),
+      loadKit(localBuildings + 'building-sample-tower-a.glb'),
+      loadKit(localBuildings + 'building-sample-tower-b.glb'),
+      loadKit(localBuildings + 'building-sample-tower-c.glb'),
+      loadKit(localBuildings + 'building-sample-tower-d.glb'),
+      loadKit(localBuildings + 'building-sample-house-a.glb'),
+      loadKit(localBuildings + 'building-sample-house-b.glb'),
+      loadKit(localBuildings + 'building-sample-house-c.glb'),
     ]);
     kit.car = loadedKits[0];
     kit.suv = loadedKits[1];
     kit.taxi = loadedKits[2];
     kit.guard = loadedKits[3];
     kit.tree = loadedKits[4];
-    kit.towers = [loadedKits[5], loadedKits[6], loadedKits[7]].filter(Boolean);
+    kit.treeSmall = loadedKits[5];
+    kit.towers = [loadedKits[6], loadedKits[7], loadedKits[8], loadedKits[9]].filter(Boolean);
+    kit.houses = [loadedKits[10], loadedKits[11], loadedKits[12]].filter(Boolean);
+    kit.blocks = kit.towers;
   } catch (err) {
-    kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [] };
+    kit = { car: null, suv: null, taxi: null, guard: null, tree: null, towers: [], houses: [], blocks: [] };
   }
   if (!document.getElementById('campusViewport')) return;
 
@@ -294,7 +425,10 @@ window.mountCampus3D = async function(model) {
   scene.background = new THREE.Color('#c5d4e4');
   scene.fog = new THREE.Fog('#c5d4e4', 70, 160);
   var camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 300);
-  camera.position.set(34, 28, 42);
+  var layout = model.layout || 'towers';
+  var wide = layout === 'villa' || layout === 'cghs' || layout === 'chb';
+  scene.fog = new THREE.Fog('#c5d4e4', wide ? 90 : 70, wide ? 220 : 160);
+  camera.position.set(wide ? 42 : 34, layout === 'villa' ? 36 : 28, wide ? 48 : 42);
 
   var controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -302,7 +436,7 @@ window.mountCampus3D = async function(model) {
   controls.maxPolarAngle = Math.PI / 2.05;
   controls.minPolarAngle = 0.35;
   controls.minDistance = 16;
-  controls.maxDistance = 110;
+  controls.maxDistance = (layout === 'villa' || layout === 'cghs' || layout === 'chb') ? 170 : 110;
 
   scene.add(new THREE.HemisphereLight('#f4f7fb', '#6b8f71', 1.15));
   var sun = new THREE.DirectionalLight('#fff4e0', 1.65);
@@ -311,10 +445,10 @@ window.mountCampus3D = async function(model) {
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 120;
-  sun.shadow.camera.left = -50;
-  sun.shadow.camera.right = 50;
-  sun.shadow.camera.top = 50;
-  sun.shadow.camera.bottom = -50;
+  sun.shadow.camera.left = -80;
+  sun.shadow.camera.right = 80;
+  sun.shadow.camera.top = 80;
+  sun.shadow.camera.bottom = -80;
   scene.add(sun);
 
   function canvasTex(canvas) {
@@ -337,28 +471,16 @@ window.mountCampus3D = async function(model) {
       ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(40,70,30,0.08)';
       ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 14, 4);
     }
-    ctx.fillStyle = '#d5d8dc';
-    ctx.fillRect(0, 690, 1024, 190);
-    ctx.fillStyle = '#5d656e';
-    ctx.fillRect(0, 718, 1024, 128);
-    ctx.fillStyle = '#c5ccd3';
-    ctx.fillRect(392, 120, 240, 760);
-    ctx.fillStyle = '#6b737c';
-    ctx.fillRect(430, 120, 164, 760);
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-    ctx.setLineDash([22, 18]);
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(0, 782);
-    ctx.lineTo(1024, 782);
-    ctx.moveTo(512, 120);
-    ctx.lineTo(512, 880);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    [[180, 140, 90, 70], [640, 220, 120, 80], [300, 700, 160, 90], [780, 640, 140, 100]].forEach(function(patch) {
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(patch[0], patch[1], patch[2], patch[3], 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
     return canvasTex(canvas);
   }
   var ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(120, 120),
+    new THREE.PlaneGeometry(220, 220),
     new THREE.MeshStandardMaterial({ map: satellite(), roughness: 0.95, metalness: 0 })
   );
   ground.rotation.x = -Math.PI / 2;
@@ -418,9 +540,39 @@ window.mountCampus3D = async function(model) {
     sprite.position.y = 2.05;
     return sprite;
   }
+  function unitOwnerName(unit) {
+    var owner = String((unit && unit.ownerName) || '').trim();
+    if (owner) return owner;
+    var tenant = String((unit && unit.tenantName) || '').trim();
+    if (tenant) return tenant;
+    return 'Vacant';
+  }
+  function unitTag(unitNumber, person, tone) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 168;
+    var ctx = canvas.getContext('2d');
+    var stroke = tone === 'open' ? '#DC2626' : (tone === 'work' ? '#C2410C' : (tone === 'wait' ? '#B45309' : '#18181B'));
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.fillRect(12, 12, 488, 144);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 8;
+    ctx.strokeRect(12, 12, 488, 144);
+    ctx.fillStyle = '#18181B';
+    ctx.font = '700 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(unitNumber || 'Flat').slice(0, 16), 256, 58);
+    ctx.fillStyle = '#3F3F46';
+    ctx.font = '500 36px sans-serif';
+    ctx.fillText(String(person || 'Vacant').slice(0, 22), 256, 112);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(canvas), transparent: true, depthWrite: false }));
+    sprite.scale.set(2.3, 0.76, 1);
+    return sprite;
+  }
 
-  function tree(x, z) {
-    var grown = placeModel(kit.tree, { height: 3.6 });
+  function tree(x, z, small) {
+    var grown = placeModel(small && kit.treeSmall ? kit.treeSmall : kit.tree, { height: small ? 2.3 : 3.8 });
     if (grown) {
       grown.position.set(x, 0, z);
       scene.add(grown);
@@ -436,8 +588,6 @@ window.mountCampus3D = async function(model) {
     group.position.set(x, 0, z);
     scene.add(group);
   }
-  [[-22, -8], [-18, 6], [20, -6], [24, 8], [-8, -16], [10, -18]].forEach(function(spot) { tree(spot[0], spot[1]); });
-
   function label(text) {
     var canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -463,19 +613,23 @@ window.mountCampus3D = async function(model) {
   var towerPos = {};
   towers.forEach(function(tower, index) {
     var units = (tower.units || []).slice(0, 48);
-    var floors = Math.max(4, Math.ceil(units.length / 4));
-    var height = Math.min(26, 3.2 + floors * 1.15);
-    var depth = 7;
-    var widthB = 8;
-    var x = (index - (span - 1) / 2) * gap;
-    var z = -2;
+    var floors = Math.max(1, Math.ceil(units.length / 4));
+    var height = tower.height || Math.min(26, 3.2 + floors * 1.15);
+    var depth = layout === 'villa' ? 4 : 7;
+    var widthB = layout === 'villa' ? 4.5 : (layout === 'commercial' ? 10 : 8);
+    var x = tower.x != null ? tower.x : (index - (span - 1) / 2) * gap;
+    var z = tower.z != null ? tower.z : -2;
     towerPos[tower.id] = { x: x, z: z, height: height };
     var usedModel = false;
     var front = { minX: x - widthB / 2 + 0.6, maxX: x + widthB / 2 - 0.6, minY: 1.2, maxY: height - 0.6, z: z + depth / 2 + 0.08 };
-    if (kit.towers.length) {
-      var building = placeModel(kit.towers[index % kit.towers.length], { height: height });
+    var modelSet = kit.towers;
+    if ((layout === 'villa' || layout === 'floors') && kit.houses.length) modelSet = kit.houses;
+    else if (kit.blocks.length && layout !== 'towers') modelSet = kit.blocks;
+    if (modelSet.length) {
+      var building = placeModel(modelSet[index % modelSet.length], { height: height });
       if (building) {
         building.position.set(x, 0, z);
+        if (tower.yaw) building.rotation.y = tower.yaw;
         scene.add(building);
         var bounds = new THREE.Box3().setFromObject(building);
         front = {
@@ -529,27 +683,34 @@ window.mountCampus3D = async function(model) {
       if (tone === 'open') color = '#ef4444';
       else if (tone === 'work') color = '#ea580c';
       else if (tone === 'wait') color = '#d97706';
-      if (usedModel && !tone) return;
+      var colsForUnit = units.length === 1 ? 1 : windowCols;
+      var rowsForUnit = units.length === 1 ? 1 : windowRows;
       var spanX = Math.max(1.2, front.maxX - front.minX);
       var spanY = Math.max(1.2, front.maxY - front.minY);
-      var win = new THREE.Mesh(
-        new THREE.BoxGeometry(Math.min(1.15, spanX / windowCols * 0.62), Math.min(0.72, spanY / windowRows * 0.55), 0.12),
-        new THREE.MeshStandardMaterial({
-          color: color,
-          emissive: tone ? color : (occupied ? '#f6e7bf' : '#000000'),
-          emissiveIntensity: tone ? 0.55 : (occupied ? 0.18 : 0),
-          roughness: 0.25,
-          metalness: 0.05,
-        })
-      );
-      win.position.set(
-        front.minX + ((col + 0.5) / windowCols) * spanX,
-        front.minY + ((row + 0.5) / windowRows) * spanY,
-        front.z
-      );
-      win.userData = { kind: 'unit', id: unit.id };
-      win.castShadow = true;
-      scene.add(win);
+      var wx = front.minX + ((col + 0.5) / colsForUnit) * spanX;
+      var wy = front.minY + ((row + 0.5) / rowsForUnit) * spanY;
+      if (!(usedModel && !tone)) {
+        var win = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.min(1.15, spanX / colsForUnit * 0.62), Math.min(0.72, spanY / rowsForUnit * 0.55), 0.12),
+          new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: tone ? color : (occupied ? '#f6e7bf' : '#000000'),
+            emissiveIntensity: tone ? 0.55 : (occupied ? 0.18 : 0),
+            roughness: 0.25,
+            metalness: 0.05,
+          })
+        );
+        win.position.set(wx, wy, front.z);
+        win.userData = { kind: 'unit', id: unit.id };
+        win.castShadow = true;
+        scene.add(win);
+      }
+      var tag = unitTag(unit.unitNumber, unitOwnerName(unit), tone);
+      var tagWidth = Math.min(2.6, Math.max(1.35, spanX / colsForUnit * 0.92));
+      tag.scale.set(tagWidth, tagWidth * 0.33, 1);
+      tag.position.set(wx, wy, front.z + 0.35);
+      tag.userData = { kind: 'unit', id: unit.id };
+      scene.add(tag);
     });
 
     var parked = [];
@@ -586,11 +747,123 @@ window.mountCampus3D = async function(model) {
     });
   });
 
+  (function dressSurroundings() {
+    if (!towers.length) return;
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minZ = Infinity;
+    var maxZ = -Infinity;
+    towers.forEach(function(tower) {
+      minX = Math.min(minX, tower.x);
+      maxX = Math.max(maxX, tower.x);
+      minZ = Math.min(minZ, tower.z);
+      maxZ = Math.max(maxZ, tower.z);
+    });
+    var gateLine = model.gateZ || 18;
+    var left = minX - (layout === 'villa' ? 7 : 11);
+    var right = maxX + (layout === 'villa' ? 7 : 11);
+    var back = minZ - 8;
+    var front = gateLine;
+    function slab(w, d, color, x, z, y) {
+      var mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.05, d),
+        new THREE.MeshStandardMaterial({ color: color, roughness: 0.94 })
+      );
+      mesh.position.set(x, y, z);
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+    }
+    function hedge(w, d, x, z) {
+      var mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.55, d),
+        new THREE.MeshStandardMaterial({ color: '#3f7d3a', roughness: 0.85 })
+      );
+      mesh.position.set(x, 0.28, z);
+      mesh.castShadow = true;
+      scene.add(mesh);
+    }
+    function boundary(x1, z1, x2, z2) {
+      var dx = x2 - x1;
+      var dz = z2 - z1;
+      var length = Math.sqrt(dx * dx + dz * dz);
+      if (length < 0.8) return;
+      var wall = new THREE.Mesh(
+        new THREE.BoxGeometry(length, 1.2, 0.32),
+        new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.5 })
+      );
+      wall.position.set((x1 + x2) / 2, 0.6, (z1 + z2) / 2);
+      wall.rotation.y = Math.atan2(dz, dx);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      scene.add(wall);
+      var cap = new THREE.Mesh(
+        new THREE.BoxGeometry(length, 0.12, 0.46),
+        new THREE.MeshStandardMaterial({ color: '#18181b', roughness: 0.4 })
+      );
+      cap.position.set((x1 + x2) / 2, 1.24, (z1 + z2) / 2);
+      cap.rotation.y = wall.rotation.y;
+      scene.add(cap);
+    }
+    var centerZ = (minZ + maxZ) / 2;
+    slab(Math.max(8, right - left - 4), Math.max(8, front - back - 6), '#7ea35a', (left + right) / 2, (back + front) / 2 - 1, 0.012);
+    var roadStart = maxZ + (layout === 'villa' ? 3.2 : 4.8);
+    var roadEnd = front + 8;
+    var roadLength = Math.max(6, roadEnd - roadStart);
+    var roadZ = (roadStart + roadEnd) / 2;
+    slab(7.4, roadLength, '#d4d4d8', 0, roadZ, 0.02);
+    slab(5.4, roadLength - 0.4, '#4b5563', 0, roadZ, 0.035);
+    var dashCount = Math.max(3, Math.floor(roadLength / 3.2));
+    for (var dash = 0; dash < dashCount; dash++) {
+      slab(0.18, 1.3, '#f8fafc', 0, roadStart + 1.4 + dash * 3.2, 0.05);
+    }
+    if (towers.length > 1) {
+      slab(right - left - 6, 4.2, '#d4d4d8', (left + right) / 2, roadStart, 0.02);
+      slab(right - left - 8, 2.6, '#4b5563', (left + right) / 2, roadStart, 0.035);
+    }
+    towers.forEach(function(tower) {
+      var widePad = layout === 'villa' || layout === 'floors' ? 5.4 : 8.2;
+      slab(widePad, layout === 'villa' ? 5 : 6.4, '#e7e5e4', tower.x, tower.z + 0.4, 0.02);
+      slab(2.2, 4.2, '#d6d3d1', tower.x, tower.z + (layout === 'villa' ? 3.4 : 4.6), 0.04);
+      hedge(widePad * 0.7, 0.45, tower.x, tower.z - (layout === 'villa' ? 2.4 : 3.2));
+    });
+    if (layout === 'cghs') {
+      slab(8, 5, '#86b36a', 0, centerZ, 0.025);
+      tree(-2.2, centerZ - 0.4, true);
+      tree(2.2, centerZ + 0.6, true);
+      tree(0, centerZ + 1.4);
+    }
+    boundary(left, back, right, back);
+    boundary(left, back, left, front);
+    boundary(right, back, right, front);
+    var openings = (model.gateNames || ['Main Gate']).map(function(name, index, all) {
+      return (index - (all.length - 1) / 2) * 12;
+    });
+    if (!openings.length) openings = [0];
+    var cursor = left;
+    openings.slice().sort(function(a, b) { return a - b; }).forEach(function(opening) {
+      var gapStart = Math.max(left, opening - 3.4);
+      var gapEnd = Math.min(right, opening + 3.4);
+      boundary(cursor, front, gapStart, front);
+      cursor = gapEnd;
+    });
+    boundary(cursor, front, right, front);
+    hedge(Math.max(2, right - left - 2), 0.7, (left + right) / 2, back + 1.1);
+    var plant = back + 2;
+    while (plant < front - 3) {
+      tree(left + 1.6, plant, plant % 2 > 0.5);
+      tree(right - 1.6, plant, plant % 2 < 0.5);
+      plant += layout === 'villa' ? 6.5 : 8;
+    }
+    for (var edge = left + 4; edge < right - 3; edge += 8) {
+      tree(edge, back + 2.4, true);
+    }
+  })();
+
   var gates = model.gateNames || ['Main Gate'];
   var gatePos = {};
   gates.forEach(function(name, index) {
     var x = (index - (gates.length - 1) / 2) * 12;
-    var z = 18;
+    var z = model.gateZ || 18;
     gatePos[name] = { x: x, z: z };
     var pillarMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.4 });
     [-2.2, 2.2].forEach(function(offset) {
