@@ -19,6 +19,7 @@ Screens['admin-campus'] = function() {
         </div>
       </div>
       <div class="campus-legend" id="campusLegend"></div>
+      <div class="campus-tower-bar" id="campusGateBar"></div>
       <div class="campus-tower-bar" id="campusTowerBar"></div>
       <div class="campus-layout">
         <div class="campus-stage" id="campusStage">
@@ -44,6 +45,7 @@ window.loadLiveCampus = async function() {
     fetchFn('/api/entry-passes').catch(function() { return null; }),
     fetchFn('/api/staff/duty').catch(function() { return null; }),
     fetchFn('/api/settings').catch(function() { return null; }),
+    fetchFn('/api/staff').catch(function() { return null; }),
   ]);
   async function read(res) {
     if (!res || !res.ok) return {};
@@ -61,9 +63,14 @@ window.loadLiveCampus = async function() {
   var passes = passData.passes || [];
   var duties = dutyData.duties || [];
   var settingsData = await read(pack[5]);
+  var staffData = await read(pack[6]);
   var housingType = (settingsData.organization && settingsData.organization.housingType) || '';
+  var savedGates = []
+    .concat(dutyData.gates || [], staffData.gates || [])
+    .map(function(name) { return String(name || '').trim(); })
+    .filter(Boolean);
 
-  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties, housingType: housingType, gates: dutyData.gates || [] };
+  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties, housingType: housingType, gates: savedGates };
   window.renderLiveCampus();
 };
 
@@ -251,12 +258,11 @@ window.renderLiveCampus = function() {
     gateNames.push(clean);
   }
   (snap.gates || []).forEach(addGate);
-  if (!gateNames.length) {
-    (snap.duties || []).forEach(function(duty) {
-      if (String(duty.category || '').toUpperCase() !== 'SECURITY' && !/guard|gate|security/i.test(String(duty.role || '') + ' ' + String(duty.locationPost || ''))) return;
-      addGate(duty.locationPost && /gate/i.test(duty.locationPost) ? duty.locationPost : (campusGateName(duty.locationPost) || campusGateName(duty.blockName)));
-    });
-  }
+  (snap.duties || []).forEach(function(duty) {
+    var post = String(duty.locationPost || '').trim();
+    if (/gate/i.test(post)) addGate(post);
+    else addGate(campusGateName(duty.blockName));
+  });
   if (!gateNames.length) gateNames = ['Main Gate'];
 
   var guardsByGate = {};
@@ -306,6 +312,13 @@ window.renderLiveCampus = function() {
     }).join('');
   }
 
+  var gateBar = document.getElementById('campusGateBar');
+  if (gateBar) {
+    gateBar.innerHTML = gateNames.map(function(name) {
+      return '<button type="button" class="campus-tower-btn" onclick="window.focusCampusGate(' + JSON.stringify(name) + ')">' + campusText(name) + '</button>';
+    }).join('');
+  }
+
   var towerBar = document.getElementById('campusTowerBar');
   if (towerBar) {
     var focusId = window.__campusTowerFocus || 'all';
@@ -340,9 +353,20 @@ function campusVisitorLine() {
   return outsideN + ' waiting outside · ' + insideN + ' inside';
 }
 
+window.focusCampusGate = function(name) {
+  window.__campusTowerFocus = 'all';
+  var buttons = document.querySelectorAll('#campusGateBar .campus-tower-btn');
+  for (var i = 0; i < buttons.length; i++) {
+    var onclick = buttons[i].getAttribute('onclick') || '';
+    if (onclick.indexOf(JSON.stringify(name)) !== -1) buttons[i].classList.add('is-active');
+    else buttons[i].classList.remove('is-active');
+  }
+  if (window.__campus3D && typeof window.__campus3D.focusGate === 'function') window.__campus3D.focusGate(name);
+};
+
 window.focusCampusTower = function(id) {
   window.__campusTowerFocus = id || 'all';
-  var buttons = document.querySelectorAll('.campus-tower-btn');
+  var buttons = document.querySelectorAll('#campusTowerBar .campus-tower-btn');
   for (var i = 0; i < buttons.length; i++) {
     var onclick = buttons[i].getAttribute('onclick') || '';
     var selected = window.__campusTowerFocus === 'all' ? onclick.indexOf("'all'") !== -1 : onclick.indexOf("'" + window.__campusTowerFocus + "'") !== -1;
@@ -833,8 +857,22 @@ window.mountCampus3D = async function(model) {
       maxZ = Math.max(maxZ, tower.z);
     });
     var gateLine = model.gateZ || 18;
+    var gateNames = model.gateNames && model.gateNames.length ? model.gateNames : ['Main Gate'];
     var left = minX - (layout === 'villa' ? 7 : 11);
     var right = maxX + (layout === 'villa' ? 7 : 11);
+    var neededWidth = gateNames.length <= 1 ? 0 : (gateNames.length - 1) * 16 + 18;
+    if (right - left < neededWidth) {
+      var grow = (neededWidth - (right - left)) / 2;
+      left -= grow;
+      right += grow;
+    }
+    var gateMargin = 9;
+    model.gateSlots = gateNames.map(function(name, index) {
+      var x = gateNames.length === 1
+        ? 0
+        : left + gateMargin + ((right - left - gateMargin * 2) * index) / (gateNames.length - 1);
+      return { name: name, x: x };
+    });
     var back = minZ - 8;
     var front = gateLine;
     function slab(w, d, color, x, z, y) {
@@ -883,12 +921,14 @@ window.mountCampus3D = async function(model) {
     var roadEnd = front + 8;
     var roadLength = Math.max(6, roadEnd - roadStart);
     var roadZ = (roadStart + roadEnd) / 2;
-    slab(7.4, roadLength, '#d4d4d8', 0, roadZ, 0.02);
-    slab(5.4, roadLength - 0.4, '#4b5563', 0, roadZ, 0.035);
-    var dashCount = Math.max(3, Math.floor(roadLength / 3.2));
-    for (var dash = 0; dash < dashCount; dash++) {
-      slab(0.18, 1.3, '#f8fafc', 0, roadStart + 1.4 + dash * 3.2, 0.05);
-    }
+    (model.gateSlots || [{ x: 0 }]).forEach(function(slot) {
+      slab(7.4, roadLength, '#d4d4d8', slot.x, roadZ, 0.02);
+      slab(5.4, roadLength - 0.4, '#4b5563', slot.x, roadZ, 0.035);
+      var dashCount = Math.max(3, Math.floor(roadLength / 3.2));
+      for (var dash = 0; dash < dashCount; dash++) {
+        slab(0.18, 1.3, '#f8fafc', slot.x, roadStart + 1.4 + dash * 3.2, 0.05);
+      }
+    });
     if (towers.length > 1) {
       slab(right - left - 6, 4.2, '#d4d4d8', (left + right) / 2, roadStart, 0.02);
       slab(right - left - 8, 2.6, '#4b5563', (left + right) / 2, roadStart, 0.035);
@@ -913,11 +953,7 @@ window.mountCampus3D = async function(model) {
     boundary(left, back, right, back);
     boundary(left, back, left, front);
     boundary(right, back, right, front);
-    var openingNames = model.gateNames || ['Main Gate'];
-    var openingGap = openingNames.length > 8 ? 7 : (openingNames.length > 5 ? 9 : 12);
-    var openings = openingNames.map(function(name, index, all) {
-      return (index - (all.length - 1) / 2) * openingGap;
-    });
+    var openings = (model.gateSlots || [{ x: 0 }]).map(function(slot) { return slot.x; });
     if (!openings.length) openings = [0];
     var cursor = left;
     openings.slice().sort(function(a, b) { return a - b; }).forEach(function(opening) {
@@ -939,11 +975,12 @@ window.mountCampus3D = async function(model) {
     }
   })();
 
-  var gates = model.gateNames || ['Main Gate'];
-  var gateGap = gates.length > 8 ? 7 : (gates.length > 5 ? 9 : 12);
+  var gates = (model.gateSlots || []).map(function(slot) { return slot.name; });
+  if (!gates.length) gates = model.gateNames || ['Main Gate'];
   var gatePos = {};
   gates.forEach(function(name, index) {
-    var x = (index - (gates.length - 1) / 2) * gateGap;
+    var slot = (model.gateSlots || [])[index];
+    var x = slot ? slot.x : 0;
     var z = model.gateZ || 18;
     gatePos[name] = { x: x, z: z };
     var pillarMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.4 });
@@ -1221,6 +1258,13 @@ window.mountCampus3D = async function(model) {
     },
     syncVisitor: syncVisitor,
     focusTower: focusTower,
+    focusGate: function(name) {
+      focusTower('all');
+      var spot = gatePos[name];
+      if (!spot) return;
+      controls.target.set(spot.x, 1.6, spot.z);
+      camera.position.set(spot.x + 8, 14, spot.z + 16);
+    },
   };
   if (window.__campusTowerFocus && window.__campusTowerFocus !== 'all') focusTower(window.__campusTowerFocus);
   (window.__campusVisitorQueue || []).forEach(function(item) {

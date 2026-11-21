@@ -1345,6 +1345,30 @@ window.refreshWizMapPreview = function(rawVal) {
   }
 };
 
+window.onboardingLayoutKind = function(housingType) {
+  var text = String(housingType || '');
+  if (/CGHS|Cooperative/i.test(text)) return 'cghs';
+  if (/Plot|Villa/i.test(text)) return 'plots';
+  if (/CHB/i.test(text)) return 'chb';
+  if (/Commercial|Mixed/i.test(text)) return 'shops';
+  if (/Builder/i.test(text)) return 'floors';
+  return 'towers';
+};
+
+window.chooseOnboardingLayout = function(kind) {
+  var types = {
+    towers: 'Multi-Tower Apartments',
+    plots: 'Plotted / Villa Colony',
+    cghs: 'Cooperative Group Housing (CGHS)',
+    chb: 'CHB Housing Complex',
+    floors: 'Builder Floors',
+    shops: 'Commercial / Mixed-Use Complex',
+  };
+  window.adaptStructureForHousingType(types[kind] || types.towers);
+  if (typeof showToast === 'function') showToast('Layout updated. Edit the blocks below if you need to.', 'success');
+  Router.go('onboarding-2');
+};
+
 // Adapt structure to specific housing layout
 window.adaptStructureForHousingType = function(housingType) {
   const state = window.getOnboardingState();
@@ -1372,6 +1396,19 @@ window.adaptStructureForHousingType = function(housingType) {
       { id: 'b1', name: 'Pocket A (Cat-I)', floors: 4, unitsPerFloor: 4, unitPrefix: 'P1-', defaultType: 'Category I', areaSqft: 1450 },
       { id: 'b2', name: 'Pocket B (Cat-II)', floors: 4, unitsPerFloor: 4, unitPrefix: 'P2-', defaultType: 'Category II', areaSqft: 1100 },
       { id: 'b3', name: 'Pocket C (Cat-III)', floors: 4, unitsPerFloor: 4, unitPrefix: 'P3-', defaultType: 'Category III', areaSqft: 850 }
+    ];
+    state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
+    state.structure.generateShareCert = false;
+  } else if (housingType === 'Builder Floors') {
+    state.structure.blocks = [
+      { id: 'b1', name: 'Building 1', floors: 4, unitsPerFloor: 1, unitPrefix: 'B1-', defaultType: '3BHK', areaSqft: 1600 },
+      { id: 'b2', name: 'Building 2', floors: 4, unitsPerFloor: 1, unitPrefix: 'B2-', defaultType: '3BHK', areaSqft: 1600 }
+    ];
+    state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
+    state.structure.generateShareCert = false;
+  } else if (housingType === 'Commercial / Mixed-Use Complex') {
+    state.structure.blocks = [
+      { id: 'b1', name: 'Shop Block', floors: 2, unitsPerFloor: 6, unitPrefix: 'S-', defaultType: 'Shop / Commercial', areaSqft: 450 }
     ];
     state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
     state.structure.generateShareCert = false;
@@ -1460,17 +1497,18 @@ window.recomputeStructureUnits = function(state) {
 // Add block or wing
 window.addStructureBlock = function() {
   const state = window.getOnboardingState();
-  const isCGHS = (state.society.housingType || '').includes('CGHS') || (state.society.housingType || '').includes('Cooperative');
+  const kind = window.onboardingLayoutKind(state.society.housingType);
   const nextLetter = String.fromCharCode(65 + state.structure.blocks.length);
+  const placeName = { towers: 'Tower', plots: 'Phase', cghs: 'Block', chb: 'Pocket', floors: 'Building', shops: 'Block' }[kind] || 'Block';
 
   const newBlock = {
     id: 'b_' + Date.now(),
-    name: isCGHS ? `Block ${nextLetter}` : `Tower ${nextLetter}`,
-    floors: isCGHS ? 4 : 6,
-    unitsPerFloor: isCGHS ? 2 : 4,
+    name: placeName + ' ' + nextLetter,
+    floors: kind === 'plots' ? 1 : (kind === 'cghs' || kind === 'floors' ? 4 : 6),
+    unitsPerFloor: kind === 'plots' ? 10 : (kind === 'floors' ? 1 : (kind === 'cghs' ? 2 : 4)),
     unitPrefix: `${nextLetter}-`,
-    defaultType: isCGHS ? 'Category A (3 BHK)' : '2BHK',
-    areaSqft: isCGHS ? 1850 : 1450
+    defaultType: kind === 'plots' ? 'Villa' : (kind === 'shops' ? 'Shop / Commercial' : (kind === 'cghs' ? 'Category A (3 BHK)' : '2BHK')),
+    areaSqft: kind === 'plots' ? 2500 : (kind === 'shops' ? 450 : (kind === 'cghs' ? 1850 : 1450))
   };
 
   state.structure.blocks.push(newBlock);
@@ -1543,7 +1581,15 @@ window.applyStructurePreset = function(preset, doNavigate = true) {
     state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
     state.structure.generateShareCert = true;
     state.structure.shareCertPrefix = 'SC-';
+  } else if (preset === 'plots-small') {
+    state.society.housingType = 'Plotted / Villa Colony';
+    state.structure.blocks = [
+      { id: 'b1', name: 'Phase 1', floors: 1, unitsPerFloor: 10, unitPrefix: 'Plot-', defaultType: 'Villa', areaSqft: 2400 }
+    ];
+    state.structure.numberingStyle = 'BLOCK_SERIAL';
+    state.structure.generateShareCert = false;
   } else if (preset === 'high-rise') {
+    state.society.housingType = 'Multi-Tower Apartments';
     state.structure.blocks = [
       { id: 'b1', name: 'Tower A', floors: 10, unitsPerFloor: 4, unitPrefix: 'A-', defaultType: '3BHK', areaSqft: 1950 },
       { id: 'b2', name: 'Tower B', floors: 10, unitsPerFloor: 4, unitPrefix: 'B-', defaultType: '3BHK', areaSqft: 1950 },
@@ -1551,7 +1597,15 @@ window.applyStructurePreset = function(preset, doNavigate = true) {
     ];
     state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
     state.structure.generateShareCert = false;
+  } else if (preset === 'one-tower') {
+    state.society.housingType = 'Multi-Tower Apartments';
+    state.structure.blocks = [
+      { id: 'b1', name: 'Tower A', floors: 8, unitsPerFloor: 4, unitPrefix: 'A-', defaultType: '3BHK', areaSqft: 1650 }
+    ];
+    state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
+    state.structure.generateShareCert = false;
   } else if (preset === 'mid-rise') {
+    state.society.housingType = 'Multi-Tower Apartments';
     state.structure.blocks = [
       { id: 'b1', name: 'Wing 1', floors: 4, unitsPerFloor: 4, unitPrefix: 'W1-', defaultType: '2BHK', areaSqft: 1350 },
       { id: 'b2', name: 'Wing 2', floors: 4, unitsPerFloor: 4, unitPrefix: 'W2-', defaultType: '2BHK', areaSqft: 1350 }
@@ -1559,6 +1613,7 @@ window.applyStructurePreset = function(preset, doNavigate = true) {
     state.structure.numberingStyle = 'BLOCK_FLOOR_UNIT';
     state.structure.generateShareCert = false;
   } else if (preset === 'plots') {
+    state.society.housingType = 'Plotted / Villa Colony';
     state.structure.blocks = [
       { id: 'b1', name: 'Phase 1 - North', floors: 1, unitsPerFloor: 20, unitPrefix: 'Plot-', defaultType: 'Villa', areaSqft: 2500 },
       { id: 'b2', name: 'Phase 2 - South', floors: 1, unitsPerFloor: 15, unitPrefix: 'Villa-', defaultType: 'Villa', areaSqft: 3200 }
@@ -1566,6 +1621,7 @@ window.applyStructurePreset = function(preset, doNavigate = true) {
     state.structure.numberingStyle = 'BLOCK_SERIAL';
     state.structure.generateShareCert = false;
   } else if (preset === 'chb-pockets') {
+    state.society.housingType = 'CHB Housing Complex';
     state.structure.blocks = [
       { id: 'b1', name: 'Pocket A (Cat-I)', floors: 4, unitsPerFloor: 4, unitPrefix: 'P1-', defaultType: 'Category I', areaSqft: 1450 },
       { id: 'b2', name: 'Pocket B (Cat-II)', floors: 4, unitsPerFloor: 4, unitPrefix: 'P2-', defaultType: 'Category II', areaSqft: 1100 },
@@ -2554,81 +2610,66 @@ Screens['onboarding-2'] = function() {
   const blocks = state.structure.blocks || [];
   const units = state.structure.generatedUnits || [];
   const totalFloors = blocks.reduce((acc, b) => acc + (parseInt(b.floors) || 0), 0);
-  const totalArea = units.reduce((acc, u) => acc + (parseFloat(u.areaSqft) || 0), 0);
-  const isCGHS = (state.society.housingType || '').includes('CGHS') || (state.society.housingType || '').includes('Cooperative');
-  const isPlotted = (state.society.housingType || '').includes('Plotted') || (state.society.housingType || '').includes('Villa');
+  const kind = window.onboardingLayoutKind(state.society.housingType);
+  const isCGHS = kind === 'cghs';
+  const isPlotted = kind === 'plots';
+  const words = {
+    towers: { add: 'Add a tower', count: 'towers', unit: 'flats', per: 'Flats on each floor', floors: 'Floors' },
+    plots: { add: 'Add a phase', count: 'phases', unit: 'plots', per: 'Number of plots', floors: 'Floors' },
+    cghs: { add: 'Add a block', count: 'blocks', unit: 'flats', per: 'Flats on each floor', floors: 'Floors' },
+    chb: { add: 'Add a pocket', count: 'pockets', unit: 'flats', per: 'Flats on each floor', floors: 'Floors' },
+    floors: { add: 'Add a building', count: 'buildings', unit: 'flats', per: 'Flats on each floor', floors: 'Floors' },
+    shops: { add: 'Add a block', count: 'blocks', unit: 'shops', per: 'Shops on each floor', floors: 'Floors' },
+  }[kind];
+  const layoutChoices = [
+    ['towers', 'Towers', 'Flats stacked in towers'],
+    ['plots', 'Plots', 'Villas or open plots'],
+    ['cghs', 'CGHS', 'Cooperative blocks'],
+    ['chb', 'CHB', 'Pockets by category'],
+    ['floors', 'Builder floors', 'A few floors each'],
+    ['shops', 'Shops', 'Shops or mixed use'],
+  ];
+  const sizeChoices = {
+    towers: [['one-tower', '1 tower'], ['mid-rise', '2 wings'], ['high-rise', '3 towers']],
+    plots: [['plots-small', '10 plots'], ['plots', '35 plots']],
+    cghs: [['cghs-compact', '2 blocks'], ['cghs-lowrise', '4 blocks']],
+    chb: [['chb-pockets', '3 pockets']],
+    floors: [],
+    shops: [],
+  }[kind];
 
   const numberingStyle = state.structure.numberingStyle || 'BLOCK_FLOOR_UNIT';
   const generateShareCert = state.structure.generateShareCert !== false;
 
   return wizardLayout(2, `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
-          <h2 style="margin-bottom:0;">Configure Property Structure</h2>
-          <span class="badge ${isCGHS ? 'badge-green' : 'badge-blue'}" style="font-size:11px;padding:3px 10px;">
-            ${isCGHS ? '🏛️ Cooperative Group Housing (CGHS)' : (isPlotted ? '🏘️ Plotted Enclave' : '🏢 Multi-Tower')}
-          </span>
-        </div>
-        <p class="wiz-desc" style="margin-bottom:0;">
-          ${isCGHS 
-            ? 'Architectural layout tailored for CGHS: Configure multi-block wings, cooperative flat categories (Cat-A HIG, Cat-B MIG), floor distributions, and share certificate folios.' 
-            : 'Decide the architectural layout of your society: blocks, towers, floors, and generated units.'}
-        </p>
+        <h2 style="margin-bottom:4px;">How is this society built?</h2>
+        <p class="wiz-desc" style="margin-bottom:0;">Pick a layout. You can switch it any time on this step. Then set how many homes each block has.</p>
       </div>
-      <button class="btn btn-primary" onclick="addStructureBlock()" style="font-weight:700;box-shadow:var(--shadow-blue);padding:8px 16px;">
-        ${isCGHS ? '+ Add CGHS Block / Wing' : '+ Add Tower / Block'}
-      </button>
+      <button class="btn btn-primary" onclick="addStructureBlock()" style="font-weight:700;padding:8px 16px;">${words.add}</button>
     </div>
 
-    <!-- Quick Presets Row Tailored to Housing Type -->
-    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="font-size:11px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.04em;">Architecture Presets:</span>
-        ${isCGHS ? `
-          <button class="onboarding-preset-pill ${units.length === 32 ? 'active' : ''}" onclick="applyStructurePreset('cghs-lowrise')">
-            <span>🏛️</span>
-            <span>Low-Rise CGHS (4 Blocks · 4 Floors · 32 Flats)</span>
-          </button>
-          <button class="onboarding-preset-pill ${units.length === 64 ? 'active' : ''}" onclick="applyStructurePreset('cghs-midrise')">
-            <span>🏢</span>
-            <span>Mid/High-Rise CGHS (2 Towers · 8 Floors · 64 Flats)</span>
-          </button>
-          <button class="onboarding-preset-pill ${units.length === 48 ? 'active' : ''}" onclick="applyStructurePreset('cghs-categories')">
-            <span>📑</span>
-            <span>Category-Wise CGHS (HIG 24 + MIG 24 = 48 Flats)</span>
-          </button>
-          <button class="onboarding-preset-pill ${units.length === 16 ? 'active' : ''}" onclick="applyStructurePreset('cghs-compact')">
-            <span>🏛️</span>
-            <span>Compact CGHS (2 Wings · 4 Floors · 16 Flats)</span>
-          </button>
-        ` : (isPlotted ? `
-          <button class="onboarding-preset-pill" onclick="applyStructurePreset('plots')">
-            <span>🏘️</span>
-            <span>Plotted Enclave (35 Plots)</span>
-          </button>
-        ` : `
-          <button class="onboarding-preset-pill" onclick="applyStructurePreset('high-rise')">
-            <span>🏢</span>
-            <span>3 Towers · 28 Floors (112 Units)</span>
-          </button>
-          <button class="onboarding-preset-pill" onclick="applyStructurePreset('mid-rise')">
-            <span>🏢</span>
-            <span>2 Wings · 4 Floors (32 Units)</span>
-          </button>
-          <button class="onboarding-preset-pill" onclick="applyStructurePreset('plots')">
-            <span>🏘️</span>
-            <span>Plotted Enclave (35 Plots)</span>
-          </button>
-        `)}
-      </div>
-
-      ${isCGHS ? `
-        <button class="btn btn-ghost btn-sm" onclick="applyStructurePreset('cghs-lowrise')" title="Reset to standard 32 flat CGHS layout" style="font-size:11px;color:var(--blue);font-weight:700;">
-          🔄 Apply Typical CGHS Layout
-        </button>
-      ` : ''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:14px;">
+      ${layoutChoices.map(function(choice) {
+        var on = kind === choice[0];
+        return '<button type="button" onclick="chooseOnboardingLayout(\'' + choice[0] + '\')" style="text-align:left;padding:12px;border-radius:2px;cursor:pointer;background:#fff;border:' + (on ? '2px solid #18181B' : '1px solid #E4E4E7') + ';">' +
+          '<div style="font-size:14px;font-weight:700;color:#18181B;">' + choice[1] + '</div>' +
+          '<div style="font-size:12px;color:#71717A;margin-top:2px;">' + choice[2] + '</div>' +
+        '</button>';
+      }).join('')}
     </div>
+
+    ${sizeChoices.length ? `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        <span style="font-size:13px;color:#52525B;">Start from</span>
+        ${sizeChoices.map(function(choice) {
+          return '<button type="button" class="btn btn-secondary btn-sm" onclick="applyStructurePreset(\'' + choice[0] + '\')">' + choice[1] + '</button>';
+        }).join('')}
+      </div>
+    ` : ''}
+
+    <div style="font-size:14px;font-weight:650;color:#18181B;margin-bottom:14px;">${blocks.length} ${words.count} · ${units.length} ${words.unit}${isPlotted ? '' : ' · ' + totalFloors + ' floors'}</div>
 
     <!-- CGHS Custom Settings Bar -->
     ${isCGHS ? `
@@ -2650,29 +2691,8 @@ Screens['onboarding-2'] = function() {
             <span>Generate Cooperative Share Certificates (SC-001, SC-002...)</span>
           </label>
         </div>
-        <span class="badge badge-muted" style="font-size:11px;">Statutory CGHS Compliance ✓</span>
       </div>
     ` : ''}
-
-    <!-- Summary KPI Counter Banner -->
-    <div class="onboarding-kpi-grid" style="margin-bottom:20px;">
-      <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-        <div style="font-size:24px;font-weight:800;color:var(--blue);">${blocks.length}</div>
-        <div style="font-size:12px;color:var(--text-muted);font-weight:600;">${isCGHS ? 'Blocks / Wings' : 'Towers / Blocks'}</div>
-      </div>
-      <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-        <div style="font-size:24px;font-weight:800;color:var(--green);">${totalFloors}</div>
-        <div style="font-size:12px;color:var(--text-muted);font-weight:600;">Total Society Floors</div>
-      </div>
-      <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-        <div style="font-size:24px;font-weight:800;color:var(--purple);">${units.length}</div>
-        <div style="font-size:12px;color:var(--text-muted);font-weight:600;">${isCGHS ? 'Cooperative Society Flats' : 'Generated Units'}</div>
-      </div>
-      <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-        <div style="font-size:24px;font-weight:800;color:#F59E0B;">${totalArea.toLocaleString('en-IN')}</div>
-        <div style="font-size:12px;color:var(--text-muted);font-weight:600;">Total Covered SqFt</div>
-      </div>
-    </div>
 
     <!-- Dynamic Tower / Block Cards -->
     <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
@@ -2698,31 +2718,30 @@ Screens['onboarding-2'] = function() {
                 <input type="text" class="form-input" value="${b.name}" 
                   style="font-size:15px;font-weight:800;width:160px;padding:6px 10px;" 
                   onchange="updateBlockField(${idx}, 'name', this.value);Router.go('onboarding-2');" />
-                <span class="badge badge-blue" style="font-weight:700;">${floorsNum * unitsPerFloorNum} Flats</span>
-                <span class="badge badge-muted" style="font-size:11px;">${floorsNum} Floors · ${unitsPerFloorNum} flats/floor</span>
+                <span class="badge badge-blue" style="font-weight:700;">${floorsNum * unitsPerFloorNum} ${words.unit}</span>
               </div>
-              <button class="btn btn-ghost btn-sm" onclick="removeStructureBlock(${idx})" style="color:var(--red);font-weight:600;" title="Remove Block">✕ Delete Block</button>
+              <button class="btn btn-ghost btn-sm" onclick="removeStructureBlock(${idx})" style="color:var(--red);font-weight:600;">Remove</button>
             </div>
 
             <!-- Parameters Grid -->
             <div class="onboarding-tower-grid" style="margin-bottom:16px;">
-              <div>
-                <label class="form-label" style="font-size:11px;font-weight:600;">Floors</label>
+              ${isPlotted ? '' : `<div>
+                <label class="form-label" style="font-size:11px;font-weight:600;">${words.floors}</label>
                 <input type="number" class="form-input" min="1" max="50" value="${b.floors}" 
                   onchange="updateBlockField(${idx}, 'floors', parseInt(this.value)||1);Router.go('onboarding-2');" style="width:100%;font-weight:700;" />
-              </div>
+              </div>`}
               <div>
-                <label class="form-label" style="font-size:11px;font-weight:600;">Flats / Floor</label>
-                <input type="number" class="form-input" min="1" max="20" value="${b.unitsPerFloor}" 
+                <label class="form-label" style="font-size:11px;font-weight:600;">${words.per}</label>
+                <input type="number" class="form-input" min="1" max="${isPlotted ? 200 : 20}" value="${b.unitsPerFloor}" 
                   onchange="updateBlockField(${idx}, 'unitsPerFloor', parseInt(this.value)||1);Router.go('onboarding-2');" style="width:100%;font-weight:700;" />
               </div>
               <div>
-                <label class="form-label" style="font-size:11px;font-weight:600;">Number Prefix</label>
+                <label class="form-label" style="font-size:11px;font-weight:600;">Number starts with</label>
                 <input type="text" class="form-input" value="${b.unitPrefix}" 
                   onchange="updateBlockField(${idx}, 'unitPrefix', this.value);Router.go('onboarding-2');" style="width:100%;font-weight:700;" />
               </div>
               <div>
-                <label class="form-label" style="font-size:11px;font-weight:600;">Flat Category / Type</label>
+                <label class="form-label" style="font-size:11px;font-weight:600;">Type</label>
                 <select class="form-select" onchange="handleUnitTypeSelect(${idx}, this.value)" style="width:100%;font-weight:600;">
                   ${isCGHS ? `
                     <option value="Category A (3 BHK)" ${b.defaultType === 'Category A (3 BHK)' ? 'selected' : ''}>Category A (3 BHK · HIG)</option>
@@ -2743,7 +2762,7 @@ Screens['onboarding-2'] = function() {
                 </select>
               </div>
               <div>
-                <label class="form-label" style="font-size:11px;font-weight:600;">Avg Area (SqFt)</label>
+                <label class="form-label" style="font-size:11px;font-weight:600;">Size (sq ft)</label>
                 <input type="number" class="form-input" value="${b.areaSqft || 1850}" 
                   onchange="updateBlockField(${idx}, 'areaSqft', parseFloat(this.value)||1850);Router.go('onboarding-2');" style="width:100%;font-weight:700;" />
               </div>
@@ -2752,8 +2771,8 @@ Screens['onboarding-2'] = function() {
             <!-- Live Floor-by-Floor Interactive Matrix -->
             <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:var(--r-md);padding:12px;">
               <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
-                <span>Floor Elevation & Unit Distribution Preview (${floorsNum} Floors)</span>
-                <span style="font-size:11px;color:var(--text-muted);">${blockUnits.length} Flats mapped</span>
+                <span>${isPlotted ? 'Plot numbers' : 'Flats that will be created'}</span>
+                <span style="font-size:11px;color:var(--text-muted);">${blockUnits.length}</span>
               </div>
 
               <div style="display:flex;flex-direction:column;gap:4px;">
@@ -2763,16 +2782,16 @@ Screens['onboarding-2'] = function() {
                     <div class="matrix-floor-row" style="margin-bottom:4px;padding:4px 8px;">
                       <div class="matrix-floor-label">
                         <span>🏢</span>
-                        <span>Floor ${f}</span>
+                        <span>${isPlotted ? 'Plots' : 'Floor ' + f}</span>
                       </div>
                       <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-                        ${floorUnits.map(u => `
+                        ${floorUnits.slice(0, 12).map(u => `
                           <div class="matrix-unit-chip" title="Unit: ${u.unitNumber} | ${u.unitType} | ${u.areaSqft} sqft ${u.shareCertificateNo ? '| Folio: ' + u.shareCertificateNo : ''}">
                             <span style="color:var(--blue);">${u.unitNumber}</span>
                             <span class="cat-tag">${u.unitType.replace(/Category\s*/, 'Cat-').split(' ')[0]}</span>
                             ${u.shareCertificateNo ? `<span style="font-size:9px;color:var(--text-muted);font-family:monospace;">${u.shareCertificateNo}</span>` : ''}
                           </div>
-                        `).join('')}
+                        `).join('')}${floorUnits.length > 12 ? '<span style="font-size:12px;color:#71717A;align-self:center;">+' + (floorUnits.length - 12) + ' more</span>' : ''}
                       </div>
                     </div>
                   `;
@@ -2782,36 +2801,6 @@ Screens['onboarding-2'] = function() {
           </div>
         `;
       }).join('')}
-    </div>
-
-    <!-- Live Visual Structure Tree Preview -->
-    <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:var(--r-lg);padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.03);">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:6px;">
-        <div style="font-size:13px;font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:6px;">
-          <span>🌳</span>
-          <span>Live Structure Tree Preview</span>
-        </div>
-        <span style="font-size:11px;color:var(--green);font-weight:700;">✓ ${units.length} units ready to be provisioned in database</span>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
-        <div style="font-weight:800;color:var(--blue);">🏛️ ${state.society.name || 'Society Organization'}</div>
-        ${blocks.map(b => {
-          const blockUnits = units.filter(u => u.blockName === b.name);
-          const sampleUnits = blockUnits.slice(0, 10).map(u => u.unitNumber).join(', ');
-          return `
-            <div style="padding-left:18px;border-left:2px solid #CBD5E1;display:flex;flex-direction:column;gap:4px;">
-              <div style="font-weight:700;color:var(--text-primary);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span>├── 🏠 ${b.name} (${b.floors} Floors · ${b.unitsPerFloor} flats/floor)</span>
-                <span class="badge badge-muted" style="font-size:10px;">${b.defaultType} · ${b.areaSqft} sqft</span>
-              </div>
-              <div style="font-size:11px;color:var(--text-secondary);padding-left:18px;font-family:monospace;word-break:break-all;">
-                └── Flats: ${sampleUnits} ${blockUnits.length > 10 ? `... and ${blockUnits.length - 10} more` : ''}
-              </div>
-            </div>
-          `;
-        }).join('')}
-      </div>
     </div>
   `);
 };
