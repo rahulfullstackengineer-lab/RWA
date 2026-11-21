@@ -1235,12 +1235,27 @@ window.readStaffAccessChecks = function(prefix) {
 };
 
 // Add Staff Modal
-window.addStaffGateOption = function(prefix) {
+window.addStaffGateOption = async function(prefix) {
   var input = document.getElementById(prefix + 'NewGate');
   var select = document.getElementById(prefix + 'Gate');
   if (!input || !select) return;
   var name = String(input.value || '').trim();
   if (!name) return;
+  var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save_gate', name: name }),
+  }) : fetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save_gate', name: name }),
+  }));
+  var data = await res.json().catch(function() { return {}; });
+  if (!res.ok) {
+    if (typeof window.showToast === 'function') window.showToast(data.error || 'Could not add the gate', 'error');
+    return;
+  }
+  window.__staffGateOptions = data.gates || [];
   var exists = Array.prototype.some.call(select.options, function(option) { return option.value.toLowerCase() === name.toLowerCase(); });
   if (!exists) {
     var option = document.createElement('option');
@@ -1250,11 +1265,13 @@ window.addStaffGateOption = function(prefix) {
   }
   select.value = name;
   input.value = '';
+  if (typeof window.renderSocietyGates === 'function') window.renderSocietyGates();
+  if (typeof window.showToast === 'function') window.showToast(window.__staffGateOptions.length + ' gates saved. Live Campus will show each one.', 'success');
 };
 
 window.staffGateField = function(prefix, selected) {
   var chosen = selected && selected !== 'Not assigned' ? selected : '';
-  var names = ['Main Gate', 'Gate 2'].concat(window.__staffGateOptions || []);
+  var names = (window.__staffGateOptions || []).slice();
   if (chosen && names.indexOf(chosen) === -1) names.push(chosen);
   var seen = {};
   var options = '<option value="">Not assigned</option>' + names.filter(function(name) {
@@ -1268,7 +1285,7 @@ window.staffGateField = function(prefix, selected) {
   }).join('');
   return '<div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">' +
     '<div style="font-size:13px;font-weight:800;color:#0F172A;">Gate assignment</div>' +
-    '<div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Choose the gate this guard stands at. Live Campus shows them at that gate. Add a gate if the society has more than the ones listed.</div>' +
+    '<div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Choose the gate this guard stands at. Add gate saves it for the society, and Live Campus draws one entrance for every saved gate.</div>' +
     '<label class="form-label">Assigned gate</label>' +
     '<select id="' + prefix + 'Gate" class="form-select" style="width:100%;">' + options + '</select>' +
     '<div style="display:flex;gap:8px;margin-top:8px;">' +
@@ -1858,7 +1875,7 @@ window.loadLiveStaffScreen = async function() {
     if (res.ok) {
       var data = await res.json();
       window.__cachedStaffList = data.staff || [];
-      window.__staffGateOptions = data.gates || window.__staffGateOptions || [];
+      window.__staffGateOptions = data.gates || [];
       window.__cachedStaffPayments = data.payments || [];
       window.__cachedStaffMetrics = data.metrics || {};
     }
@@ -1893,6 +1910,74 @@ window.loadLiveStaffScreen = async function() {
   if (elPending) elPending.textContent = (metrics.pendingDisbursementCount || 0) + ' Due (₹' + (metrics.pendingDisbursementAmount || 0).toLocaleString('en-IN') + ')';
 
   window.renderStaffTable();
+  if (typeof window.renderSocietyGates === 'function') window.renderSocietyGates();
+};
+
+window.renderSocietyGates = function() {
+  var list = document.getElementById('societyGateList');
+  var count = document.getElementById('societyGateCount');
+  var gates = window.__staffGateOptions || [];
+  if (count) count.textContent = gates.length + (gates.length === 1 ? ' gate' : ' gates');
+  if (!list) return;
+  if (!gates.length) {
+    list.innerHTML = '<div style="font-size:13px;color:#71717A;">No gates saved yet. Add each entrance. Live Campus draws that many gates.</div>';
+    return;
+  }
+  list.innerHTML = gates.map(function(name) {
+    var safe = String(name).replace(/[&<>"']/g, function(ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+    return '<span style="display:inline-flex;align-items:center;gap:8px;border:1px solid #E4E4E7;background:#fff;border-radius:2px;padding:6px 8px;font-size:13px;font-weight:650;color:#18181B;">' +
+      safe +
+      '<button type="button" data-gate="' + safe + '" onclick="window.removeSocietyGate(this.getAttribute(\'data-gate\'))" style="border:0;background:transparent;color:#71717A;cursor:pointer;font-size:12px;">Remove</button>' +
+    '</span>';
+  }).join('');
+};
+
+window.saveSocietyGate = async function() {
+  var input = document.getElementById('societyGateName');
+  var name = input ? String(input.value || '').trim() : '';
+  if (!name) {
+    if (typeof window.showToast === 'function') window.showToast('Enter a gate name', 'error');
+    return;
+  }
+  var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save_gate', name: name }),
+  }) : fetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'save_gate', name: name }),
+  }));
+  var data = await res.json().catch(function() { return {}; });
+  if (!res.ok) {
+    if (typeof window.showToast === 'function') window.showToast(data.error || 'Could not add the gate', 'error');
+    return;
+  }
+  window.__staffGateOptions = data.gates || [];
+  if (input) input.value = '';
+  window.renderSocietyGates();
+  if (typeof window.showToast === 'function') window.showToast(window.__staffGateOptions.length + ' gates saved', 'success');
+};
+
+window.removeSocietyGate = async function(name) {
+  var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove_gate', name: name }),
+  }) : fetch('/api/staff', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'remove_gate', name: name }),
+  }));
+  var data = await res.json().catch(function() { return {}; });
+  if (!res.ok) {
+    if (typeof window.showToast === 'function') window.showToast(data.error || 'Could not remove the gate', 'error');
+    return;
+  }
+  window.__staffGateOptions = data.gates || [];
+  window.renderSocietyGates();
 };
 
 // Render Staff Table Rows
@@ -2060,6 +2145,21 @@ Screens['admin-staff'] = function() {
           <div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">Staff due for monthly disbursement</div>
         </div>
         -->
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div class="card-title">Society gates</div>
+          <span class="badge badge-green" id="societyGateCount">0 gates</span>
+        </div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:13px;color:#52525B;">Add every entrance here. Live Campus draws one gate for each name, and you can assign a guard to a gate from Edit Staff.</div>
+          <div id="societyGateList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="societyGateName" class="form-input" placeholder="Gate name, e.g. Main Gate or Gate 2" style="flex:1;min-width:220px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.saveSocietyGate();}" />
+            <button type="button" class="btn btn-primary btn-sm" onclick="window.saveSocietyGate()">Add gate</button>
+          </div>
+        </div>
       </div>
 
       <div class="card">

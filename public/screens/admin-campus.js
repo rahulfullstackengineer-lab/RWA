@@ -15,6 +15,7 @@ Screens['admin-campus'] = function() {
         <div class="page-header-left">
           <div class="page-title">Society structure</div>
           <div class="page-subtitle" id="campusSubtitle">Loading gates, blocks, guards, vehicles, visitors, and complaints.</div>
+          <div class="page-subtitle" id="campusGateLine"></div>
         </div>
       </div>
       <div class="campus-legend" id="campusLegend"></div>
@@ -62,7 +63,7 @@ window.loadLiveCampus = async function() {
   var settingsData = await read(pack[5]);
   var housingType = (settingsData.organization && settingsData.organization.housingType) || '';
 
-  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties, housingType: housingType };
+  window.__campusSnapshot = { units: units, blocks: blocks, vehicles: vehicles, complaints: complaints, passes: passes, duties: duties, housingType: housingType, gates: dutyData.gates || [] };
   window.renderLiveCampus();
 };
 
@@ -245,14 +246,17 @@ window.renderLiveCampus = function() {
 
   var gateNames = [];
   function addGate(name) {
-    if (!name || gateNames.indexOf(name) !== -1) return;
-    gateNames.push(name);
+    var clean = String(name || '').trim();
+    if (!clean || gateNames.some(function(existing) { return existing.toLowerCase() === clean.toLowerCase(); })) return;
+    gateNames.push(clean);
   }
-  (snap.duties || []).forEach(function(duty) {
-    if (String(duty.category || '').toUpperCase() !== 'SECURITY' && !/guard|gate|security/i.test(String(duty.role || '') + ' ' + String(duty.locationPost || ''))) return;
-    addGate(campusGateName(duty.locationPost) || campusGateName(duty.blockName) || (duty.locationPost ? String(duty.locationPost).slice(0, 24) : ''));
-  });
-  (snap.passes || []).forEach(function(pass) { addGate(campusGateName(pass.gateNumber) || 'Main Gate'); });
+  (snap.gates || []).forEach(addGate);
+  if (!gateNames.length) {
+    (snap.duties || []).forEach(function(duty) {
+      if (String(duty.category || '').toUpperCase() !== 'SECURITY' && !/guard|gate|security/i.test(String(duty.role || '') + ' ' + String(duty.locationPost || ''))) return;
+      addGate(duty.locationPost && /gate/i.test(duty.locationPost) ? duty.locationPost : (campusGateName(duty.locationPost) || campusGateName(duty.blockName)));
+    });
+  }
   if (!gateNames.length) gateNames = ['Main Gate'];
 
   var guardsByGate = {};
@@ -264,8 +268,13 @@ window.renderLiveCampus = function() {
   (snap.duties || []).forEach(function(duty) {
     var security = String(duty.category || '').toUpperCase() === 'SECURITY' || /guard|gate|security/i.test(String(duty.role || '') + ' ' + String(duty.locationPost || ''));
     if (!security) return;
-    var gate = campusGateName(duty.locationPost) || campusGateName(duty.blockName);
-    if (!gate || !guardsByGate[gate]) gate = gateNames[0];
+    var posted = String(duty.locationPost || duty.blockName || '').trim().toLowerCase();
+    var gate = gateNames.find(function(name) { return name.toLowerCase() === posted; });
+    if (!gate) {
+      var normalized = campusGateName(duty.locationPost) || campusGateName(duty.blockName);
+      gate = normalized && gateNames.find(function(name) { return name.toLowerCase() === normalized.toLowerCase() || campusGateName(name).toLowerCase() === normalized.toLowerCase(); });
+    }
+    if (!gate) gate = gateNames[0];
     guardsByGate[gate].push(duty);
   });
 
@@ -277,6 +286,10 @@ window.renderLiveCampus = function() {
   window.__campusSubtitleBase = campusLayoutLabel(layoutKind, snap.housingType) + ' · ' + towers.length + ' ' + placeWord + (towers.length === 1 ? '' : 's') + ' · ' + units.length + ' flats · ' + gateNames.length + ' gate' + (gateNames.length === 1 ? '' : 's') + ' · ';
   if (subtitle) {
     subtitle.textContent = window.__campusSubtitleBase + campusVisitorLine() + ' · ' + openComplaints.length + ' open complaints';
+  }
+  var gateLine = document.getElementById('campusGateLine');
+  if (gateLine) {
+    gateLine.textContent = gateNames.length + (gateNames.length === 1 ? ' gate: ' : ' gates: ') + gateNames.join(', ');
   }
   if (legend) {
     legend.innerHTML = [
@@ -900,8 +913,10 @@ window.mountCampus3D = async function(model) {
     boundary(left, back, right, back);
     boundary(left, back, left, front);
     boundary(right, back, right, front);
-    var openings = (model.gateNames || ['Main Gate']).map(function(name, index, all) {
-      return (index - (all.length - 1) / 2) * 12;
+    var openingNames = model.gateNames || ['Main Gate'];
+    var openingGap = openingNames.length > 8 ? 7 : (openingNames.length > 5 ? 9 : 12);
+    var openings = openingNames.map(function(name, index, all) {
+      return (index - (all.length - 1) / 2) * openingGap;
     });
     if (!openings.length) openings = [0];
     var cursor = left;
@@ -925,9 +940,10 @@ window.mountCampus3D = async function(model) {
   })();
 
   var gates = model.gateNames || ['Main Gate'];
+  var gateGap = gates.length > 8 ? 7 : (gates.length > 5 ? 9 : 12);
   var gatePos = {};
   gates.forEach(function(name, index) {
-    var x = (index - (gates.length - 1) / 2) * 12;
+    var x = (index - (gates.length - 1) / 2) * gateGap;
     var z = model.gateZ || 18;
     gatePos[name] = { x: x, z: z };
     var pillarMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.4 });
@@ -965,8 +981,18 @@ window.mountCampus3D = async function(model) {
   });
 
   var visitors = [];
+  function resolveGate(value) {
+    var posted = String(value || '').trim().toLowerCase();
+    var exact = gates.find(function(name) { return name.toLowerCase() === posted; });
+    if (exact) return exact;
+    var normalized = campusGateName(value);
+    var fuzzy = normalized && gates.find(function(name) {
+      return name.toLowerCase() === normalized.toLowerCase() || campusGateName(name).toLowerCase() === normalized.toLowerCase();
+    });
+    return fuzzy || gates[0];
+  }
   function visitorSpots(pass, slot) {
-    var gateName = campusGateName(pass.gateNumber) || gates[0];
+    var gateName = resolveGate(pass.gateNumber);
     var gate = gatePos[gateName] || gatePos[gates[0]] || { x: 0, z: 18 };
     var tower = towers.find(function(item) {
       return (item.units || []).some(function(unit) { return unit.id === pass.unitId || unit.unitNumber === pass.residentUnit; });

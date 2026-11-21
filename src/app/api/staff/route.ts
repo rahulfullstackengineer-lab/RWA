@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAdmin, hashPassword } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
 import { findUserByPhone, normalizePhone, societyMembershipBlock } from '@/lib/phone'
+import { listSocietyGates, rememberSocietyGate, saveSocietyGates } from '@/lib/society-gates'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -414,7 +415,12 @@ function saveStoredStaffData(orgId: string, data: OrgStaffStore) {
         allData = JSON.parse(fs.readFileSync(STAFF_DATA_PATH, 'utf-8'))
       } catch (e) {}
     }
-    allData[orgId] = data
+    const previous = allData[orgId] && typeof allData[orgId] === 'object' ? allData[orgId] : {}
+    allData[orgId] = {
+      ...previous,
+      staff: data.staff,
+      payments: data.payments,
+    }
     fs.writeFileSync(STAFF_DATA_PATH, JSON.stringify(allData, null, 2), 'utf-8')
   } catch (e) {
     console.error('Error saving staff store:', e)
@@ -466,11 +472,7 @@ export async function GET(request: Request) {
       const post = duty?.locationPost && duty.locationPost !== 'Not assigned' ? duty.locationPost : ''
       return { ...rest, locationPost: post }
     })
-    const gates = Array.from(new Set([
-      'Main Gate',
-      'Gate 2',
-      ...duties.map((row) => row.locationPost).filter((post): post is string => Boolean(post) && post !== 'Not assigned'),
-    ]))
+    const gates = listSocietyGates(orgId)
 
     return NextResponse.json({
       staff,
@@ -494,6 +496,19 @@ export async function POST(request: Request) {
     const { action = 'create_staff' } = body
 
     const data = getStoredStaffData(orgId)
+
+    if (action === 'save_gate') {
+      const name = String(body.name || '').trim()
+      if (!name) return NextResponse.json({ error: 'Enter a gate name' }, { status: 400 })
+      const gates = rememberSocietyGate(orgId, name)
+      return NextResponse.json({ success: true, gates })
+    }
+
+    if (action === 'remove_gate') {
+      const name = String(body.name || '').trim().toLowerCase()
+      const gates = saveSocietyGates(orgId, listSocietyGates(orgId).filter((gate) => gate.toLowerCase() !== name))
+      return NextResponse.json({ success: true, gates })
+    }
 
     if (action === 'disburse_salary') {
       const {
@@ -702,6 +717,7 @@ export async function POST(request: Request) {
         },
       })
 
+      if (locationPost) rememberSocietyGate(orgId, locationPost)
       const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE', locationPost }, existingDuty || undefined)
       const dutyNotes = notesWithAccess(existingDuty?.notes, newStaff.portalAccess || defaultPortalAccess(department))
       if (existingDuty) {
@@ -850,6 +866,7 @@ export async function PATCH(request: Request) {
         },
       })
 
+      if (locationPost) rememberSocietyGate(orgId, locationPost)
       const dutyFields = dutyFieldsFromStaff({ ...staffMember, locationPost }, existingDuty || undefined)
       const access = staffMember.portalAccess && staffMember.portalAccess.length
         ? staffMember.portalAccess

@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
 import { societyMembershipBlock } from '@/lib/phone'
+import { listSocietyGates } from '@/lib/society-gates'
 
 const SAMPLE_STAFF_PHONES = [
   '9876543231', '9876543232', '9876543233', '9876543234', '9876543235',
@@ -133,6 +134,7 @@ export async function GET(request: Request) {
       success: true,
       duties,
       metrics,
+      gates: listSocietyGates(orgId),
     })
   } catch (err: any) {
     console.error('Error fetching staff duty roster:', err)
