@@ -37,6 +37,7 @@ export interface StaffRecord {
   supervisorPhone?: string
   reliefName?: string
   reliefPhone?: string
+  locationPost?: string
   createdAt: string
   updatedAt?: string
 }
@@ -469,8 +470,9 @@ export async function GET(request: Request) {
         const sameName = row.staffName.trim().toLowerCase() === String(rest.name || '').trim().toLowerCase()
         return samePhone || sameName
       })
-      const post = duty?.locationPost && duty.locationPost !== 'Not assigned' ? duty.locationPost : ''
-      return { ...rest, locationPost: post }
+      const dutyPost = duty?.locationPost && duty.locationPost !== 'Not assigned' ? duty.locationPost : ''
+      const savedPost = rest.locationPost && rest.locationPost !== 'Not assigned' ? rest.locationPost : ''
+      return { ...rest, locationPost: dutyPost || savedPost }
     })
     const gates = listSocietyGates(orgId)
 
@@ -701,11 +703,15 @@ export async function POST(request: Request) {
       aadhaarNumber: aadhaarNumber.trim(),
       emergencyContact: emergencyContact.trim(),
       portalAccess: cleanPortalAccess(portalAccess, department),
+      locationPost: String(locationPost || '').trim(),
       createdAt: new Date().toISOString(),
     }
 
     data.staff.unshift(newStaff)
     saveStoredStaffData(orgId, data)
+    if (newStaff.locationPost && newStaff.locationPost !== 'Not assigned') {
+      rememberSocietyGate(orgId, newStaff.locationPost)
+    }
 
     // Sync to Prisma: StaffDuty & User (for guard/staff login)
     try {
@@ -717,19 +723,20 @@ export async function POST(request: Request) {
         },
       })
 
-      if (locationPost) rememberSocietyGate(orgId, locationPost)
-      const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE', locationPost }, existingDuty || undefined)
+      const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE', locationPost: newStaff.locationPost || '' }, existingDuty || undefined)
       const dutyNotes = notesWithAccess(existingDuty?.notes, newStaff.portalAccess || defaultPortalAccess(department))
+      const gateName = newStaff.locationPost && newStaff.locationPost !== 'Not assigned' ? newStaff.locationPost : null
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: { ...dutyFields, category: cat, notes: dutyNotes },
+          data: { ...dutyFields, blockName: gateName, category: cat, notes: dutyNotes },
         })
       } else {
         await prisma.staffDuty.create({
           data: {
             organizationId: orgId,
             ...dutyFields,
+            blockName: gateName,
             category: cat,
             notes: dutyNotes,
           },
@@ -839,6 +846,7 @@ export async function PATCH(request: Request) {
     if (supervisorPhone !== undefined) staffMember.supervisorPhone = String(supervisorPhone).trim()
     if (reliefName !== undefined) staffMember.reliefName = String(reliefName).trim()
     if (reliefPhone !== undefined) staffMember.reliefPhone = String(reliefPhone).trim()
+    if (locationPost !== undefined) staffMember.locationPost = String(locationPost || '').trim()
     staffMember.updatedAt = new Date().toISOString()
 
     saveStoredStaffData(orgId, data)
@@ -866,8 +874,12 @@ export async function PATCH(request: Request) {
         },
       })
 
-      if (locationPost) rememberSocietyGate(orgId, locationPost)
-      const dutyFields = dutyFieldsFromStaff({ ...staffMember, locationPost }, existingDuty || undefined)
+      if (locationPost !== undefined && staffMember.locationPost && staffMember.locationPost !== 'Not assigned') rememberSocietyGate(orgId, staffMember.locationPost)
+      const { locationPost: storedPost, ...staffWithoutPost } = staffMember
+      const dutyFields = dutyFieldsFromStaff({
+        ...staffWithoutPost,
+        ...(locationPost !== undefined ? { locationPost: storedPost || '' } : {}),
+      }, existingDuty || undefined)
       const access = staffMember.portalAccess && staffMember.portalAccess.length
         ? staffMember.portalAccess
         : defaultPortalAccess(staffMember.department)
@@ -885,7 +897,7 @@ export async function PATCH(request: Request) {
       if (existingDuty) {
         await prisma.staffDuty.update({
           where: { id: existingDuty.id },
-          data: { ...dutyFields, ...clock, phone: targetPhone, category: cat, notes: dutyNotes },
+          data: { ...dutyFields, ...clock, phone: targetPhone, category: cat, notes: dutyNotes, ...(locationPost !== undefined ? { blockName: staffMember.locationPost || null } : {}) },
         })
       } else {
         await prisma.staffDuty.create({
@@ -894,6 +906,7 @@ export async function PATCH(request: Request) {
             ...dutyFields,
             ...clock,
             phone: targetPhone,
+            blockName: staffMember.locationPost || null,
             category: cat,
             notes: dutyNotes,
           },

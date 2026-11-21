@@ -1235,6 +1235,12 @@ window.readStaffAccessChecks = function(prefix) {
 };
 
 // Add Staff Modal
+window.chosenStaffGate = function(prefix) {
+  var typed = String((document.getElementById(prefix + 'NewGate') || {}).value || '').trim();
+  var selected = String((document.getElementById(prefix + 'Gate') || {}).value || '').trim();
+  return typed || selected;
+};
+
 window.addStaffGateOption = async function(prefix) {
   var input = document.getElementById(prefix + 'NewGate');
   var select = document.getElementById(prefix + 'Gate');
@@ -1285,7 +1291,7 @@ window.staffGateField = function(prefix, selected) {
   }).join('');
   return '<div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">' +
     '<div style="font-size:13px;font-weight:800;color:#0F172A;">Gate assignment</div>' +
-    '<div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Choose the gate this guard stands at. Add gate saves it for the society, and Live Campus draws one entrance for every saved gate.</div>' +
+    '<div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Pick a saved gate, or type a new name and save. A security guard is stored on that gate, and Live Campus draws it.</div>' +
     '<label class="form-label">Assigned gate</label>' +
     '<select id="' + prefix + 'Gate" class="form-select" style="width:100%;">' + options + '</select>' +
     '<div style="display:flex;gap:8px;margin-top:8px;">' +
@@ -1399,7 +1405,11 @@ window.openAddStaffModal = function() {
     var accountNumber = '';
     var ifscCode = '';
     var portalAccess = window.readStaffAccessChecks('stf').filter(function(id) { return id !== 'salary'; });
-    var locationPost = (document.getElementById('stfGate')?.value || '').trim();
+    var locationPost = window.chosenStaffGate('stf');
+    if (department === 'Security' && !locationPost) {
+      if (typeof window.showToast === 'function') window.showToast('Choose the gate this guard stands at, or type a new gate name', 'error');
+      throw new Error('Gate required');
+    }
 
     if (!name || !role || !phone) {
       if (typeof window.showToast === 'function') window.showToast('Please fill all required staff fields', 'error');
@@ -1719,7 +1729,11 @@ window.openEditStaffModal = async function(staffId) {
       throw new Error('Portal access required');
     }
 
-    var locationPost = (document.getElementById('estfGate')?.value || '').trim();
+    var locationPost = window.chosenStaffGate('estf');
+    if (department === 'Security' && !locationPost) {
+      if (typeof window.showToast === 'function') window.showToast('Choose the gate this guard stands at, or type a new gate name', 'error');
+      throw new Error('Gate required');
+    }
     var updatePayload = { id: staffId, name, role, department, phone, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, aadhaarNumber, portalAccess, locationPost };
     if (salary !== undefined) updatePayload.salary = salary;
     if (upiId !== undefined) updatePayload.upiId = upiId;

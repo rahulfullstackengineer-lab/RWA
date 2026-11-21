@@ -20,7 +20,6 @@ Screens['admin-campus'] = function() {
       </div>
       <div class="campus-legend" id="campusLegend"></div>
       <div class="campus-tower-bar" id="campusGateBar"></div>
-      <div class="campus-tower-bar" id="campusTowerBar"></div>
       <div class="campus-layout">
         <div class="campus-stage" id="campusStage">
           <div style="padding:28px;color:#71717A;">Drawing the society…</div>
@@ -319,16 +318,7 @@ window.renderLiveCampus = function() {
     }).join('');
   }
 
-  var towerBar = document.getElementById('campusTowerBar');
-  if (towerBar) {
-    var focusId = window.__campusTowerFocus || 'all';
-    towerBar.innerHTML = '<button type="button" class="campus-tower-btn' + (focusId === 'all' ? ' is-active' : '') + '" onclick="window.focusCampusTower(\'all\')">All blocks</button>' +
-      towers.map(function(tower) {
-        var active = focusId === tower.id ? ' is-active' : '';
-        return '<button type="button" class="campus-tower-btn' + active + '" onclick="window.focusCampusTower(\'' + String(tower.id).replace(/'/g, '') + '\')">' + campusText(tower.name || 'Block') + '</button>';
-      }).join('');
-  }
-  stage.innerHTML = '<div id="campusViewport" class="campus-viewport"><div class="campus-viewport-note">Drag to look around. Scroll to zoom. Pick one block above to open it on its own.</div></div>';
+  stage.innerHTML = '<div id="campusViewport" class="campus-viewport"><div class="campus-viewport-note">Drag to look around. Scroll to zoom. Use the gate buttons to move to an entrance.</div></div>';
   window.__campusStructures = structures;
   window.mountCampus3D({
     towers: structures,
