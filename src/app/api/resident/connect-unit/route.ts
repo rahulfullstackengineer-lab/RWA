@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAuth } from '@/lib/auth'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, societyMembershipBlock } from '@/lib/phone'
 import { notifyUsers } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
@@ -42,8 +42,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Selected flat was not found in this society' }, { status: 404 })
     }
 
-    if (user.organizationId && user.organizationId !== unit.organizationId) {
-      return NextResponse.json({ error: 'This account already belongs to another society' }, { status: 403 })
+    const joinedElsewhere = await societyMembershipBlock(user.phone, unit.organizationId)
+    if (joinedElsewhere.error) {
+      return NextResponse.json({ error: joinedElsewhere.error }, { status: 403 })
     }
     if (user.role && user.role !== 'RESIDENT' && user.organizationId) {
       return NextResponse.json({ error: 'Society office accounts are assigned by the admin' }, { status: 403 })

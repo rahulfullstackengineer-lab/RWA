@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashPassword, createSession } from '@/lib/auth'
-import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
+import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse, societyMembershipBlock } from '@/lib/phone'
 import { notifyUsers } from '@/lib/socket-server'
 
 export async function POST(request: Request) {
@@ -42,9 +42,10 @@ export async function POST(request: Request) {
     }
 
     const existingPhoneUser = await findUserByPhone(cleanPhone)
-    if (existingPhoneUser) {
+    if (existingPhoneUser?.organizationId) {
+      const blocked = await societyMembershipBlock(cleanPhone, 'new-society')
       return NextResponse.json(
-        { error: 'This mobile number already has an account. Sign in with that number instead of creating another.' },
+        { error: blocked.error || 'This mobile number already belongs to a society. Sign in with that number instead of creating another.' },
         { status: 409 }
       )
     }

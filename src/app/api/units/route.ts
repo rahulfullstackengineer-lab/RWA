@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { societyMembershipBlock } from '@/lib/phone'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
 import { spreadOverpaidInvoices } from '@/lib/settle-invoices'
@@ -198,6 +199,16 @@ export async function PATCH(request: Request) {
     if (tenantName !== undefined) updateData.tenantName = tenantName ? tenantName.trim() : null
     if (tenantPhone !== undefined) updateData.tenantPhone = tenantPhone ? tenantPhone.trim().replace(/\s+/g, '') : null
     if (notes !== undefined) updateData.notes = notes
+
+    const orgId = user.organizationId
+    if (orgId && updateData.ownerPhone) {
+      const ownerBlock = await societyMembershipBlock(updateData.ownerPhone, orgId)
+      if (ownerBlock.error) return NextResponse.json({ error: ownerBlock.error }, { status: 409 })
+    }
+    if (orgId && updateData.tenantPhone) {
+      const tenantBlock = await societyMembershipBlock(updateData.tenantPhone, orgId)
+      if (tenantBlock.error) return NextResponse.json({ error: tenantBlock.error }, { status: 409 })
+    }
 
     const updated = await prisma.unit.update({
       where: { id },

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin, hashPassword } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
 import { logAudit } from '@/lib/audit'
+import { societyMembershipBlock } from '@/lib/phone'
 
 const SAMPLE_STAFF_PHONES = [
   '9876543231', '9876543232', '9876543233', '9876543234', '9876543235',
@@ -185,6 +186,16 @@ export async function POST(request: Request) {
 
     const cleanPhone = phone.trim().replace(/\D/g, '')
     const tenDigit = cleanPhone.slice(-10)
+    const membership = await societyMembershipBlock(tenDigit, orgId)
+    if (membership.error) {
+      return NextResponse.json({ error: membership.error }, { status: 409 })
+    }
+    if (membership.existing && membership.existing.role !== 'STAFF' && membership.existing.organizationId === orgId) {
+      return NextResponse.json(
+        { error: 'This phone is already a resident in this society. Use a different number for the staff login.' },
+        { status: 409 }
+      )
+    }
 
     const duty = await prisma.staffDuty.create({
       data: {
@@ -230,7 +241,7 @@ export async function POST(request: Request) {
           data: {
             name: staffName.trim(),
             role: 'STAFF',
-            organizationId: orgId,
+            ...(existingUser.organizationId ? {} : { organizationId: orgId }),
             status: status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
             passwordHash: hashedPin,
           },
@@ -300,6 +311,11 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Duty record not found' }, { status: 404 })
     }
 
+    if (updates.phone) {
+      const blocked = await societyMembershipBlock(updates.phone, orgId)
+      if (blocked.error) return NextResponse.json({ error: blocked.error }, { status: 409 })
+    }
+
     let handoverNotes = existing.notes
     if (updates.supervisorName !== undefined || updates.reliefName !== undefined) {
       let previous: Record<string, string> = {}
@@ -346,7 +362,6 @@ export async function PUT(request: Request) {
       const tenDigit = phoneToSync.slice(-10)
 
       let userUpdateData: any = {
-        organizationId: orgId,
         status: (updates.status || existing.status) === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE',
       }
       if (updates.staffName) userUpdateData.name = updates.staffName.trim()
@@ -363,7 +378,12 @@ export async function PUT(request: Request) {
         },
       })
 
+      if (staffUser && staffUser.organizationId && staffUser.organizationId !== orgId) {
+        const blocked = await societyMembershipBlock(tenDigit, orgId)
+        return NextResponse.json({ error: blocked.error || 'This phone already belongs to another society' }, { status: 409 })
+      }
       if (staffUser) {
+        if (!staffUser.organizationId) userUpdateData.organizationId = orgId
         await prisma.user.update({
           where: { id: staffUser.id },
           data: userUpdateData,

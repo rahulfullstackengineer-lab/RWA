@@ -1235,6 +1235,48 @@ window.readStaffAccessChecks = function(prefix) {
 };
 
 // Add Staff Modal
+window.addStaffGateOption = function(prefix) {
+  var input = document.getElementById(prefix + 'NewGate');
+  var select = document.getElementById(prefix + 'Gate');
+  if (!input || !select) return;
+  var name = String(input.value || '').trim();
+  if (!name) return;
+  var exists = Array.prototype.some.call(select.options, function(option) { return option.value.toLowerCase() === name.toLowerCase(); });
+  if (!exists) {
+    var option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    select.appendChild(option);
+  }
+  select.value = name;
+  input.value = '';
+};
+
+window.staffGateField = function(prefix, selected) {
+  var chosen = selected && selected !== 'Not assigned' ? selected : '';
+  var names = ['Main Gate', 'Gate 2'].concat(window.__staffGateOptions || []);
+  if (chosen && names.indexOf(chosen) === -1) names.push(chosen);
+  var seen = {};
+  var options = '<option value="">Not assigned</option>' + names.filter(function(name) {
+    var key = String(name || '').trim().toLowerCase();
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  }).map(function(name) {
+    var safe = String(name).replace(/"/g, '&quot;');
+    return '<option value="' + safe + '"' + (name === chosen ? ' selected' : '') + '>' + safe + '</option>';
+  }).join('');
+  return '<div style="padding:12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;">' +
+    '<div style="font-size:13px;font-weight:800;color:#0F172A;">Gate assignment</div>' +
+    '<div style="font-size:12px;color:#64748B;margin:4px 0 8px;">Choose the gate this guard stands at. Live Campus shows them at that gate. Add a gate if the society has more than the ones listed.</div>' +
+    '<label class="form-label">Assigned gate</label>' +
+    '<select id="' + prefix + 'Gate" class="form-select" style="width:100%;">' + options + '</select>' +
+    '<div style="display:flex;gap:8px;margin-top:8px;">' +
+      '<input type="text" id="' + prefix + 'NewGate" class="form-input" placeholder="Add a gate, e.g. Gate 3 - Club side" style="flex:1;" />' +
+      '<button type="button" class="btn btn-secondary btn-sm" onclick="window.addStaffGateOption(\'' + prefix + '\')">Add gate</button>' +
+    '</div></div>';
+};
+
 window.openAddStaffModal = function() {
   var html = `
     <div>
@@ -1290,6 +1332,8 @@ window.openAddStaffModal = function() {
       <label class="form-label">Aadhaar Last 4 Digits</label>
       <input type="text" id="stfAadhaar" placeholder="e.g. XXXX-XXXX-4589" class="form-input" style="width:100%;" />
     </div>
+
+    ${window.staffGateField('stf', '')}
     <!-- Demo: salary payout fields hidden for now.
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
@@ -1338,6 +1382,7 @@ window.openAddStaffModal = function() {
     var accountNumber = '';
     var ifscCode = '';
     var portalAccess = window.readStaffAccessChecks('stf').filter(function(id) { return id !== 'salary'; });
+    var locationPost = (document.getElementById('stfGate')?.value || '').trim();
 
     if (!name || !role || !phone) {
       if (typeof window.showToast === 'function') window.showToast('Please fill all required staff fields', 'error');
@@ -1352,11 +1397,11 @@ window.openAddStaffModal = function() {
       var res = await (window.apiFetch ? window.apiFetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess, locationPost }),
       }) : fetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess }),
+        body: JSON.stringify({ action: 'create_staff', name, role, department, phone, salary, shift, joiningDate, pin, upiId, aadhaarNumber, accountNumber, ifscCode, portalAccess, locationPost }),
       }));
 
       if (res.ok) {
@@ -1506,6 +1551,8 @@ window.openEditStaffModal = async function(staffId) {
     if (duty) {
       if (!staff.startTime && duty.startTime) staff.startTime = duty.startTime;
       if (!staff.endTime && duty.endTime) staff.endTime = duty.endTime;
+      if (duty.locationPost) staff.locationPost = duty.locationPost;
+      window.__staffGateOptions = (dutyData.duties || []).map(function(row) { return row.locationPost; }).filter(function(post) { return post && post !== 'Not assigned'; });
       try { if (duty.notes && String(duty.notes).trim().charAt(0) === '{') dutyNotes = JSON.parse(duty.notes); } catch (e) {}
     }
   } catch (e) {}
@@ -1580,6 +1627,8 @@ window.openEditStaffModal = async function(staffId) {
     </div>
     <div style="font-size:12px;color:#64748B;margin-top:-6px;">These clock hours show on Today’s Shift Hours in the staff portal.</div>
 
+    ${window.staffGateField('estf', staff.locationPost || '')}
+
     <div style="display:flex;gap:10px;">
       <div style="flex:1;">
         <label class="form-label">Supervisor name</label>
@@ -1653,7 +1702,8 @@ window.openEditStaffModal = async function(staffId) {
       throw new Error('Portal access required');
     }
 
-    var updatePayload = { id: staffId, name, role, department, phone, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, aadhaarNumber, portalAccess };
+    var locationPost = (document.getElementById('estfGate')?.value || '').trim();
+    var updatePayload = { id: staffId, name, role, department, phone, status, shift, startTime, endTime, supervisorName: supervisorNameValue, supervisorPhone, reliefName, reliefPhone, aadhaarNumber, portalAccess, locationPost };
     if (salary !== undefined) updatePayload.salary = salary;
     if (upiId !== undefined) updatePayload.upiId = upiId;
     if (pin && pin.length >= 4) {
@@ -1808,6 +1858,7 @@ window.loadLiveStaffScreen = async function() {
     if (res.ok) {
       var data = await res.json();
       window.__cachedStaffList = data.staff || [];
+      window.__staffGateOptions = data.gates || window.__staffGateOptions || [];
       window.__cachedStaffPayments = data.payments || [];
       window.__cachedStaffMetrics = data.metrics || {};
     }
@@ -1924,7 +1975,7 @@ window.renderStaffTable = function() {
         <td>
           <div style="font-size:12.5px;font-weight:600;color:var(--text-primary);">${s.role}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">
-            ${s.department} · <span style="color:#64748B;">${shiftLabel}</span>
+            ${s.department} · <span style="color:#64748B;">${shiftLabel}</span>${s.locationPost ? ' · ' + s.locationPost : ''}
           </div>
         </td>
         <td style="font-family:monospace;font-size:12.5px;">

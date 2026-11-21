@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAuth, requireAdmin } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 import { notifyUsers } from '@/lib/socket-server'
-import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse } from '@/lib/phone'
+import { findUserByPhone, normalizePhone, emailUsedBySomeoneElse, societyMembershipBlock } from '@/lib/phone'
 
 export async function GET(request: Request) {
   try {
@@ -228,11 +228,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Only the society admin can assign an office role' }, { status: 403 })
     }
 
-    if (existing?.organizationId && existing.organizationId !== orgId) {
-      return NextResponse.json(
-        { error: 'This mobile number already belongs to another society' },
-        { status: 409 }
-      )
+    const membership = await societyMembershipBlock(cleanPhone, orgId)
+    if (membership.error) {
+      return NextResponse.json({ error: membership.error }, { status: 409 })
     }
 
     if (resolvedUnitId) {

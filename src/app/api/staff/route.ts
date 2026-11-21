@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireAdmin, hashPassword } from '@/lib/auth'
 import { notifyUsers } from '@/lib/socket-server'
-import { findUserByPhone, normalizePhone } from '@/lib/phone'
+import { findUserByPhone, normalizePhone, societyMembershipBlock } from '@/lib/phone'
 import { logAudit } from '@/lib/audit'
 import fs from 'fs'
 import path from 'path'
@@ -118,10 +118,14 @@ const INVENTED_DUTY_POSTS = new Set([
   'Gate 1 - Main Entrance Desk',
 ])
 
-function dutyFieldsFromStaff(staff: { name: string; role: string; department: string; phone: string; salary?: number; shift?: string; status?: string }, existing?: { locationPost?: string | null; startTime?: string | null; endTime?: string | null; salaryDate?: string | null; lastPaidDate?: string | null; attendancePresent?: number | null; attendanceTotal?: number | null }) {
+function dutyFieldsFromStaff(staff: { name: string; role: string; department: string; phone: string; salary?: number; shift?: string; status?: string; locationPost?: string }, existing?: { locationPost?: string | null; startTime?: string | null; endTime?: string | null; salaryDate?: string | null; lastPaidDate?: string | null; attendancePresent?: number | null; attendanceTotal?: number | null }) {
   const inventedPost = !existing?.locationPost
     || INVENTED_DUTY_POSTS.has(existing.locationPost)
     || existing.locationPost === `${staff.department} Station`
+  const requestedPost = staff.locationPost !== undefined ? String(staff.locationPost).trim() : undefined
+  const locationPost = requestedPost !== undefined
+    ? (requestedPost || 'Not assigned')
+    : (inventedPost ? 'Not assigned' : existing!.locationPost!)
   const defaultHours = !existing?.startTime || !existing?.endTime
   const defaultPayDate = !existing?.salaryDate || existing.salaryDate === '5th of every month'
   const defaultAttendance = !existing || (existing.attendancePresent === 26 && existing.attendanceTotal === 28)
@@ -129,7 +133,7 @@ function dutyFieldsFromStaff(staff: { name: string; role: string; department: st
     staffName: staff.name.trim(),
     role: staff.role.trim(),
     phone: staff.phone,
-    locationPost: inventedPost ? 'Not assigned' : existing!.locationPost!,
+    locationPost,
     shiftName: shiftLabel(staff.shift),
     startTime: defaultHours ? '' : (existing?.startTime || ''),
     endTime: defaultHours ? '' : (existing?.endTime || ''),
@@ -290,9 +294,11 @@ export async function ensureStaffAccount(orgId: string, input: { name: string; p
   const cleanPhone = normalizePhone(phone)
   if (!name) return { error: 'Enter the person\'s name' }
   if (!cleanPhone) return { error: 'Enter a valid 10-digit phone number' }
-  const existingUser = await findUserByPhone(cleanPhone)
-  if (existingUser && existingUser.role !== 'STAFF') {
-    return { error: 'This phone number already belongs to another account' }
+  const membership = await societyMembershipBlock(cleanPhone, orgId)
+  if (membership.error) return { error: membership.error }
+  const existingUser = membership.existing
+  if (existingUser && existingUser.role !== 'STAFF' && existingUser.organizationId === orgId) {
+    return { error: 'This phone is already a resident in this society. Use a different number for the staff login.' }
   }
 
   const department = input.department || 'Security'
@@ -366,7 +372,7 @@ export async function ensureStaffAccount(orgId: string, input: { name: string; p
         name,
         role: 'STAFF',
         status: 'ACTIVE',
-        organizationId: orgId,
+        ...(existingUser.organizationId ? {} : { organizationId: orgId }),
         ...(passwordHash ? { passwordHash } : {}),
       },
     })
@@ -446,12 +452,31 @@ export async function GET(request: Request) {
     await clearSalaryMarkedPaidByExpense(orgId)
     const fresh = getStoredStaffData(orgId)
     const metrics = calculateStaffMetrics(fresh.staff, payrollMonthLabel())
-    const staff = fresh.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => rest)
+    const duties = await prisma.staffDuty.findMany({
+      where: { organizationId: orgId },
+      select: { phone: true, staffName: true, locationPost: true },
+    })
+    const phoneTail = (value: string | null | undefined) => String(value || '').replace(/\D/g, '').slice(-10)
+    const staff = fresh.staff.map(({ pin, aadhaarNumber, accountNumber, ...rest }) => {
+      const duty = duties.find((row) => {
+        const samePhone = phoneTail(row.phone) && phoneTail(row.phone) === phoneTail(rest.phone)
+        const sameName = row.staffName.trim().toLowerCase() === String(rest.name || '').trim().toLowerCase()
+        return samePhone || sameName
+      })
+      const post = duty?.locationPost && duty.locationPost !== 'Not assigned' ? duty.locationPost : ''
+      return { ...rest, locationPost: post }
+    })
+    const gates = Array.from(new Set([
+      'Main Gate',
+      'Gate 2',
+      ...duties.map((row) => row.locationPost).filter((post): post is string => Boolean(post) && post !== 'Not assigned'),
+    ]))
 
     return NextResponse.json({
       staff,
       payments: fresh.payments,
       metrics,
+      gates,
     })
   } catch (err: unknown) {
     console.error('Error in GET /api/staff:', err)
@@ -617,6 +642,7 @@ export async function POST(request: Request) {
       ifscCode = '',
       aadhaarNumber = '',
       emergencyContact = '',
+      locationPost = '',
     } = body
 
     if (!name || !role || !phone || salary === undefined) {
@@ -630,10 +656,13 @@ export async function POST(request: Request) {
     if (!cleanPhone) {
       return NextResponse.json({ error: 'Please enter a valid 10-digit mobile number' }, { status: 400 })
     }
-    const existingAccount = await findUserByPhone(cleanPhone)
-    if (existingAccount && existingAccount.role !== 'STAFF') {
+    const membership = await societyMembershipBlock(cleanPhone, orgId)
+    if (membership.error) {
+      return NextResponse.json({ error: membership.error }, { status: 409 })
+    }
+    if (membership.existing && membership.existing.role !== 'STAFF' && membership.existing.organizationId === orgId) {
       return NextResponse.json(
-        { error: 'This mobile number already has an account. One phone number can have only one account.' },
+        { error: 'This phone is already a resident in this society. Use a different number for the staff login.' },
         { status: 409 }
       )
     }
@@ -673,7 +702,7 @@ export async function POST(request: Request) {
         },
       })
 
-      const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE' }, existingDuty || undefined)
+      const dutyFields = dutyFieldsFromStaff({ name, role, department, phone: phone.trim(), salary: Number(salary) || 0, shift, status: 'ACTIVE', locationPost }, existingDuty || undefined)
       const dutyNotes = notesWithAccess(existingDuty?.notes, newStaff.portalAccess || defaultPortalAccess(department))
       if (existingDuty) {
         await prisma.staffDuty.update({
@@ -703,7 +732,7 @@ export async function POST(request: Request) {
             role: 'STAFF',
             status: 'ACTIVE',
             ...(passwordHash ? { passwordHash } : {}),
-            organizationId: orgId,
+            ...(existingUser.organizationId ? {} : { organizationId: orgId }),
           },
         })
       } else {
@@ -764,7 +793,7 @@ export async function PATCH(request: Request) {
 
     const orgId = user.organizationId!
     const body = await request.json()
-    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact, portalAccess, startTime, endTime, supervisorName, supervisorPhone, reliefName, reliefPhone } = body
+    const { id, name, role, department, phone, salary, status, shift, pin, upiId, accountNumber, ifscCode, aadhaarNumber, emergencyContact, portalAccess, startTime, endTime, supervisorName, supervisorPhone, reliefName, reliefPhone, locationPost } = body
 
     if (!id) return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 })
 
@@ -821,7 +850,7 @@ export async function PATCH(request: Request) {
         },
       })
 
-      const dutyFields = dutyFieldsFromStaff(staffMember, existingDuty || undefined)
+      const dutyFields = dutyFieldsFromStaff({ ...staffMember, locationPost }, existingDuty || undefined)
       const access = staffMember.portalAccess && staffMember.portalAccess.length
         ? staffMember.portalAccess
         : defaultPortalAccess(staffMember.department)
@@ -867,6 +896,14 @@ export async function PATCH(request: Request) {
       })
 
       const newHash = pin && pin.trim().length >= 4 ? await hashPassword(pin.trim()) : undefined
+      const phoneBlock = await societyMembershipBlock(tenDigitTarget || targetPhone, orgId)
+      if (phoneBlock.error) {
+        return NextResponse.json({ error: phoneBlock.error }, { status: 409 })
+      }
+
+      if (existingUser && existingUser.organizationId && existingUser.organizationId !== orgId) {
+        return NextResponse.json({ error: phoneBlock.error || 'This phone already belongs to another society' }, { status: 409 })
+      }
 
       if (existingUser) {
         const updateData: any = {
@@ -948,6 +985,7 @@ export async function DELETE(request: Request) {
 
       await prisma.user.updateMany({
         where: {
+          organizationId: orgId,
           OR: [{ phone: removed.phone }, { phone: cleanP }, { phone: tenD }],
         },
         data: { status: 'SUSPENDED' },

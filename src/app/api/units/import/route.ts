@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { requireAdmin } from '@/lib/auth'
 import { logAudit } from '@/lib/audit'
 import { emitLiveSocketEvent } from '@/lib/socket-server'
+import { societyMembershipBlock } from '@/lib/phone'
 
 export async function POST(request: Request) {
   try {
@@ -155,6 +156,10 @@ export async function POST(request: Request) {
             where: { phone: cleanPhone },
           })
 
+          const ownerElsewhere = await societyMembershipBlock(cleanPhone, orgId)
+          if (ownerElsewhere.error) {
+            continue
+          }
           if (!existingUser) {
             await prisma.user.create({
               data: {
@@ -187,6 +192,10 @@ export async function POST(request: Request) {
             where: { phone: cleanTenantPhone },
           })
 
+          const tenantElsewhere = await societyMembershipBlock(cleanTenantPhone, orgId)
+          if (tenantElsewhere.error) {
+            continue
+          }
           if (!existingTenant) {
             await prisma.user.create({
               data: {
