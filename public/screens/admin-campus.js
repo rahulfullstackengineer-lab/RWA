@@ -860,21 +860,37 @@ window.mountCampus3D = async function(model) {
     var gateNames = model.gateNames && model.gateNames.length ? model.gateNames : ['Main Gate'];
     var left = minX - (layout === 'villa' ? 7 : 11);
     var right = maxX + (layout === 'villa' ? 7 : 11);
-    var neededWidth = gateNames.length <= 1 ? 0 : (gateNames.length - 1) * 16 + 18;
-    if (right - left < neededWidth) {
-      var grow = (neededWidth - (right - left)) / 2;
-      left -= grow;
-      right += grow;
-    }
-    var gateMargin = 9;
-    model.gateSlots = gateNames.map(function(name, index) {
-      var x = gateNames.length === 1
-        ? 0
-        : left + gateMargin + ((right - left - gateMargin * 2) * index) / (gateNames.length - 1);
-      return { name: name, x: x };
-    });
     var back = minZ - 8;
     var front = gateLine;
+    var sideOrder = ['front', 'right', 'back', 'left'];
+    var buckets = { front: [], right: [], back: [], left: [] };
+    gateNames.forEach(function(name, index) { buckets[sideOrder[index % 4]].push(name); });
+    function spreadAlong(count, start, end) {
+      var margin = 10;
+      if (count <= 1) return [(start + end) / 2];
+      var from = start + margin;
+      var to = end - margin;
+      var spots = [];
+      for (var i = 0; i < count; i++) spots.push(from + (to - from) * (i / (count - 1)));
+      return spots;
+    }
+    model.gateSlots = [];
+    spreadAlong(buckets.front.length, left, right).forEach(function(x, index) {
+      if (!buckets.front[index]) return;
+      model.gateSlots.push({ name: buckets.front[index], x: x, z: front, side: 'front', outX: 0, outZ: 1 });
+    });
+    spreadAlong(buckets.back.length, left, right).forEach(function(x, index) {
+      if (!buckets.back[index]) return;
+      model.gateSlots.push({ name: buckets.back[index], x: x, z: back, side: 'back', outX: 0, outZ: -1 });
+    });
+    spreadAlong(buckets.left.length, back, front).forEach(function(z, index) {
+      if (!buckets.left[index]) return;
+      model.gateSlots.push({ name: buckets.left[index], x: left, z: z, side: 'left', outX: -1, outZ: 0 });
+    });
+    spreadAlong(buckets.right.length, back, front).forEach(function(z, index) {
+      if (!buckets.right[index]) return;
+      model.gateSlots.push({ name: buckets.right[index], x: right, z: z, side: 'right', outX: 1, outZ: 0 });
+    });
     function slab(w, d, color, x, z, y) {
       var mesh = new THREE.Mesh(
         new THREE.BoxGeometry(w, 0.05, d),
@@ -918,21 +934,24 @@ window.mountCampus3D = async function(model) {
     var centerZ = (minZ + maxZ) / 2;
     slab(Math.max(8, right - left - 4), Math.max(8, front - back - 6), '#7ea35a', (left + right) / 2, (back + front) / 2 - 1, 0.012);
     var roadStart = maxZ + (layout === 'villa' ? 3.2 : 4.8);
-    var roadEnd = front + 8;
-    var roadLength = Math.max(6, roadEnd - roadStart);
-    var roadZ = (roadStart + roadEnd) / 2;
-    (model.gateSlots || [{ x: 0 }]).forEach(function(slot) {
-      slab(7.4, roadLength, '#d4d4d8', slot.x, roadZ, 0.02);
-      slab(5.4, roadLength - 0.4, '#4b5563', slot.x, roadZ, 0.035);
-      var dashCount = Math.max(3, Math.floor(roadLength / 3.2));
-      for (var dash = 0; dash < dashCount; dash++) {
-        slab(0.18, 1.3, '#f8fafc', slot.x, roadStart + 1.4 + dash * 3.2, 0.05);
-      }
-    });
+    var spineLength = Math.max(6, front - 4 - roadStart);
+    var spineZ = (roadStart + front - 4) / 2;
+    slab(7.4, spineLength, '#d4d4d8', 0, spineZ, 0.02);
+    slab(5.4, spineLength - 0.4, '#4b5563', 0, spineZ, 0.035);
+    var dashCount = Math.max(3, Math.floor(spineLength / 3.2));
+    for (var dash = 0; dash < dashCount; dash++) {
+      slab(0.18, 1.3, '#f8fafc', 0, roadStart + 1.4 + dash * 3.2, 0.05);
+    }
     if (towers.length > 1) {
       slab(right - left - 6, 4.2, '#d4d4d8', (left + right) / 2, roadStart, 0.02);
       slab(right - left - 8, 2.6, '#4b5563', (left + right) / 2, roadStart, 0.035);
     }
+    (model.gateSlots || []).forEach(function(slot) {
+      if (slot.side === 'front') slab(5.2, 7, '#4b5563', slot.x, front + 3.6, 0.04);
+      else if (slot.side === 'back') slab(5.2, 7, '#4b5563', slot.x, back - 3.6, 0.04);
+      else if (slot.side === 'left') slab(7, 5.2, '#4b5563', left - 3.6, slot.z, 0.04);
+      else slab(7, 5.2, '#4b5563', right + 3.6, slot.z, 0.04);
+    });
     towers.forEach(function(tower) {
       var widePad = layout === 'villa' || layout === 'floors' ? 5.4 : 8.2;
       slab(widePad, layout === 'villa' ? 5 : 6.4, '#e7e5e4', tower.x, tower.z + (tower.yaw ? -0.4 : 0.4), 0.02);
@@ -950,19 +969,27 @@ window.mountCampus3D = async function(model) {
       tree(2.2, centerZ + 0.6, true);
       tree(0, centerZ + 1.4);
     }
-    boundary(left, back, right, back);
-    boundary(left, back, left, front);
-    boundary(right, back, right, front);
-    var openings = (model.gateSlots || [{ x: 0 }]).map(function(slot) { return slot.x; });
-    if (!openings.length) openings = [0];
-    var cursor = left;
-    openings.slice().sort(function(a, b) { return a - b; }).forEach(function(opening) {
-      var gapStart = Math.max(left, opening - 3.4);
-      var gapEnd = Math.min(right, opening + 3.4);
-      boundary(cursor, front, gapStart, front);
-      cursor = gapEnd;
-    });
-    boundary(cursor, front, right, front);
+    function wallWithGaps(x1, z1, x2, z2, gaps) {
+      var horizontal = Math.abs(z2 - z1) < 0.01;
+      var start = horizontal ? Math.min(x1, x2) : Math.min(z1, z2);
+      var end = horizontal ? Math.max(x1, x2) : Math.max(z1, z2);
+      var fixed = horizontal ? z1 : x1;
+      var cursor = start;
+      gaps.slice().sort(function(a, b) { return a - b; }).forEach(function(opening) {
+        var gapStart = Math.max(start, opening - 3.4);
+        var gapEnd = Math.min(end, opening + 3.4);
+        if (horizontal) boundary(cursor, fixed, gapStart, fixed);
+        else boundary(fixed, cursor, fixed, gapStart);
+        cursor = gapEnd;
+      });
+      if (horizontal) boundary(cursor, fixed, end, fixed);
+      else boundary(fixed, cursor, fixed, end);
+    }
+    var slots = model.gateSlots || [];
+    wallWithGaps(left, back, right, back, slots.filter(function(slot) { return slot.side === 'back'; }).map(function(slot) { return slot.x; }));
+    wallWithGaps(left, back, left, front, slots.filter(function(slot) { return slot.side === 'left'; }).map(function(slot) { return slot.z; }));
+    wallWithGaps(right, back, right, front, slots.filter(function(slot) { return slot.side === 'right'; }).map(function(slot) { return slot.z; }));
+    wallWithGaps(left, front, right, front, slots.filter(function(slot) { return slot.side === 'front'; }).map(function(slot) { return slot.x; }));
     hedge(Math.max(2, right - left - 2), 0.7, (left + right) / 2, back + 1.1);
     var plant = back + 2;
     while (plant < front - 3) {
@@ -979,23 +1006,31 @@ window.mountCampus3D = async function(model) {
   if (!gates.length) gates = model.gateNames || ['Main Gate'];
   var gatePos = {};
   gates.forEach(function(name, index) {
-    var slot = (model.gateSlots || [])[index];
-    var x = slot ? slot.x : 0;
-    var z = model.gateZ || 18;
-    gatePos[name] = { x: x, z: z };
+    var slot = (model.gateSlots || []).find(function(item) { return item.name === name; }) || (model.gateSlots || [])[index] || { x: 0, z: model.gateZ || 18, side: 'front', outX: 0, outZ: 1 };
+    var x = slot.x;
+    var z = slot.z;
+    gatePos[name] = { x: x, z: z, side: slot.side, outX: slot.outX || 0, outZ: slot.outZ == null ? 1 : slot.outZ };
+    var frame = new THREE.Group();
+    frame.position.set(x, 0, z);
+    if (slot.side === 'left' || slot.side === 'right') frame.rotation.y = Math.PI / 2;
     var pillarMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.4 });
     [-2.2, 2.2].forEach(function(offset) {
       var pillar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.4, 0.7), pillarMat);
-      pillar.position.set(x + offset, 1.7, z);
+      pillar.position.set(offset, 1.7, 0);
       pillar.castShadow = true;
-      scene.add(pillar);
+      frame.add(pillar);
     });
     var bar = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.28, 0.28), new THREE.MeshStandardMaterial({ color: '#18181b' }));
-    bar.position.set(x, 3.3, z);
-    scene.add(bar);
+    bar.position.set(0, 3.3, 0);
+    frame.add(bar);
     var gateLabel = label(name);
-    gateLabel.position.set(x, 4.6, z);
-    scene.add(gateLabel);
+    gateLabel.position.set(0, 4.6, 0);
+    frame.add(gateLabel);
+    scene.add(frame);
+    var inwardX = -(slot.outX || 0);
+    var inwardZ = -(slot.outZ == null ? 1 : slot.outZ);
+    var alongX = slot.side === 'left' || slot.side === 'right' ? 0 : 1;
+    var alongZ = slot.side === 'left' || slot.side === 'right' ? 1 : 0;
     var guards = (model.guardsByGate && model.guardsByGate[name]) || [];
     guards.slice(0, 3).forEach(function(guard, guardIndex) {
       var person = placeModel(kit.guard, { height: 1.8 });
@@ -1009,7 +1044,8 @@ window.mountCampus3D = async function(model) {
         head.position.y = 1.6;
         person.add(legs, torso, head);
       }
-      person.position.set(x - 1.4 + guardIndex * 1.35, 0, z - 1.8);
+      var along = (guardIndex - 1) * 1.35;
+      person.position.set(x + alongX * along + inwardX * 1.8, 0, z + alongZ * along + inwardZ * 1.8);
       person.userData = { kind: 'guard', gateIndex: index, guardIndex: guardIndex, bob: guardIndex };
       var guardTag = plate(guard.staffName || 'Guard', guard.shiftName || guard.locationPost || 'On duty');
       person.add(guardTag);
@@ -1037,13 +1073,17 @@ window.mountCampus3D = async function(model) {
     var home = tower && towerPos[tower.id] ? towerPos[tower.id] : { x: 0, z: -2 };
     var lane = slot % 5;
     var rank = Math.floor(slot / 5);
-    var holdX = gate.x - 9 + lane * 3.6;
-    var holdZ = gate.z + 8 + rank * 3.6;
+    var outX = gate.outX || 0;
+    var outZ = gate.outZ == null ? 1 : gate.outZ;
+    var sideX = outZ;
+    var sideZ = -outX;
+    var holdX = gate.x + outX * (8 + rank * 3.6) + sideX * (-9 + lane * 3.6);
+    var holdZ = gate.z + outZ * (8 + rank * 3.6) + sideZ * (-9 + lane * 3.6);
     var visitBay = tower && tower.visitorBays && tower.visitorBays[slot % tower.visitorBays.length];
     return {
-      far: { x: holdX, z: gate.z + 16 + rank * 3.6 },
+      far: { x: gate.x + outX * (16 + rank * 3.6) + sideX * (-9 + lane * 3.6), z: gate.z + outZ * (16 + rank * 3.6) + sideZ * (-9 + lane * 3.6) },
       outside: { x: holdX, z: holdZ },
-      gate: { x: gate.x + (lane - 2) * 0.15, z: gate.z },
+      gate: { x: gate.x + sideX * (lane - 2) * 0.15, z: gate.z + sideZ * (lane - 2) * 0.15 },
       towerId: tower && tower.id,
       tower: visitBay ? { x: visitBay.x, z: visitBay.z } : { x: home.x + (lane - 2) * 3.6, z: home.z + 12 },
     };
@@ -1262,8 +1302,10 @@ window.mountCampus3D = async function(model) {
       focusTower('all');
       var spot = gatePos[name];
       if (!spot) return;
+      var outX = spot.outX || 0;
+      var outZ = spot.outZ == null ? 1 : spot.outZ;
       controls.target.set(spot.x, 1.6, spot.z);
-      camera.position.set(spot.x + 8, 14, spot.z + 16);
+      camera.position.set(spot.x + outX * 18 + 6, 14, spot.z + outZ * 18 + 6);
     },
   };
   if (window.__campusTowerFocus && window.__campusTowerFocus !== 'all') focusTower(window.__campusTowerFocus);
